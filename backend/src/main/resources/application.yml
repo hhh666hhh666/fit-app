@@ -10,9 +10,10 @@ spring:
     name: fit-app-server
 
   datasource:
-    # 默认值供本机开发用（mvn spring-boot:run 直连本机 3306）；
+    # 默认值供本机开发用（mvn spring-boot:run 直连本机映射出来的端口）；
     # 容器里由 compose 注入 SPRING_DATASOURCE_* 覆盖，指向 mysql 服务。
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/fit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    # ⚠️ 端口是 3307 而非 3306：本机 3306 已被另一个项目的 MySQL 容器占用（见 docs/operations/configuration.md）。
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3307/fit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:change-me}
     driver-class-name: com.mysql.cj.jdbc.Driver

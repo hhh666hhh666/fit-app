@@ -10,6 +10,9 @@ dist-ssr/
 .env.local
 .env.*.local
 
+# 本机数据库数据目录（docker-compose.dev.yml 的 MYSQL_DATA_DIR 指向这里）
+.data/
+
 # 编辑器与系统
 .idea/
 *.iml

@@ -20,6 +20,23 @@ cp .env.example .env    # 然后至少把 JWT 密钥换成随机值（生成命�
 ⚠️ `.env` **不入库**（`.gitignore` 已拦），它是每台机器各填各的。
 `docker compose` 会读它，`git` 不会碰它——这就是为什么不把真值写进 `docker-compose.*.yml`。
 
+## 本机端口：3307 而不是 3306
+
+开发机上的 3306 已被**另一个项目的 MySQL 容器**占用，所以 `MYSQL_PORT` 设为 3307，
+`application.yml` 的默认连接串跟着走 3307。
+
+**改端口要动两处**：`.env` 的 `MYSQL_PORT`（compose 映射）与 `application.yml` 的默认 URL（本机裸跑）。
+两处不一致时，症状是「容器在跑但后端报连接被拒」。
+
+## 本机裸跑的后端读不到 compose 那套环境变量
+
+`mvn spring-boot:run` 只认**自己进程的环境变量**，不会去读 `.env`，所以数据源密码要靠
+`SPRING_DATASOURCE_PASSWORD` 单独给一份，且必须与 `MYSQL_ROOT_PASSWORD` 相同。
+
+⚠️ **遗漏它的症状很会骗人**：`docker ps` 显示数据库 healthy、端口也通，
+但后端启动报 `Access denied for user 'root'@'172.19.0.1'`——看着像数据库坏了，其实是**密码没传过去**。
+（连本机映射端口时，MySQL 看到的来源 IP 是 Docker 网关地址，不是 127.0.0.1，这一样是正常的。）
+
 ## 密钥这条为什么特殊
 
 - `FITAPP_JWT_SECRET` 必须是**随机值，至少 32 字节**。
