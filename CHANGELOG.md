@@ -19,12 +19,16 @@
 - 前端：统计页（周期 tab／双格卡／近 4 周自绘柱状／PR ARCHIVE 列表，最近刷新的 PR 荧光）；汇总页 PR 组 chip 与主页上次训练行的荧光标记
 - 后端第四期（身体档案）：迁移 V8（`body_record`：测定日期＋体重＋四围＋备注，记哪项填哪项）；`GET /api/body` 一屏总览（当前体重／较上周／阶段最低判定／体重序列／最新围度）、体重明细（相邻 DIFF 服务端算）、录入（全空拦截＋数值范围校验）；后端测试扩至 45 用例
 - 前端：身体档案页（当前体重卡含「阶段最低 · PR」荧光、基础围度四格、近 3 个月 canvas 折线自绘、体重明细 DIFF、录入弹层）
+- 前端：**登录守卫**——`utils/guard.ts` 的 `ensureLogin()` 读本地 token，空则回登录页；12 个业务页在 `onShow`（会话页 `onLoad`）首行调用并 `return`
+- 部署链路（上云准备）：`frontend/Dockerfile` ＋ `nginx.conf`（H5 产物 `dist/build/h5` → nginx，`/api/` 反代到 `server:8080`）＋ `frontend/.dockerignore`；`release.yml` 的 ACR／HOST／USER 填真值；部署方案见 ADR 0005
 
 ### Changed
 
 - 前端工程由 Vue3 网页骨架整体换代到 uni-app（旧骨架退役，见 ADR 0002）
 - CI：前端构建命令适配 `build:h5`；lockfile 重建为全平台产物（修复 CI 上 rollup 二进制缺失）
 - scope #10 实施细化：动作「下架」与计划「物理删除」的删除机制分离（见 `docs/design/数据模型.md`）
+- **云上编排改方案 A**：不再自带 MySQL，复用 quizzy 的 `quizzy-mysql` 容器里的 `fit_app` 库（external 网络 ＋ 容器名直连 ＋ `createDatabaseIfNotExist`）；web 端口 8081 → **8082**（8081 被 quizzy-web 占）；`server-deploy.sh` 只检查外部 MySQL 在跑，绝不上拉／重建别人的容器
+- scope #6 收窄：训练记录**不录休息时长**（设计稿无该字段、第一阶段无「训练密度」视图读它）；自动计时器本就在「明确不做」里，口径不变
 
 ### Fixed
 

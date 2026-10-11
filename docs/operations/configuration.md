@@ -62,6 +62,20 @@ Get-Content .env -Encoding UTF8 | ForEach-Object {
 
 > 环境变量统一前缀 `FITAPP_`，它从项目名 `fit-app` 派生；改项目名则前缀跟着变。
 
+## 云上：数据库不是自己的容器
+
+`docker-compose.prod.yml` 里**没有 mysql 服务**——云上复用 quizzy 的 `quizzy-mysql` 容器，
+只用其中的 `fit_app` 库（[ADR 0005](../adr/0005-deploy-with-quizzy-infra.md)）。三处跟着变：
+
+| 项 | 云上 |
+|---|---|
+| `MYSQL_ROOT_PASSWORD` | 必须与 `/srv/quizzy/.env` 里**同值**——是同一个实例，不是「同名而已」 |
+| `MYSQL_DATA_DIR` | 云上不再需要（那是自带 MySQL 时才用的数据卷路径） |
+| 库不存在时 | JDBC URL 带 `createDatabaseIfNotExist=true`，首次部署自动建 `fit_app` |
+
+⚠️ 备份脚本要 `docker exec` 进 `quizzy-mysql` 去 dump `fit_app`，不能连 `localhost:3306`
+（宿主上 3306 只绑回环，且那是 quizzy 的映射；容器里的 localhost 是它自己）。
+
 ## 同源部署不需要配 CORS
 
 `fitapp.cors.allowed-origins` 默认为空（= 完全不注册），因为 web 容器与 `/api` 同域。
