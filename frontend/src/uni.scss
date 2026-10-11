@@ -1,0 +1,49 @@
+// 全局 scss 变量（uni-app 会把本文件注入到每个组件的样式里）。
+// 设计语言＝「训练日志」（2026-10-11 定稿）：
+//   纸感浅底 · 墨黑 · 荧光笔高亮（唯一信号色）· 表格数字 · 细线分隔 · 极克制阴影。
+// ⚠️ 这里刻意不 import wot-design-uni 的任何文件：它的组件各自 import 自己的样式，是自洽的。
+
+// ── 面 ──
+$app-canvas: #f3f4ef; // 页面底：冷调纸感浅面
+$app-surface: #ffffff; // 卡片面：纯白
+$app-surface-2: #ecede6; // 次级面：tag 底 / 输入框底
+
+// ── 线（分隔优先于阴影）──
+$app-line: #d8d9d1; // 主分隔线
+$app-line-soft: #e6e7e0; // 更轻的分隔线（卡内细分）
+
+// ── 字（三档）──
+$app-ink: #17191d; // 正文 / 标题 / 主按钮底
+$app-ink-muted: #666b73; // 次要文字
+$app-ink-subtle: #9a9ea3; // 占位符 / 装饰
+
+// ── 高亮（全站唯一信号色：荧光笔）──
+// 只用于「划过」的笔触式高亮（PR 数字等），不做大面积底色、不做按钮色。
+$app-highlight: #d9f24b;
+
+// ── 饮食记录四环粉彩（仅限该组件内使用）──
+$ring-protein: #f2c29b;
+$ring-carb: #a8c5f0;
+$ring-fat: #f0a9a9;
+$ring-water: #9bd4cf;
+
+// ── 形状 ──
+$radius-xs: 16rpx; // 8px，小 tag
+$radius-sm: 20rpx; // 10px
+$radius-md: 24rpx; // 12px
+$radius-lg: 28rpx; // 14px，卡片 / 按钮
+$radius-xl: 40rpx; // 20px
+
+// ── 阴影：极克制（先靠细线分隔）──
+$shadow-sm: 0 4rpx 10rpx -4rpx rgba(20, 22, 28, 0.08);
+$shadow-md: 0 16rpx 36rpx -14rpx rgba(20, 22, 28, 0.12);
+
+// ── 字阶（rpx：750rpx = 375px，即 1px = 2rpx）──
+$text-xs: 22rpx; // 11px
+$text-sm: 24rpx; // 12px
+$text-base: 26rpx; // 13px
+$text-md: 28rpx; // 14px —— 正文
+$text-lg: 32rpx; // 16px
+$text-xl: 40rpx; // 20px
+$text-2xl: 48rpx; // 24px
+$text-3xl: 64rpx; // 32px，大数字（容量 / 体重）

@@ -1,0 +1,440 @@
+<script setup lang="ts">
+import FtTabBar from '@/components/FtTabBar.vue'
+
+// ── 本页数据先走本地 mock，后端接通后逐块替换 ──
+const today = (() => {
+  const d = new Date()
+  const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
+  return `${d.getMonth() + 1}月${d.getDate()}日 · 周${week}`
+})()
+
+// 饮食记录（第二阶段开放；当前为空态预览，与设计稿一致）
+const diet = {
+  kcal: 0,
+  target: '目标 --',
+  rings: [
+    { key: 'protein', label: '蛋白(g)', value: 0, total: 0, percent: 0 },
+    { key: 'carb', label: '碳水(g)', value: 0, total: 0, percent: 0 },
+    { key: 'fat', label: '脂肪(g)', value: 0, total: 0, percent: 0 },
+    { key: 'water', label: '饮水(ml)', value: 0, total: 0, percent: 0 }
+  ],
+  shortcuts: [
+    { key: 'breakfast', label: '早餐' },
+    { key: 'lunch', label: '午餐' },
+    { key: 'dinner', label: '晚餐' },
+    { key: 'snack', label: '加餐' },
+    { key: 'water', label: '饮水' },
+    { key: 'weight', label: '记体重' }
+  ]
+}
+
+// 上次训练
+const lastSession = {
+  title: '上次训练 · 胸 & 三头',
+  date: '10月9日',
+  rows: [
+    { name: '杠铃卧推', value: '60 kg × 8', pr: true },
+    { name: '上斜哑铃卧推', value: '22.5 kg × 10', pr: false }
+  ],
+  footer: '总容量 4,280 kg · 55 分钟'
+}
+
+const weekCount = 3
+const monthCount = 11
+
+function goLibrary() {
+  uni.navigateTo({ url: '/pages/library/index' })
+}
+function startSession() {
+  uni.navigateTo({ url: '/pages/session/index' })
+}
+function startByPlan() {
+  uni.navigateTo({ url: '/pages/plans/index' })
+}
+function dietPending() {
+  uni.showToast({ title: '饮食记录 · 第二阶段开放', icon: 'none' })
+}
+</script>
+
+<template>
+  <view class="home">
+    <view class="home__body">
+      <!-- 顶部行 -->
+      <view class="home__head">
+        <text class="home__date ft-num">{{ today }}</text>
+        <text class="home__head-link" @click="goLibrary">动作库</text>
+      </view>
+
+      <!-- 饮食记录卡（第二阶段开放，此处按定稿稿空态预留） -->
+      <view class="ft-card diet">
+        <view class="diet__head">
+          <text class="diet__title">饮食记录</text>
+          <text class="diet__link" @click="dietPending">记一笔</text>
+        </view>
+
+        <view class="diet__kcal">
+          <text class="diet__kcal-num ft-num">{{ diet.kcal }}</text>
+          <text class="diet__kcal-unit"> / {{ diet.target }} 大卡</text>
+        </view>
+
+        <view class="diet__rings">
+          <view v-for="r in diet.rings" :key="r.key" class="diet__ring-col">
+            <view class="diet__ring" :class="'diet__ring--' + r.key">
+              <text class="diet__ring-num ft-num">{{ r.value }}</text>
+              <text class="diet__ring-sub ft-num">{{ r.value }} / {{ r.total }}</text>
+            </view>
+            <text class="diet__ring-label">{{ r.label }}</text>
+            <text class="diet__ring-pct ft-num">{{ r.percent }}%</text>
+          </view>
+        </view>
+
+        <view class="diet__shortcuts">
+          <view v-for="s in diet.shortcuts" :key="s.key" class="diet__shortcut" @click="dietPending">
+            <view class="diet__ico" :class="'diet__ico--' + s.key" />
+            <text class="diet__shortcut-label">{{ s.label }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 上次训练 -->
+      <view class="ft-card last">
+        <view class="last__head">
+          <view class="last__head-left">
+            <view class="last__bar" />
+            <text class="last__title">{{ lastSession.title }}</text>
+          </view>
+          <text class="last__date ft-num">{{ lastSession.date }}</text>
+        </view>
+        <view v-for="row in lastSession.rows" :key="row.name" class="last__row">
+          <view class="last__dot" />
+          <text class="last__name">{{ row.name }}</text>
+          <text class="last__value ft-num" :class="{ 'ft-marker': row.pr }">{{ row.value }}</text>
+        </view>
+        <view class="last__foot ft-num">{{ lastSession.footer }}</view>
+      </view>
+
+      <!-- 统计条（白框卡片） -->
+      <view class="strip-card">
+        <view class="strip">
+          <view class="strip__item">
+            <text class="strip__label">本周</text>
+            <text class="strip__num ft-num">{{ weekCount }}</text>
+            <text class="strip__label">练</text>
+          </view>
+          <view class="strip__divider" />
+          <view class="strip__item">
+            <text class="strip__label">本月</text>
+            <text class="strip__num ft-num">{{ monthCount }}</text>
+            <text class="strip__label">练</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="home__pad" />
+    </view>
+
+    <!-- 底部固定区：开始训练 + tab 栏 -->
+    <view class="home__bottom">
+      <text class="home__bottom-link" @click="startByPlan">按计划开始</text>
+      <view class="ft-btn ft-btn--primary ft-btn--block" @click="startSession">开始训练</view>
+      <FtTabBar active="home" />
+    </view>
+  </view>
+</template>
+
+<style lang="scss" scoped>
+.home__body {
+  padding: 28rpx 32rpx 0;
+}
+
+/* ── 顶部行 ── */
+.home__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8rpx 0 24rpx;
+}
+
+.home__date {
+  font-size: $text-lg;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.home__head-link {
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+/* ── 饮食记录卡 ── */
+.diet__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.diet__title {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.diet__link {
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.diet__kcal {
+  display: flex;
+  align-items: baseline;
+  margin: 18rpx 0 26rpx;
+}
+
+.diet__kcal-num {
+  font-size: $text-3xl;
+  font-weight: 600;
+  color: $app-ink;
+  line-height: 1;
+}
+
+.diet__kcal-unit {
+  font-size: $text-md;
+  color: $app-ink-muted;
+}
+
+.diet__rings {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 26rpx;
+}
+
+.diet__ring-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 25%;
+}
+
+.diet__ring {
+  width: 116rpx;
+  height: 116rpx;
+  border-radius: 50%;
+  border: 6rpx solid $app-line;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.diet__ring--protein {
+  border-color: $ring-protein;
+}
+.diet__ring--carb {
+  border-color: $ring-carb;
+}
+.diet__ring--fat {
+  border-color: $ring-fat;
+}
+.diet__ring--water {
+  border-color: $ring-water;
+}
+
+.diet__ring-num {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+  line-height: 1.1;
+}
+
+.diet__ring-sub {
+  font-size: 18rpx;
+  color: $app-ink-subtle;
+  line-height: 1.2;
+}
+
+.diet__ring-label {
+  margin-top: 10rpx;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.diet__ring-pct {
+  font-size: 18rpx;
+  color: $app-ink-subtle;
+}
+
+.diet__shortcuts {
+  display: flex;
+  justify-content: space-between;
+}
+
+.diet__shortcut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  flex: 1;
+}
+
+.diet__shortcut-label {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.diet__ico {
+  width: 40rpx;
+  height: 40rpx;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+
+/* 六个快捷图标：自绘线条（stroke 用 muted 色），风格与设计稿一致 */
+.diet__ico--breakfast {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z'/%3E%3Cpath d='M16 10h1.5a2.3 2.3 0 0 1 0 4.6H16'/%3E%3Cpath d='M7.5 3v2.4M11.5 3v2.4'/%3E%3C/svg%3E");
+}
+.diet__ico--lunch {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11h16a8 8 0 0 1-16 0z'/%3E%3Cpath d='M9 4.5v3M15 4.5v3'/%3E%3C/svg%3E");
+}
+.diet__ico--dinner {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z'/%3E%3C/svg%3E");
+}
+.diet__ico--snack {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12.5h11l-1.2 7.5H7.7z'/%3E%3Cpath d='M9.5 12.5c0-2.2 1.1-3.4 2.5-3.4s2.5 1.2 2.5 3.4'/%3E%3Cpath d='M12 9V6.6'/%3E%3Ccircle cx='12' cy='5.4' r='1.2'/%3E%3C/svg%3E");
+}
+.diet__ico--water {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4c3 4 6 7 6 10a6 6 0 0 1-12 0c0-3 3-6 6-10z'/%3E%3C/svg%3E");
+}
+.diet__ico--weight {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='4.5'/%3E%3Cpath d='M12 12.2l2.6-3.1'/%3E%3C/svg%3E");
+}
+
+/* ── 上次训练卡 ── */
+.last__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 18rpx;
+}
+
+.last__head-left {
+  display: flex;
+  align-items: center;
+}
+
+/* 标题左侧的粗竖条标记（对齐设计稿） */
+.last__bar {
+  width: 10rpx;
+  height: 34rpx;
+  border-radius: 4rpx;
+  background: $app-ink;
+  margin-right: 14rpx;
+  flex-shrink: 0;
+}
+
+.last__title {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.last__date {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.last__row {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 0;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.last__dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: $app-ink;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}
+
+.last__name {
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.last__value {
+  margin-left: auto;
+  font-size: $text-md;
+  font-weight: 500;
+  color: $app-ink;
+}
+
+.last__foot {
+  padding-top: 18rpx;
+  border-top: 1rpx solid $app-line-soft;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* ── 统计条（白框卡片）── */
+.strip-card {
+  background: $app-surface;
+  border: 1rpx solid $app-line-soft;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: 24rpx 28rpx;
+  margin-bottom: 24rpx;
+}
+
+.strip {
+  display: flex;
+  align-items: center;
+}
+
+.strip__item {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8rpx;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.strip__num {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.strip__divider {
+  width: 1rpx;
+  height: 32rpx;
+  background: $app-line;
+}
+
+/* ── 底部固定区 ── */
+.home__pad {
+  height: 320rpx;
+}
+
+.home__bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: $app-canvas;
+  padding: 16rpx 32rpx 0;
+}
+
+.home__bottom-link {
+  display: block;
+  text-align: center;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  padding: 10rpx 0 16rpx;
+}
+</style>

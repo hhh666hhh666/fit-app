@@ -79,4 +79,4 @@ jobs:
       # ⚠️ vite build 走 esbuild 只剥离类型、不做检查，
       #    所以**类型错误只会被 typecheck 这一步挡住，构建永远是绿的**。
       - run: npm run typecheck
-      - run: npm run build
+      - run: npm run build:h5

@@ -15,10 +15,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "baseUrl": ".",
+    "types": ["@dcloudio/types"],
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
+  "include": ["env.d.ts", "src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
+  "exclude": ["node_modules", "dist"],
   "references": []
 }

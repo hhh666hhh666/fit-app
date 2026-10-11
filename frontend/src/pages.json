@@ -1,0 +1,65 @@
+{
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^wd-(.*)": "wot-design-uni/components/wd-$1/wd-$1.vue"
+    }
+  },
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": { "navigationBarTitleText": "fit-app" }
+    },
+    {
+      "path": "pages/login/index",
+      "style": { "navigationBarTitleText": "登录" }
+    },
+    {
+      "path": "pages/session/index",
+      "style": { "navigationBarTitleText": "训练中" }
+    },
+    {
+      "path": "pages/summary/index",
+      "style": { "navigationBarTitleText": "训练完成" }
+    },
+    {
+      "path": "pages/log/index",
+      "style": { "navigationBarTitleText": "训练日志" }
+    },
+    {
+      "path": "pages/detail/index",
+      "style": { "navigationBarTitleText": "训练详情" }
+    },
+    {
+      "path": "pages/stats/index",
+      "style": { "navigationBarTitleText": "统计" }
+    },
+    {
+      "path": "pages/body/index",
+      "style": { "navigationBarTitleText": "身体档案" }
+    },
+    {
+      "path": "pages/library/index",
+      "style": { "navigationBarTitleText": "动作库" }
+    },
+    {
+      "path": "pages/plans/index",
+      "style": { "navigationBarTitleText": "训练计划" }
+    },
+    {
+      "path": "pages/plan-edit/index",
+      "style": { "navigationBarTitleText": "编辑计划" }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": { "navigationBarTitleText": "我的" }
+    }
+  ],
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "fit-app",
+    "navigationBarBackgroundColor": "#F3F4EF",
+    "backgroundColor": "#F3F4EF"
+  }
+}

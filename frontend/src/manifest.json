@@ -1,0 +1,23 @@
+{
+  "name": "fit-app",
+  "appid": "",
+  "description": "个人健身训练记录（本轮只跑 H5）",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "vueVersion": "3",
+  "h5": {
+    "title": "fit-app",
+    "router": {
+      "mode": "hash",
+      "base": "/"
+    }
+  },
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false
+    },
+    "usingComponents": true
+  }
+}
