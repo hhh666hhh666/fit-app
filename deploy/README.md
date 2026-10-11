@@ -11,7 +11,12 @@
 2. **服务器**：装好容器运行时；确认 80/443 上的对外入口归谁管（若已有面板或反代，就让它反代到本项目的 web 端口，别抢端口）。
 3. **仓库 Secrets**：`ACR_USERNAME` / `ACR_PASSWORD` / `DEPLOY_SSH_KEY` / `DEPLOY_SSH_KNOWN_HOSTS`（后两个可选但推荐）。
 4. **服务器上的 `.env`**：照 `.env.cloud.example` 填好，放在 `/srv/fit-app/.env`。**这个文件不入库**。
-5. **数据库**：绑到宿主机上的绝对路径（`MYSQL_DATA_DIR`），**不要放在容器里**——容器删了数据不能跟着没。
+5. **数据库**：云上**不自带 MySQL**——复用同机 quizzy 的 `quizzy-mysql` 容器里的 `fit_app` 库
+   （[ADR 0005](../docs/adr/0005-deploy-with-quizzy-infra.md)）。前提：quizzy 已在跑，
+   且 `.env` 里的 `MYSQL_ROOT_PASSWORD` 与 `/srv/quizzy/.env` **同值**；`fit_app` 库首次部署自动建。
+6. **宿主反代**：web 容器只绑回环 `127.0.0.1:8082`（8081 已被 quizzy-web 占）。
+   用面板就加一条反代到 `http://127.0.0.1:8082`；不用面板就照 `nginx/site.conf.example`。
+   ⚠️ 安全组与防火墙都**不要**放行 8082——反代走机器内部回环。
 
 ## 怎么传
 

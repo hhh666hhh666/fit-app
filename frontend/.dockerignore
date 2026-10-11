@@ -1,0 +1,10 @@
+# 关键：node_modules 必须排除。宿主是 Windows，node_modules 里只有
+# @esbuild/win32-x64 / rollup-win32-x64-*，COPY 进容器会覆盖掉 Linux 版本，
+# 导致 npm run build:h5 因找不到 Linux 可执行文件而失败。
+node_modules/
+dist/
+.git/
+.gitignore
+*.log
+.idea/
+.vscode/

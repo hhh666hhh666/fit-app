@@ -1,13 +1,22 @@
 # 云上 prod 编排
 #
 # 形态：镜像来自镜像仓库（CI 构建推送，服务器只拉取、不构建、不 clone 仓库）；
-#       对外入口是宿主反代，web 容器只绑 127.0.0.1。
+#       对外入口是宿主反代（宝塔），web 容器只绑 127.0.0.1:8082。
 #
 # ⚠️ 本文件里**没有 build:**——小机器上跑 Maven 必 OOM，构建一律在 CI 上做。
 # ⚠️ 变量来自服务器上的 $SERVER_ROOT/.env，而 compose 默认只找**自己所在目录**的 .env；
 #    所以调用方（scripts/server-deploy.sh）一律显式 `--env-file`。
-# ⚠️ 内存参数（mem_limit / JAVA_TOOL_OPTIONS / MySQL 的 command 段）的算法见
-#    `docs/operations/内存策略.md`（可选章节）；**数值以本文件为准**。
+# ⚠️ 内存参数（mem_limit / JAVA_TOOL_OPTIONS）的算法见 `docs/operations/内存策略.md`；
+#    **数值以本文件为准**。
+#
+# ── 数据库：复用 quizzy 的 MySQL 容器（ADR 0005）──
+# 同一台 2C2G 上 quizzy 已占 127.0.0.1:3306 与 127.0.0.1:8081；fit-app 若自带 MySQL
+# 会①端口撞车、②再吃掉一整份 MySQL 内存。所以这里**没有 mysql 服务**：
+# server 容器加入 quizzy 的外部网络，直连容器名 `quizzy-mysql`，只用其中的 `fit_app` 库。
+# 代价：两个应用共享一个 MySQL 实例（故障域与备份范围合并）——取舍见 ADR 0005。
+#
+# ⚠️ 端口为什么是 8082：8081 已被 quizzy-web 占用（`ss -tlnp | grep 8081` 可查）。
+#    改端口时要同步改宝塔反代的「目标 URL」与 deploy/nginx/site.conf.example。
 
 name: fit-app   # 固定项目名，免得容器/网络名随 compose 目录名变化而漂移
 
@@ -18,51 +27,15 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
-services:
-  mysql:
-    image: mysql:8
-    container_name: fit-app-mysql
-    restart: unless-stopped
-    # 内核级内存硬顶（保险，不是配额）：取值 = 实测占用（约 161MB）的约 2.4 倍。
-    # ⚠️ 上线前按你自己的实测重算，别照抄。
-    mem_limit: 384m
-    # ⚠️ 只绑**宿主回环**，不是 0.0.0.0。
-    #    用途：让本机能经 SSH 隧道直连（数据库工具、临时排障都靠它），
-    #    同时数据库仍不对公网开口。
-    #    ⚠️ 必须写成 `127.0.0.1:3306:3306`。写成 `3306:3306` 等于绑 0.0.0.0，那是真正的红线。
-    ports:
-      - "127.0.0.1:3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置 MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: fit_app
-      TZ: ${TZ:-Asia/Shanghai}
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-time-zone=+08:00
-      # 小机器：显式钉死缓冲池与连接数，不让默认值往上飘。
-      - --innodb-buffer-pool-size=128M
-      - --max-connections=50
-      # ---- 省内存三刀（算法与实测方法见 docs/operations/内存策略.md）----
-      # 1) 关 performance_schema：不影响任何业务功能，却是单项最大的一笔可回收内存；
-      #    代价是失去它的性能诊断视图。
-      - --performance-schema=OFF
-      # 2) redo log buffer 64M → 16M：写入量小的应用足够。
-      - --innodb-log-buffer-size=16M
-      # 3) 表缓存 4000 → 400：小库同时打开的表远不到 400 张。
-      - --table-open-cache=400
-    volumes:
-      - type: bind
-        source: ${MYSQL_DATA_DIR:?请在 .env 里设置 MYSQL_DATA_DIR（Linux 绝对路径）}
-        target: /var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    logging: *default-logging
+# quizzy compose 的默认网络（`name: quizzy` → `<项目名>_default`）。
+# ⚠️ external: true = 这个网络由外面创建并拥有，fit-app **不会**创建也不会销毁它；
+#    代价是 quizzy 若重建（down/up）导致网络重建，fit-app 的 server 要跟着重启一次。
+networks:
+  quizzy:
+    external: true
+    name: quizzy_default
 
+services:
   server:
     # 镜像 tag 跟随版本号，但由部署时传入（这里永远是变量，不写死）。
     image: ${ACR_REGISTRY:?未设置 ACR_REGISTRY}/${ACR_NAMESPACE:?未设置 ACR_NAMESPACE}/fit-app-server:${APP_VERSION:?未设置 APP_VERSION}
@@ -70,13 +43,18 @@ services:
     restart: unless-stopped
     # 内核级内存硬顶：JVM 的**理论上限 ≈ -Xmx + 242MB**，这里留约 1.3 倍余量。
     mem_limit: 640m
-    depends_on:
-      mysql:
-        condition: service_healthy
+    networks:
+      - default
+      - quizzy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      # ⚠️ 主机是**容器名** quizzy-mysql（走 quizzy_default 网络的 Docker 内置 DNS），
+      #    不是 localhost——容器内的 localhost 是它自己。
+      # ⚠️ createDatabaseIfNotExist=true：首次部署自动建 fit_app 库，省掉手工 CREATE DATABASE；
+      #    连的是 root，有这个权限；库已存在时该参数无害。
+      SPRING_DATASOURCE_URL: jdbc:mysql://quizzy-mysql:3306/fit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # ⚠️ 必须与 quizzy 的 /srv/quizzy/.env 里 MYSQL_ROOT_PASSWORD **同值**——是同一个实例。
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置 MYSQL_ROOT_PASSWORD（与 quizzy 同值）}
       # 必填：默认值已随仓库公开，缺失时 compose 在读配置阶段就退出。
       FITAPP_JWT_SECRET: ${FITAPP_JWT_SECRET:?请在 .env 里设置 FITAPP_JWT_SECRET}
       FITAPP_JWT_EXPIRE_DAYS: ${FITAPP_JWT_EXPIRE_DAYS:-7}
@@ -89,6 +67,8 @@ services:
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx256m -XX:MaxMetaspaceSize=112m -XX:MaxDirectMemorySize=32m -XX:ReservedCodeCacheSize=48m -Xss512k -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
       SERVER_TOMCAT_THREADS_MAX: 32
     # 不发布端口：只经 web 容器的反代暴露 /api/，接口文档因此也不对外。
+    # ⚠️ 没有 depends_on：跨项目的 quizzy-mysql 不归本文件管，编排层无法表达依赖。
+    #    启动顺序靠 healthcheck 的 start_period + Flyway 自己重试连库来兜底。
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:8080/v3/api-docs || exit 1"]
       interval: 10s
@@ -105,8 +85,9 @@ services:
     depends_on:
       server:
         condition: service_healthy
-    # 只绑回环：对外入口交给宿主反代，由它反代到 127.0.0.1:8081。
-    # 绑回环而不是 0.0.0.0，是为了①不与宿主上已有的服务抢 80/443、②不直接对公网可达。
+    # 只绑回环：对外入口交给宿主反代，由它反代到 127.0.0.1:8082。
+    # 绑回环而不是 0.0.0.0，是为了①不与宿主上已有的服务（quizzy 的 8081）抢端口、
+    # ②不直接对公网可达。⚠️ 安全组与宝塔防火墙都**不要**放行这个端口。
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8082:80"
     logging: *default-logging

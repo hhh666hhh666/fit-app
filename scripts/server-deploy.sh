@@ -5,8 +5,8 @@
 #   bash server-deploy.sh <版本号> [web|server|all]      # 版本号不带 v，如 1.1.0
 #
 # 从部署脚本继承下来的设计（要改这里之前先读这几条）：
-#   * mysql 永不重建：用 --no-deps 绕开 depends_on，它最多在「没在跑」时被拉起一次；
-#   * up -d 之前先强制备份一次（第一道保险，备份脚本由你自己补）；
+#   * 数据库是**别人的容器**（quizzy-mysql，见 ADR 0005）：只检查它在跑，绝不 up / 重建 / 停止；
+#   * up -d 之前先强制备份一次（第一道保险，备份脚本由你自己补，备份对象是 fit_app 库）；
 #   * 等 healthcheck（无 healthcheck 的容器退回看 State.Status）；
 #   * 失败时打印日志尾部与回滚命令。
 #
@@ -62,7 +62,7 @@ fail() {
     echo "  没有记录到上一个版本（可能是首次部署）。手动给一个仓库里存在的 tag：" >&2
     echo "    bash $0 <旧版本号>" >&2
   fi
-  echo "  数据在宿主机的 MYSQL_DATA_DIR（见 $ENV_FILE），不在容器里，不会被卷走。" >&2
+  echo "  数据在 quizzy 的 MySQL 实例里（$MYSQL_CONTAINER 的 fit_app 库），不在容器里，不会被卷走。" >&2
   exit 1
 }
 
@@ -88,20 +88,28 @@ docker compose version >/dev/null 2>&1 || { echo "docker compose 用不了" >&2;
 
 echo "==> 部署 $APP_VERSION（范围：${SERVICES[*]}）"
 
-# ---- 2. 保证 mysql 在跑，但绝不重建 ----
-# 用 docker ps 判断而不是 compose：避免 up 因为 depends_on 把 mysql 一起拉进这次操作。
-if docker ps --format '{{.Names}}' | grep -qx "fit-app-mysql"; then
-  echo "==> mysql 已在运行，跳过"
+# ---- 2. 只确认外部 MySQL 在跑，绝不碰它 ----
+# ⚠️ 数据库是 quizzy 的容器（ADR 0005），不归本脚本管：
+#    不 up、不 restart、不 down，连 --no-deps 都不需要——compose 里根本没有 mysql 服务。
+#    它没在跑时**直接失败**，而不是把别人的容器拉起来（那会顺带影响 quizzy 的可用性）。
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-quizzy-mysql}"
+if docker ps --format '{{.Names}}' | grep -qx "$MYSQL_CONTAINER"; then
+  echo "==> 外部 MySQL $MYSQL_CONTAINER 已在运行"
 else
-  echo "==> mysql 没在跑，拉起来"
-  compose up -d mysql || fail "mysql 起不来" mysql
+  echo "" >&2
+  echo "外部 MySQL 容器 $MYSQL_CONTAINER 没在运行。" >&2
+  echo "它是 quizzy 的容器，请去 /srv/quizzy 那边处理（bash /srv/quizzy/compose/scripts/server-compose.sh ps）。" >&2
+  echo "本脚本不会替你拉起它。" >&2
+  exit 1
 fi
-wait_ready "fit-app-mysql" 180 || fail "mysql 起不来" mysql
 
 # ---- 3. up -d 之前先备份一次（脚本由你自己补；没有就删掉这一步，但要知道代价）----
+# ⚠️ 补写时注意：库在**外部容器**里，得 docker exec 进 $MYSQL_CONTAINER 跑 mysqldump fit_app，
+#    而不是连 localhost:3306（宿主上 3306 只绑回环、且那是 quizzy 的映射）。
 if [ -x ./backup-mysql.sh ]; then
   echo "==> 部署前备份"
-  ENV_FILE="$ENV_FILE" bash ./backup-mysql.sh || fail "备份失败，中止部署（不带着没备份的库去跑迁移）"
+  ENV_FILE="$ENV_FILE" MYSQL_CONTAINER="$MYSQL_CONTAINER" bash ./backup-mysql.sh \
+    || fail "备份失败，中止部署（不带着没备份的库去跑迁移）"
 else
   echo "==> ⚠️ 没有 backup-mysql.sh，跳过部署前备份（建议补上）"
 fi
@@ -111,7 +119,7 @@ fi
 echo "==> 拉取镜像 $APP_VERSION"
 compose pull "${SERVICES[@]}" || fail "拉取镜像失败（仓库上有 $APP_VERSION 这个 tag 吗？）" "${SERVICES[@]}"
 
-# --no-deps 是关键：跳过 depends_on，确保这一步碰不到 mysql
+# --no-deps：不动依赖链（server/web 都在 SERVICES 里显式给出，不需要额外拉起谁）
 echo "==> 重建并启动：${SERVICES[*]}"
 compose up -d --no-deps "${SERVICES[@]}" || fail "compose up 失败" "${SERVICES[@]}"
 

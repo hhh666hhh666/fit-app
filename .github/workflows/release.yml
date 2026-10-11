@@ -4,7 +4,8 @@ name: Release
 # 这是本项目唯一会改动运行中服务的流水线。
 # 与 ci.yml 的分工：ci.yml 管「提交能不能过」，本文件管「tag 能不能上线」。
 #
-# ⚠️ 下面的 env 段里全是**占位符**：ACR_REGISTRY / DEPLOY_HOST / DEPLOY_USER 换成你自己的值。
+# env 段是**真值**（与服务器 /srv/fit-app/.env 里的 ACR 相关项保持一致）。
+# ⚠️ ACR 个人版不支持 AccessKey 推送：ACR_USERNAME/ACR_PASSWORD 走 secrets，见下方 build-push。
 # ⚠️ secrets 不能出现在 if: 里（GitHub 会报 Unrecognized named-value 并让整个 workflow 作废，
 #    故障表现是「run 失败但 jobs 数为 0」，极容易误判）——需要判「有没有」时先在 job 级 env
 #    折算成普通布尔，step 再判 env。密钥值本身不进 env，只传「有没有」。
@@ -21,11 +22,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # ⚠️ 换成你自己的镜像仓库地址与命名空间（整段从云厂商控制台「访问凭证」抄）
-  ACR_REGISTRY: <你的镜像仓库地址>
+  # 阿里云 ACR **新个人版实例**（地址形如 crpi-*.cn-<地域>.personal.cr.aliyuncs.com，
+  # 与「经典个人版」的 registry.cn-<地域>.aliyuncs.com 是两种格式，不要照后者猜）。
+  # 与 quizzy 共用同一个 ACR 实例，命名空间各用各的（fit-app / quizzy）。
+  ACR_REGISTRY: crpi-1e1fwsxsm0ra0pky.cn-chengdu.personal.cr.aliyuncs.com
   ACR_NAMESPACE: fit-app
-  DEPLOY_HOST: <你的服务器 IP>
-  DEPLOY_USER: <部署用户名>
+  # 与 quizzy 同一台轻量服务器；产物落到 /srv/fit-app（见 scripts/server-deploy.sh）。
+  DEPLOY_HOST: 8.137.172.6
+  DEPLOY_USER: root
 
 jobs:
   # 1. 版本门禁：tag 与 frontend/package.json / backend/pom.xml / CHANGELOG 对齐，
