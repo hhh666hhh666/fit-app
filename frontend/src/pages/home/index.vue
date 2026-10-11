@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import FtTabBar from '@/components/FtTabBar.vue'
+import { useScheduleStore } from '@/stores/schedule'
 
 // ── 本页数据先走本地 mock，后端接通后逐块替换 ──
 const today = (() => {
@@ -42,15 +44,40 @@ const lastSession = {
 const weekCount = 3
 const monthCount = 11
 
+// ── 周安排驱动的「开始训练」──
+const schedule = useScheduleStore()
+const sheet = ref<'rest' | 'empty' | null>(null)
+
+const bottomHint = computed(() => {
+  if (schedule.todayPlan) return `今天 · ${schedule.todayPlan.name}`
+  if (schedule.isRest) return '今天休息'
+  return '今天没有安排'
+})
+
 function goLibrary() {
   uni.navigateTo({ url: '/pages/library/index' })
 }
-function startSession() {
+
+function onStart() {
+  if (schedule.todayPlan) {
+    uni.navigateTo({ url: `/pages/session/index?plan=${schedule.todayPlan.id}` })
+  } else if (schedule.isRest) {
+    sheet.value = 'rest'
+  } else {
+    sheet.value = 'empty'
+  }
+}
+
+function freeTrain() {
+  sheet.value = null
   uni.navigateTo({ url: '/pages/session/index' })
 }
-function startByPlan() {
-  uni.navigateTo({ url: '/pages/plans/index' })
+
+function goWeek() {
+  sheet.value = null
+  uni.navigateTo({ url: '/pages/week/index' })
 }
+
 function dietPending() {
   uni.showToast({ title: '饮食记录 · 第二阶段开放', icon: 'none' })
 }
@@ -135,9 +162,23 @@ function dietPending() {
 
     <!-- 底部固定区：开始训练 + tab 栏 -->
     <view class="home__bottom">
-      <text class="home__bottom-link" @click="startByPlan">按计划开始</text>
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="startSession">开始训练</view>
+      <text class="home__bottom-link">{{ bottomHint }}</text>
+      <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
       <FtTabBar active="home" />
+    </view>
+
+    <!-- 休息日 / 未安排弹层 -->
+    <view v-if="sheet" class="sheet-mask" @click="sheet = null" />
+    <view v-if="sheet" class="sheet">
+      <view class="sheet__handle" />
+      <text class="sheet__title">{{ sheet === 'rest' ? '今天是休息日' : '今天没有安排' }}</text>
+      <text class="sheet__sub">{{
+        sheet === 'rest' ? '好好恢复，明天见。' : '设置每周安排后，开始训练会自动按计划进行。'
+      }}</text>
+      <view class="ft-btn ft-btn--primary ft-btn--block" @click="freeTrain">自由训练</view>
+      <view class="ft-btn ft-btn--ghost ft-btn--block sheet__second" @click="goWeek">
+        调整训练安排
+      </view>
     </view>
   </view>
 </template>
@@ -436,5 +477,53 @@ function dietPending() {
   font-size: $text-sm;
   color: $app-ink-muted;
   padding: 10rpx 0 16rpx;
+}
+
+/* ── 休息日 / 未安排弹层 ── */
+.sheet-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(23, 25, 29, 0.4);
+  z-index: 90;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: $app-surface;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  z-index: 91;
+}
+
+.sheet__handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: $app-line;
+  margin: 0 auto 28rpx;
+}
+
+.sheet__title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.sheet__sub {
+  display: block;
+  font-size: $text-base;
+  color: $app-ink-muted;
+  padding: 10rpx 0 32rpx;
+}
+
+.sheet__second {
+  margin-top: 16rpx;
 }
 </style>

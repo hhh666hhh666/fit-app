@@ -51,6 +51,10 @@
       "style": { "navigationBarTitleText": "编辑计划" }
     },
     {
+      "path": "pages/week/index",
+      "style": { "navigationBarTitleText": "训练安排" }
+    },
+    {
       "path": "pages/profile/index",
       "style": { "navigationBarTitleText": "我的" }
     }
