@@ -25,10 +25,14 @@ VERSION_FILE="${VERSION_FILE:-$SERVER_ROOT/compose/.current-version}"
 RAW_VERSION="${1:-}"
 SCOPE="${2:-all}"
 
+# ⚠️ 两组名字别混：compose **服务名**（compose 子命令的参数）与 **容器名**（docker 子命令的参数）。
+#    服务名定义在 docker-compose.prod.yml 的 services: 下（server / web），
+#    容器名是 container_name（fit-app-server / fit-app-web）。
+#    给 compose 传容器名会报 `no such service`；给 docker 传服务名会报 `No such object`。
 case "$SCOPE" in
-  all)    SERVICES=(fit-app-server fit-app-web) ;;
-  server) SERVICES=(fit-app-server) ;;
-  web)    SERVICES=(fit-app-web) ;;
+  all)    SERVICES=(server web) ;;
+  server) SERVICES=(server) ;;
+  web)    SERVICES=(web) ;;
   *)      echo "用法：$0 <版本号，如 1.1.0> [web|server|all]" >&2; exit 1 ;;
 esac
 
@@ -125,11 +129,12 @@ compose up -d --no-deps "${SERVICES[@]}" || fail "compose up 失败" "${SERVICES
 
 # ---- 5. 等健康检查 ----
 echo "==> 等待容器就绪"
+# wait_ready 走 docker inspect，要用**容器名**；fail 里的 compose logs 用**服务名**
 case "$SCOPE" in
-  server|all) wait_ready "fit-app-server" 180 || fail "后端未通过健康检查" fit-app-server ;;
+  server|all) wait_ready "fit-app-server" 180 || fail "后端未通过健康检查" server ;;
 esac
 case "$SCOPE" in
-  web|all)    wait_ready "fit-app-web" 60    || fail "前端容器没起来" fit-app-web ;;
+  web|all)    wait_ready "fit-app-web" 60    || fail "前端容器没起来" web ;;
 esac
 
 # ---- 6. 探一下真实端口（只告警，不中断）----
