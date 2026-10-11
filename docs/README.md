@@ -23,6 +23,7 @@
 | [../scripts/check-module-tests.sh](../scripts/check-module-tests.sh) | 断言每个带 Controller 的模块都配了测试类 | 加新模块的人 / CI | 文件系统 |
 | [../scripts/check-version.sh](../scripts/check-version.sh) | 版本号与 `git tag` 对齐自检；非 tag 提交上自动跳过 | 要打 tag 的人 / CI | `git tag` |
 | [requirements/scope.md](./requirements/scope.md) | 定位、范围、**明确不做**、已定约束 | 判断某个改动越没越界的人 | 本文件 + 各条 ADR |
+| [requirements/产品设计稿.md](./requirements/产品设计稿.md) | 原始功能规划稿（输入素材，仅供追溯；范围以 scope.md 为准） | 想核对「当初为什么这么设计」的人 | 本文件（收录快照，不随需求变更同步） |
 | [design/API.md](./design/API.md) | 怎么看真实接口、通用响应与错误约定 | 对接接口或改 Controller 的人 | 接口文档与各 Controller |
 | [design/数据模型.md](./design/数据模型.md) | 实体关系、生命周期、历史一致性 | 改数据结构或写查询的人 | 迁移脚本 |
 | [design/前端.md](./design/前端.md) | 前端页面流、路由、状态与 API 边界 | 改前端的人 | `frontend/src/` |
