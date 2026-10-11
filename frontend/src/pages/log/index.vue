@@ -5,6 +5,7 @@ import FtTabBar from '@/components/FtTabBar.vue'
 import { listWorkouts } from '@/api/workout'
 import type { WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 const items = ref<WorkoutListItem[]>([])
 const loading = ref(true)
@@ -31,7 +32,10 @@ async function load() {
   }
 }
 
-onShow(load)
+onShow(() => {
+  if (!ensureLogin()) return
+  load()
+})
 
 function weekdayOf(iso: string): string {
   return `周${WEEK_CHARS[new Date(iso).getDay()]}`

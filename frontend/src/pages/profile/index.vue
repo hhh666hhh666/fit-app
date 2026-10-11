@@ -6,6 +6,7 @@ import { listWorkouts } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 我的（设计稿：.workbuddy/stitch/screen/profile.png）──
 
@@ -17,6 +18,7 @@ const exerciseCount = ref(0)
 const schedule = useScheduleStore()
 
 onShow(() => {
+  if (!ensureLogin()) return
   username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
   schedule.load()
   loadStats()

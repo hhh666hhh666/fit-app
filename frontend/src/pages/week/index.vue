@@ -2,11 +2,13 @@
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
+import { ensureLogin } from '@/utils/guard'
 
 const schedule = useScheduleStore()
 const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 onShow(() => {
+  if (!ensureLogin()) return
   schedule.load(true)
 })
 

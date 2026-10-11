@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createPlan, deletePlan, getPlan, updatePlan } from '@/api/plan'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 计划编辑/新建（设计稿：.workbuddy/stitch/screen/plan-edit.png）──
 
@@ -50,6 +51,7 @@ async function loadDetail(id: number) {
 
 // 从动作库（点选模式）返回：取走选中动作并入编排；重复则提示
 onShow(() => {
+  if (!ensureLogin()) return
   const p = pick.take()
   if (!p) return
   if (rows.value.some((r) => r.exerciseId === p.id)) {

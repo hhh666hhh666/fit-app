@@ -4,6 +4,7 @@ import { onReady, onShow } from '@dcloudio/uni-app'
 import { createBodyRecord, getBodyOverview, getBodyRecords } from '@/api/body'
 import type { BodyOverview, BodyRecordRow } from '@/api/body'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 身体档案（设计稿：.workbuddy/stitch/screen/body.png）──
 
@@ -31,7 +32,10 @@ async function load() {
   }
 }
 
-onShow(load)
+onShow(() => {
+  if (!ensureLogin()) return
+  load()
+})
 
 const series = computed(() => overview.value?.weightSeries ?? [])
 

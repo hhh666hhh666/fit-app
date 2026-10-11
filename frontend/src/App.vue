@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app'
 
-// 启动时不做跳转：登录态由各页 onShow 的 ensureLogin() 兜底，
-// 因为 onLaunch 里做 reLaunch 有时序问题。
+// 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
+// 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
+// ⚠️ 守卫是**逐页**的：新建页面记得加 `if (!ensureLogin()) return`，uni-app 没有全局页面钩子。
 onLaunch(() => {})
 </script>
 

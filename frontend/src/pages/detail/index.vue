@@ -1,5 +1,11 @@
 <script setup lang="ts">
 // 训练详情（占位）。设计稿：.workbuddy/stitch/screen/detail.png
+import { onShow } from '@dcloudio/uni-app'
+import { ensureLogin } from '@/utils/guard'
+
+onShow(() => {
+  if (!ensureLogin()) return
+})
 </script>
 
 <template>

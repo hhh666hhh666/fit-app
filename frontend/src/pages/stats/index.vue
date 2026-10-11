@@ -4,6 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 统计（设计稿：.workbuddy/stitch/screen/stats.png）──
 
@@ -28,7 +29,10 @@ async function load() {
   }
 }
 
-onShow(load)
+onShow(() => {
+  if (!ensureLogin()) return
+  load()
+})
 
 function switchPeriod(p: StatsPeriod) {
   if (period.value === p) return

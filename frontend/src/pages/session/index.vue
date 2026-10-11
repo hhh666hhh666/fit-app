@@ -5,6 +5,7 @@ import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
 import { formatThousands, muscleLabel } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 训练会话（计划 → 真数据；训练记录已接真接口）──
 const training = useTrainingStore()
@@ -65,6 +66,7 @@ async function loadPlan(pid: number) {
 }
 
 onLoad((query) => {
+  if (!ensureLogin()) return
   const q = (query || {}) as Record<string, string | undefined>
   const pid = Number(q.plan)
   if (pid) {

@@ -3,6 +3,12 @@ import { computed } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { updateWorkoutNote } from '@/api/workout'
 import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { onShow } from '@dcloudio/uni-app'
+import { ensureLogin } from '@/utils/guard'
+
+onShow(() => {
+  if (!ensureLogin()) return
+})
 
 const training = useTrainingStore()
 const summary = computed(() => training.current)

@@ -5,6 +5,7 @@ import FtTabBar from '@/components/FtTabBar.vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { getWorkout, listWorkouts } from '@/api/workout'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 const today = (() => {
   const d = new Date()
@@ -98,6 +99,7 @@ const schedule = useScheduleStore()
 const sheet = ref<'rest' | 'empty' | null>(null)
 
 onShow(() => {
+  if (!ensureLogin()) return
   schedule.load()
   refreshLastWorkout()
   refreshCounts()

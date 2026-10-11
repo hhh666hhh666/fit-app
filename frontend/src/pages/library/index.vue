@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 动作库（设计稿：.workbuddy/stitch/screen/library.png）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
@@ -34,6 +35,7 @@ onLoad((query) => {
 })
 
 onShow(() => {
+  if (!ensureLogin()) return
   load()
 })
 

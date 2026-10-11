@@ -3,11 +3,13 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { ensureLogin } from '@/utils/guard'
 
 // ── 训练计划列表（设计稿：.workbuddy/stitch/screen/plans.png）──
 const schedule = useScheduleStore()
 
 onShow(() => {
+  if (!ensureLogin()) return
   schedule.load()
 })
 
