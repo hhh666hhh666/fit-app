@@ -34,8 +34,6 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/login",
                         "/api/auth/register",
-                        // ⚠️ 脚手架的示例接口（首页靠它验证前后端连通）。接手后删掉这一行与示例模块。
-                        "/api/example/hello",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/v3/api-docs/**"
