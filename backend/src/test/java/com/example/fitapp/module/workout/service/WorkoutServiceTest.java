@@ -9,6 +9,7 @@ import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutSetMapper;
+import com.example.fitapp.module.workout.vo.ExerciseMaxVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,12 +18,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -164,5 +169,80 @@ class WorkoutServiceTest {
         verify(workoutMapper).insert(captor.capture());
         assertNull(captor.getValue().getPlanId());
         assertEquals("胸 & 三头", captor.getValue().getTitle());
+    }
+
+    // ── PR 判定（scope #7：动作历史「最重一组」weight×reps）──
+
+    private WorkoutCreateDTO oneExerciseDto(long exerciseId, String[][] sets) {
+        WorkoutCreateDTO dto = new WorkoutCreateDTO();
+        dto.setTitle("推");
+        WorkoutCreateDTO.BlockDTO b = new WorkoutCreateDTO.BlockDTO();
+        b.setExerciseId(exerciseId);
+        b.setName("杠铃卧推");
+        b.setSets(Arrays.stream(sets)
+                .map(s -> {
+                    WorkoutCreateDTO.SetDTO x = new WorkoutCreateDTO.SetDTO();
+                    x.setWeight(new BigDecimal(s[0]));
+                    x.setReps(Integer.parseInt(s[1]));
+                    return x;
+                })
+                .toList());
+        dto.setBlocks(List.of(b));
+        return dto;
+    }
+
+    private List<Boolean> insertedPrFlags() {
+        ArgumentCaptor<WorkoutSet> captor = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper, atLeastOnce()).insert(captor.capture());
+        return captor.getAllValues().stream().map(WorkoutSet::getPr).toList();
+    }
+
+    @Test
+    void create_firstSetOfExercise_isPr_thenBelow_notPr() {
+        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"60", "8"}, {"60", "7"}});
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of());
+
+        service().create(1L, dto);
+
+        // 无历史：第一组即当前最佳＝PR；之后没超过就不标
+        assertEquals(List.of(true, false), insertedPrFlags());
+    }
+
+    @Test
+    void create_beatsHistory_pr_tieAndBelow_notPr() {
+        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"61", "8"}, {"60", "8"}});
+        ExerciseMaxVO history = new ExerciseMaxVO();
+        history.setExerciseId(5L);
+        history.setMaxVol(new BigDecimal("480")); // 60×8
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history));
+
+        service().create(1L, dto);
+
+        // 488 刷新 PR；480 与历史并列不算新 PR
+        assertEquals(List.of(true, false), insertedPrFlags());
+    }
+
+    @Test
+    void create_progressiveWithinWorkout_marksEachNewBest() {
+        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"50", "8"}, {"55", "8"}, {"52", "10"}});
+        ExerciseMaxVO history = new ExerciseMaxVO();
+        history.setExerciseId(5L);
+        history.setMaxVol(new BigDecimal("400"));
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history));
+
+        service().create(1L, dto);
+
+        // 400 并列不刷；440 刷；520 再刷（runningMax 随训练内逐组递进）
+        assertEquals(List.of(false, true, true), insertedPrFlags());
+    }
+
+    @Test
+    void create_withoutExerciseId_neverPr_andSkipsHistoryQuery() {
+        WorkoutCreateDTO dto = sampleDto(); // 全部 block 未挂动作库
+
+        service().create(1L, dto);
+
+        verify(workoutMapper, never()).selectMaxSetVolume(any(), any());
+        assertEquals(List.of(false, false, false), insertedPrFlags());
     }
 }

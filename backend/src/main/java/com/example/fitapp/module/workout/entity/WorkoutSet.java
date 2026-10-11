@@ -22,9 +22,14 @@ public class WorkoutSet {
 
     private Integer setIndex;
 
+    /** 重量 kg */
     private BigDecimal weight;
 
+    /** 次数 */
     private Integer reps;
+
+    /** 提交时是否刷新该动作历史最佳（weight×reps；仅 exercise_id 非空时判定）。 */
+    private Boolean pr;
 
     private LocalDateTime createdAt;
 }

@@ -40,5 +40,8 @@ public class WorkoutDetailVO {
         private BigDecimal weight;
 
         private Integer reps;
+
+        /** 提交时是否刷新该动作历史最佳（自由训练未挂动作库的组恒为 false）。 */
+        private Boolean pr;
     }
 }

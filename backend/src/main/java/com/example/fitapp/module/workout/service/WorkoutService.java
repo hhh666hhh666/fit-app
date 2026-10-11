@@ -12,6 +12,7 @@ import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutSetMapper;
+import com.example.fitapp.module.workout.vo.ExerciseMaxVO;
 import com.example.fitapp.module.workout.vo.LastRecordVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import com.example.fitapp.module.workout.vo.WorkoutListItemVO;
@@ -23,7 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 训练记录：提交（一次事务写入 workout/block/set）、列表、详情、备注、删除、上次数据。
@@ -45,6 +51,17 @@ public class WorkoutService {
                 .flatMap(b -> b.getSets().stream())
                 .map(s -> s.getWeight().multiply(BigDecimal.valueOf(s.getReps())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // PR 判定的起点＝这些动作的历史最大单组容量（weight×reps）；本训练内逐组递进更新
+        Set<Long> exerciseIds = dto.getBlocks().stream()
+                .map(WorkoutCreateDTO.BlockDTO::getExerciseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, BigDecimal> runningMax = new HashMap<>(
+                exerciseIds.isEmpty()
+                        ? Map.of()
+                        : workoutMapper.selectMaxSetVolume(userId, exerciseIds).stream()
+                                .collect(Collectors.toMap(ExerciseMaxVO::getExerciseId, ExerciseMaxVO::getMaxVol)));
 
         Workout w = new Workout();
         w.setUserId(userId);
@@ -74,11 +91,13 @@ public class WorkoutService {
                 ws.setSetIndex(idx++);
                 ws.setWeight(s.getWeight());
                 ws.setReps(s.getReps());
+                ws.setPr(isPr(b.getExerciseId(), s, runningMax));
                 setMapper.insert(ws);
 
                 WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
                 item.setWeight(s.getWeight());
                 item.setReps(s.getReps());
+                item.setPr(ws.getPr());
                 sets.add(item);
             }
 
@@ -113,6 +132,7 @@ public class WorkoutService {
                 WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
                 item.setWeight(s.getWeight());
                 item.setReps(s.getReps());
+                item.setPr(Boolean.TRUE.equals(s.getPr()));
                 return item;
             }).toList());
             vbs.add(vb);
@@ -137,6 +157,23 @@ public class WorkoutService {
     /** 某动作的「上次数据」；没有记录时返回 null。 */
     public LastRecordVO lastRecord(Long userId, Long exerciseId) {
         return workoutMapper.selectLastRecord(userId, exerciseId);
+    }
+
+    /**
+     * PR 口径（scope #7）：该动作历史「最重一组」（weight×reps）。
+     * 严格大于才刷新（并列不算新 PR）；无历史即当前最佳＝PR；未挂动作库的组不判定。
+     */
+    private boolean isPr(Long exerciseId, WorkoutCreateDTO.SetDTO s, Map<Long, BigDecimal> runningMax) {
+        if (exerciseId == null) {
+            return false;
+        }
+        BigDecimal vol = s.getWeight().multiply(BigDecimal.valueOf(s.getReps()));
+        BigDecimal max = runningMax.get(exerciseId);
+        if (max == null || vol.compareTo(max) > 0) {
+            runningMax.put(exerciseId, vol);
+            return true;
+        }
+        return false;
     }
 
     private Workout requireOwn(Long userId, Long id) {
