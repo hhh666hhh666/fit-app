@@ -1,6 +1,8 @@
 package com.example.fitapp.module.workout.service;
 
 import com.example.fitapp.common.BusinessException;
+import com.example.fitapp.module.plan.entity.Plan;
+import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
 import com.example.fitapp.module.workout.entity.Workout;
 import com.example.fitapp.module.workout.entity.WorkoutSet;
@@ -18,6 +20,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
@@ -26,7 +29,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * 纯单元测试（不碰库）：专测静默错误——
- * 总容量算错会一直错；组序号编号乱（不从 1 起、跨动作不重置）前端会显示错。
+ * 总容量算错会一直错；组序号编号乱（不从 1 起、跨动作不重置）前端会显示错；
+ * 来源计划引用非法时不能阻断训练入库。
  */
 @ExtendWith(MockitoExtension.class)
 class WorkoutServiceTest {
@@ -37,9 +41,11 @@ class WorkoutServiceTest {
     private WorkoutBlockMapper blockMapper;
     @Mock
     private WorkoutSetMapper setMapper;
+    @Mock
+    private PlanMapper planMapper;
 
     private WorkoutService service() {
-        return new WorkoutService(workoutMapper, blockMapper, setMapper);
+        return new WorkoutService(workoutMapper, blockMapper, setMapper, planMapper);
     }
 
     private WorkoutCreateDTO sampleDto() {
@@ -127,5 +133,36 @@ class WorkoutServiceTest {
         WorkoutDetailVO vo = service().detail(1L, 1L);
         assertEquals("胸 & 三头", vo.getTitle());
         assertEquals(0, vo.getTotalVolume().compareTo(new BigDecimal("1125")));
+    }
+
+    @Test
+    void create_validPlanId_saved() {
+        WorkoutCreateDTO dto = sampleDto();
+        dto.setPlanId(5L);
+        Plan own = new Plan();
+        own.setId(5L);
+        own.setUserId(1L);
+        when(planMapper.selectById(5L)).thenReturn(own);
+
+        service().create(1L, dto);
+
+        ArgumentCaptor<Workout> captor = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).insert(captor.capture());
+        assertEquals(5L, captor.getValue().getPlanId());
+    }
+
+    @Test
+    void create_invalidPlanId_ignoredButWorkoutStillSaved() {
+        WorkoutCreateDTO dto = sampleDto();
+        dto.setPlanId(42L); // 不存在的计划（或他人的计划）
+        when(planMapper.selectById(42L)).thenReturn(null);
+
+        service().create(1L, dto);
+
+        // 数据优先：引用问题绝不阻断「结束训练」，plan_id 静默置 null
+        ArgumentCaptor<Workout> captor = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).insert(captor.capture());
+        assertNull(captor.getValue().getPlanId());
+        assertEquals("胸 & 三头", captor.getValue().getTitle());
     }
 }
