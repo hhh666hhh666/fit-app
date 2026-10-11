@@ -6,7 +6,7 @@
 
 个人自用的训练记录工具：预设与自定义动作库、自建训练计划、组次录入、训练日志、统计（PR／频次／趋势）与身体档案。数据存在自己的服务器；手机端是 Android App（uni-app 网页＋套壳）。
 
-现状：需求打磨完成（范围见 [`docs/requirements/scope.md`](docs/requirements/scope.md)，决策见 [`docs/adr/`](docs/adr/)），开发未开始。
+现状：**开发中**——uni-app 前端（主页／记录／汇总／日志／周安排已建）＋ Spring Boot 后端（认证／动作库／训练记录已接通真库）。范围见 [`docs/requirements/scope.md`](docs/requirements/scope.md)，决策见 [`docs/adr/`](docs/adr/)。
 
 **不是什么**：不是公开产品（不做注册风控与运营）；不预设训练计划模板；暂不含饮食模块（后置第二阶段）；不做 iOS 与小程序（现阶段）。
 
@@ -15,24 +15,26 @@
 前置：JDK 21、Maven 3.9+、Node 22、Docker（只用来起数据库）。
 
 ```bash
-# 1. 起数据库
+# 1. 起数据库（Docker Desktop 需先开着）
 docker compose -f docker-compose.dev.yml up -d
 
 # 2. 起后端（默认 8080）
+#    ⚠️ 本机裸跑必须先把 .env 注入进程环境变量（mvn 不读 .env），起法与症状见
+#    docs/operations/configuration.md
 cd backend && mvn -B -ntp spring-boot:run
 
-# 3. 起前端（默认 5173，/api 已代理到后端）
-cd frontend && npm install && npm run dev
+# 3. 起前端（默认 5175，/api 已代理到后端）
+cd frontend && npm install && npm run dev:h5
 ```
 
-打开 `http://127.0.0.1:5173/`，首页上那行来自后端接口的返回值是「前后端通了」的肉眼判据。
+打开 `http://127.0.0.1:5175/`，出现 fit-app 登录页即「跑通」；注册账号后可完整使用（数据存本机 MySQL 3307）。
 
 ## 目录
 
 | 目录 | 是什么 |
 |------|--------|
 | `backend/` | Spring Boot + MyBatis-Plus + Flyway |
-| `frontend/` | Vue 3 + Vite + TypeScript + shadcn-vue + Tailwind v4 |
+| `frontend/` | uni-app（Vue 3 + TypeScript）→ H5；Android 侧由 WebView 壳装载（ADR 0002） |
 | `docs/` | 文档体系（索引见 `docs/README.md`） |
 | `scripts/` | 机械守卫脚本 |
 | `deploy/` | 部署侧配置模板（可选章节生成） |

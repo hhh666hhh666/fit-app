@@ -37,6 +37,20 @@ cp .env.example .env    # 然后至少把 JWT 密钥换成随机值（生成命�
 但后端启动报 `Access denied for user 'root'@'172.19.0.1'`——看着像数据库坏了，其实是**密码没传过去**。
 （连本机映射端口时，MySQL 看到的来源 IP 是 Docker 网关地址，不是 127.0.0.1，这一样是正常的。）
 
+**本机裸跑的起法（PowerShell）**：先把 `.env` 注入当前进程的环境变量，再启动——
+
+```powershell
+Get-Content .env -Encoding UTF8 | ForEach-Object {
+  if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$') {
+    Set-Item -Path "Env:\$($matches[1])" -Value $matches[2]
+  }
+}
+& "E:\develop\apache-maven-3.9.9\bin\mvn.cmd" -B -ntp spring-boot:run
+```
+
+⚠️ 读 `.env` 必须显式 `-Encoding UTF8`（PowerShell 5.1 默认按 ANSI 读、遇中文注释会静默丢行——丢的正好可能是要用的那行）。
+漏 `FITAPP_JWT_SECRET` 的症状是 `PlaceholderResolutionException`（JwtUtil 的 `@Value` 没有默认值）；漏 `SPRING_DATASOURCE_PASSWORD` 的症状是 `Access denied`。
+
 ## 密钥这条为什么特殊
 
 - `FITAPP_JWT_SECRET` 必须是**随机值，至少 32 字节**。
