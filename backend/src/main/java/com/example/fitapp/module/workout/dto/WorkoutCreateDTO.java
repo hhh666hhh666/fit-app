@@ -19,6 +19,9 @@ import java.util.List;
 @Data
 public class WorkoutCreateDTO {
 
+    /** 来源计划（弱引用，可空；自由训练不传）。服务端校验归属，非法则忽略——不阻断训练入库。 */
+    private Long planId;
+
     @NotBlank(message = "标题不能为空")
     @Size(max = 64, message = "标题过长")
     private String title;

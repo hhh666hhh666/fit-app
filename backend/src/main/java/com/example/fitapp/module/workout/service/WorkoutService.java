@@ -3,6 +3,8 @@ package com.example.fitapp.module.workout.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.module.plan.entity.Plan;
+import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
 import com.example.fitapp.module.workout.entity.Workout;
 import com.example.fitapp.module.workout.entity.WorkoutBlock;
@@ -14,6 +16,7 @@ import com.example.fitapp.module.workout.vo.LastRecordVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import com.example.fitapp.module.workout.vo.WorkoutListItemVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,7 @@ import java.util.List;
 /**
  * 训练记录：提交（一次事务写入 workout/block/set）、列表、详情、备注、删除、上次数据。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WorkoutService {
@@ -32,6 +36,7 @@ public class WorkoutService {
     private final WorkoutMapper workoutMapper;
     private final WorkoutBlockMapper blockMapper;
     private final WorkoutSetMapper setMapper;
+    private final PlanMapper planMapper;
 
     @Transactional
     public WorkoutDetailVO create(Long userId, WorkoutCreateDTO dto) {
@@ -43,6 +48,7 @@ public class WorkoutService {
 
         Workout w = new Workout();
         w.setUserId(userId);
+        w.setPlanId(resolvePlanId(userId, dto.getPlanId()));
         w.setTitle(dto.getTitle().trim());
         w.setStartedAt(now.minusSeconds(dto.getDurationSec() == null ? 0 : dto.getDurationSec()));
         w.setDurationSec(dto.getDurationSec() == null ? 0 : dto.getDurationSec());
@@ -139,6 +145,22 @@ public class WorkoutService {
             throw new BusinessException(ResultCode.NOT_FOUND, "训练记录不存在");
         }
         return w;
+    }
+
+    /**
+     * 来源计划弱引用：存在且属于当前用户才存，否则记警告并忽略。
+     * 刻意不抛异常——训练数据优先，「结束训练」绝不因引用问题白录（前端 bug 也不能丢数据）。
+     */
+    private Long resolvePlanId(Long userId, Long planId) {
+        if (planId == null) {
+            return null;
+        }
+        Plan p = planMapper.selectById(planId);
+        if (p != null && userId.equals(p.getUserId())) {
+            return planId;
+        }
+        log.warn("忽略非法的来源计划 planId={}（user={}）", planId, userId);
+        return null;
     }
 
     private WorkoutDetailVO toDetail(Workout w, LocalDateTime createdAt, List<WorkoutDetailVO.Block> blocks) {

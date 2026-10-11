@@ -20,6 +20,9 @@ public class Workout {
 
     private Long userId;
 
+    /** 来源计划（弱引用，自由训练为 null；删计划不影响历史）。 */
+    private Long planId;
+
     /** 当次标题快照（计划名或「自由训练」）。 */
     private String title;
 
