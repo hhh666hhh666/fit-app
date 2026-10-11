@@ -3,6 +3,8 @@ import request, { unwrap } from './request'
 export interface WorkoutSetItem {
   weight: number
   reps: number
+  /** 提交时是否刷新该动作历史最佳（未挂动作库的组为 false）。 */
+  pr?: boolean
 }
 
 export interface WorkoutBlockItem {

@@ -80,7 +80,7 @@ async function close() {
             <view class="detail__sets">
               <template v-for="(s, j) in b.sets" :key="j">
                 <text v-if="j > 0" class="detail__sep">·</text>
-                <text class="detail__chip ft-num">{{ s.weight }} × {{ s.reps }}</text>
+                <text class="detail__chip ft-num" :class="{ 'ft-marker': s.pr }">{{ s.weight }} × {{ s.reps }}</text>
               </template>
             </view>
           </view>
@@ -274,6 +274,12 @@ async function close() {
   border: 1rpx solid $app-line-soft;
   border-radius: 8rpx;
   padding: 8rpx 16rpx;
+}
+
+/* PR 组：scoped 属性选择器优先级压过全局 .ft-marker，需联合类名提回来 */
+.detail__chip.ft-marker {
+  background: $app-highlight;
+  border-color: $app-highlight;
 }
 
 /* ── 备注 ── */

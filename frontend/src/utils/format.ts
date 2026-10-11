@@ -10,6 +10,13 @@ export function formatClock(totalSec: number): string {
   return `${m}:${s}`
 }
 
+/** 秒 → "2 小时 45 分"（不足 1 小时为 "45 分钟"） */
+export function formatDuration(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.round((totalSec % 3600) / 60)
+  return h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`
+}
+
 /** ISO 时间 → "10月11日" */
 export function formatDateLabel(iso: string): string {
   const d = new Date(iso)

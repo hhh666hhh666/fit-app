@@ -32,8 +32,8 @@ const diet = {
   ]
 }
 
-// ── 上次训练（真数据：最近一次训练 + 各动作最后一组）──
-type LastRow = { name: string; value: string }
+// ── 上次训练（真数据：最近一次训练 + 各动作最后一组；该动作本次刷新过 PR 则荧光）──
+type LastRow = { name: string; value: string; pr: boolean }
 const lastWorkout = ref<{
   title: string
   date: string
@@ -59,7 +59,8 @@ async function refreshLastWorkout() {
         const lastSet = b.sets[b.sets.length - 1]
         return {
           name: b.name,
-          value: lastSet ? `${lastSet.weight} kg × ${lastSet.reps}` : '—'
+          value: lastSet ? `${lastSet.weight} kg × ${lastSet.reps}` : '—',
+          pr: b.sets.some((s) => s.pr)
         }
       }),
       footer: `总容量 ${formatThousands(Math.round(summary.totalVolume))} kg · ${Math.max(
@@ -189,7 +190,7 @@ function dietPending() {
         <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
           <view class="last__dot" />
           <text class="last__name">{{ row.name }}</text>
-          <text class="last__value ft-num">{{ row.value }}</text>
+          <text class="last__value ft-num" :class="{ 'ft-marker': row.pr }">{{ row.value }}</text>
         </view>
         <view class="last__foot ft-num">{{ lastWorkout.footer }}</view>
       </view>
