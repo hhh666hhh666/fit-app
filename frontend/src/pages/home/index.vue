@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { useScheduleStore } from '@/stores/schedule'
+import { getWorkout, listWorkouts } from '@/api/workout'
+import { formatDateLabel, formatThousands } from '@/utils/format'
 
-// ── 本页数据先走本地 mock，后端接通后逐块替换 ──
 const today = (() => {
   const d = new Date()
   const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
@@ -30,23 +32,75 @@ const diet = {
   ]
 }
 
-// 上次训练
-const lastSession = {
-  title: '上次训练 · 胸 & 三头',
-  date: '10月9日',
-  rows: [
-    { name: '杠铃卧推', value: '60 kg × 8', pr: true },
-    { name: '上斜哑铃卧推', value: '22.5 kg × 10', pr: false }
-  ],
-  footer: '总容量 4,280 kg · 55 分钟'
+// ── 上次训练（真数据：最近一次训练 + 各动作最后一组）──
+type LastRow = { name: string; value: string }
+const lastWorkout = ref<{
+  title: string
+  date: string
+  rows: LastRow[]
+  footer: string
+} | null>(null)
+const lastLoaded = ref(false)
+
+async function refreshLastWorkout() {
+  try {
+    const list = await listWorkouts(1)
+    if (list.length === 0) {
+      lastWorkout.value = null
+      lastLoaded.value = true
+      return
+    }
+    const summary = list[0]
+    const detail = await getWorkout(summary.id)
+    lastWorkout.value = {
+      title: `上次训练 · ${summary.title}`,
+      date: formatDateLabel(summary.createdAt),
+      rows: detail.blocks.map((b) => {
+        const lastSet = b.sets[b.sets.length - 1]
+        return {
+          name: b.name,
+          value: lastSet ? `${lastSet.weight} kg × ${lastSet.reps}` : '—'
+        }
+      }),
+      footer: `总容量 ${formatThousands(Math.round(summary.totalVolume))} kg · ${Math.max(
+        1,
+        Math.round(summary.durationSec / 60)
+      )} 分钟`
+    }
+    lastLoaded.value = true
+  } catch {
+    // request 层已统一提示
+  }
 }
 
-const weekCount = 3
-const monthCount = 11
+// ── 统计条（真数据：本周 / 本月训练次数）──
+const weekCount = ref(0)
+const monthCount = ref(0)
+
+async function refreshCounts() {
+  try {
+    const list = await listWorkouts(200)
+    const now = new Date()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+    monday.setHours(0, 0, 0, 0)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    weekCount.value = list.filter((w) => new Date(w.createdAt) >= monday).length
+    monthCount.value = list.filter((w) => new Date(w.createdAt) >= monthStart).length
+  } catch {
+    // request 层已统一提示
+  }
+}
 
 // ── 周安排驱动的「开始训练」──
 const schedule = useScheduleStore()
 const sheet = ref<'rest' | 'empty' | null>(null)
+
+onShow(() => {
+  schedule.load()
+  refreshLastWorkout()
+  refreshCounts()
+})
 
 const bottomHint = computed(() => {
   if (schedule.todayPlan) return `今天 · ${schedule.todayPlan.name}`
@@ -123,21 +177,31 @@ function dietPending() {
         </view>
       </view>
 
-      <!-- 上次训练 -->
-      <view class="ft-card last">
+      <!-- 上次训练（真数据） -->
+      <view v-if="lastWorkout" class="ft-card last">
         <view class="last__head">
           <view class="last__head-left">
             <view class="last__bar" />
-            <text class="last__title">{{ lastSession.title }}</text>
+            <text class="last__title">{{ lastWorkout.title }}</text>
           </view>
-          <text class="last__date ft-num">{{ lastSession.date }}</text>
+          <text class="last__date ft-num">{{ lastWorkout.date }}</text>
         </view>
-        <view v-for="row in lastSession.rows" :key="row.name" class="last__row">
+        <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
           <view class="last__dot" />
           <text class="last__name">{{ row.name }}</text>
-          <text class="last__value ft-num" :class="{ 'ft-marker': row.pr }">{{ row.value }}</text>
+          <text class="last__value ft-num">{{ row.value }}</text>
         </view>
-        <view class="last__foot ft-num">{{ lastSession.footer }}</view>
+        <view class="last__foot ft-num">{{ lastWorkout.footer }}</view>
+      </view>
+
+      <view v-else-if="lastLoaded" class="ft-card last last--empty">
+        <view class="last__head">
+          <view class="last__head-left">
+            <view class="last__bar" />
+            <text class="last__title">上次训练</text>
+          </view>
+        </view>
+        <text class="last__none">还没有训练记录，从今天开始。</text>
       </view>
 
       <!-- 统计条（白框卡片） -->
@@ -411,6 +475,17 @@ function dietPending() {
   font-size: $text-md;
   font-weight: 500;
   color: $app-ink;
+}
+
+.last--empty {
+  padding-bottom: 32rpx;
+}
+
+.last__none {
+  display: block;
+  padding-top: 8rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .last__foot {

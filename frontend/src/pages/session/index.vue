@@ -1,30 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useScheduleStore } from '@/stores/schedule'
 import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
-import { formatThousands } from '@/utils/format'
+import { getPlan } from '@/api/plan'
+import { formatThousands, muscleLabel } from '@/utils/format'
 
-// ── 计划与周安排仍走本地 mock（第二期落库）；训练记录已接真接口 ──
-const schedule = useScheduleStore()
+// ── 训练会话（计划 → 真数据；训练记录已接真接口）──
 const training = useTrainingStore()
 
 const planTitle = ref('自由训练')
+/** 来源计划 id（自由训练为 null）；结束训练时随记录入库。 */
+const planId = ref<number | null>(null)
 
-const DEMO_LAST = '60 kg × 8'
-
-// id=1 是预设「杠铃卧推」；计划来的动作暂无 id（计划表第二期落库）
-const exercise = ref({ id: 1 as number | null, name: '杠铃卧推', muscle: '胸', last: DEMO_LAST })
+const exercise = ref({
+  id: 1 as number | null,
+  name: '杠铃卧推',
+  muscle: '胸',
+  last: '暂无记录',
+  /** 计划目标提示（如「目标 5 组 × 5 次」；自由训练为空） */
+  goal: ''
+})
 const nextExercise = ref('上斜哑铃卧推')
 
 type SetRow = { w: string; r: string; done: boolean }
-// 演示动作带已完成两组；其它动作从第一组空输入开始
-const sets = ref<SetRow[]>([
-  { w: '60', r: '8', done: true },
-  { w: '60', r: '8', done: true },
-  { w: '60', r: '8', done: false }
-])
+const sets = ref<SetRow[]>([{ w: '', r: '', done: false }])
 
 // 「上次数据」：有 exerciseId 时从真接口取
 async function loadLastRecord() {
@@ -38,23 +38,40 @@ async function loadLastRecord() {
   }
 }
 
-// 从「开始训练」带计划进来：用计划里的动作铺当前动作（从第一组空输入开始）
-onLoad((query) => {
-  const q = (query || {}) as Record<string, string | undefined>
-  const plan = schedule.planOf(Number(q.plan))
-  if (plan && plan.exercises.length > 0) {
+// 从「开始训练」带计划进来：拉计划详情，第一个动作进场（目标组次显示在卡头；勾一组自动补一行）
+async function loadPlan(pid: number) {
+  try {
+    const plan = await getPlan(pid)
+    if (plan.exercises.length === 0) return
+    planId.value = plan.id
     planTitle.value = plan.name
     const first = plan.exercises[0]
     exercise.value = {
-      id: null,
-      name: first,
-      muscle: plan.name.split(/[&＆]/)[0].trim(),
-      last: '暂无记录'
+      id: first.exerciseId,
+      name: first.name,
+      muscle: muscleLabel(first.muscle),
+      last: '暂无记录',
+      goal:
+        first.targetSets || first.targetReps
+          ? `目标 ${first.targetSets ?? '–'} 组 × ${first.targetReps ?? '–'} 次`
+          : ''
     }
-    nextExercise.value = plan.exercises[1] ?? '—'
+    nextExercise.value = plan.exercises[1]?.name ?? '—'
     sets.value = [{ w: '', r: '', done: false }]
+    loadLastRecord()
+  } catch {
+    // request 层已统一提示；本页保留自由训练兜底
   }
-  loadLastRecord()
+}
+
+onLoad((query) => {
+  const q = (query || {}) as Record<string, string | undefined>
+  const pid = Number(q.plan)
+  if (pid) {
+    loadPlan(pid)
+  } else {
+    loadLastRecord()
+  }
 })
 
 // 输入态 = 最后一行；勾完最后一行会自动补一行新的
@@ -109,6 +126,7 @@ async function finish() {
   }
   try {
     const detail = await createWorkout({
+      planId: planId.value,
       title: planTitle.value,
       durationSec: seconds.value,
       blocks: [
@@ -154,6 +172,7 @@ function comingSoon(tip: string) {
           <view class="card__last">
             <text v-if="exercise.last === '暂无记录'">暂无记录</text>
             <text v-else>上次 <text class="ft-num">{{ exercise.last }}</text></text>
+            <text v-if="exercise.goal" class="card__goal ft-num">{{ exercise.goal }}</text>
           </view>
         </view>
 
@@ -333,6 +352,14 @@ function comingSoon(tip: string) {
 .card__last {
   font-size: $text-sm;
   color: $app-ink-muted;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.card__goal {
+  color: $app-ink;
+  font-weight: 500;
 }
 
 /* 表头 */

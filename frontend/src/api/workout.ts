@@ -36,6 +36,8 @@ export interface LastRecord {
 }
 
 export interface CreateWorkoutPayload {
+  /** 来源计划（自由训练不传）。 */
+  planId?: number | null
   title: string
   durationSec: number
   note?: string
@@ -52,6 +54,10 @@ export function createWorkout(payload: CreateWorkoutPayload) {
 
 export function listWorkouts(limit = 50) {
   return unwrap(request.get<WorkoutListItem[]>('/workouts', { limit }))
+}
+
+export function getWorkout(id: number) {
+  return unwrap(request.get<WorkoutDetail>(`/workouts/${id}`))
 }
 
 export function getLastRecord(exerciseId: number) {

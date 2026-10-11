@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
 
 const schedule = useScheduleStore()
 const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+
+onShow(() => {
+  schedule.load(true)
+})
 
 const rows = computed(() =>
   WEEK_NAMES.map((label, idx) => {
@@ -27,14 +32,14 @@ function editDay(idx: number) {
   const itemList = [...schedule.plans.map((p) => p.name), '休息', '清除安排']
   uni.showActionSheet({
     itemList,
-    success: ({ tapIndex }) => {
+    success: async ({ tapIndex }) => {
       const planCount = schedule.plans.length
       if (tapIndex < planCount) {
-        schedule.setDay(idx, schedule.plans[tapIndex].id)
+        await schedule.setDay(idx, schedule.plans[tapIndex].id)
       } else if (tapIndex === planCount) {
-        schedule.setDay(idx, 'rest')
+        await schedule.setDay(idx, 'rest')
       } else {
-        schedule.setDay(idx, null)
+        await schedule.setDay(idx, null)
       }
     }
   })
