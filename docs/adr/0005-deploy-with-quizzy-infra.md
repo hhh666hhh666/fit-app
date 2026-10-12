@@ -29,3 +29,7 @@ fit-app 要上公网（ADR 0001：壳 App 加载线上地址，训练现场与�
 > 推送（`permissions: packages: write`，不再需要 ACR 的两个 Secrets）、包设 public 后服务器匿名拉取。
 > 两个变量顺带改名为中性的 `IMAGE_REGISTRY` / `IMAGE_NAMESPACE`。ACR 实例本身还在，
 > 待控制台确认当前地址后再决定是否切回——**其余的部署决策（子域、复用 quizzy MySQL、8082、CI 发布）不变**。
+
+> ⚠️ **后续（2026-10-12，撞名事故收尾）**：本文提到的后端服务名 `server` 已更名为 **`fit-app-server`**——
+> 通用名与 quizzy 的服务在共享网络里重名时，Docker DNS 轮询会把约一半请求劫持到错的容器（2026-10-12 实测事故）；
+> `server` 降级为 fit-app 自己网络内的**别名**（web 镜像零改动）。缘由与取舍见 [ADR 0006](./0006-dedicated-service-name.md)。

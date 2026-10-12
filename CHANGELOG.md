@@ -19,6 +19,7 @@
 ### Changed
 
 - 日志页列表行可点击（→ 训练详情）
+- 云上编排：后端服务名由通用名 `server` 改为专属名 `fit-app-server`；`server` 降级为 fit-app 自己网络内的**别名**（web 镜像零改动）——消除与 quizzy 共享 Docker 网络时「通用名被 Docker DNS 轮询劫持」的隐患（2026-10-12 事故的 fit-app 侧收尾，见 ADR 0006）
 
 ## [0.1.1] - 2026-10-12
 

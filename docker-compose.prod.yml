@@ -12,7 +12,7 @@
 # ── 数据库：复用 quizzy 的 MySQL 容器（ADR 0005）──
 # 同一台 2C2G 上 quizzy 已占 127.0.0.1:3306 与 127.0.0.1:8081；fit-app 若自带 MySQL
 # 会①端口撞车、②再吃掉一整份 MySQL 内存。所以这里**没有 mysql 服务**：
-# server 容器加入 quizzy 的外部网络，直连容器名 `quizzy-mysql`，只用其中的 `fit_app` 库。
+# 后端容器（`fit-app-server`）加入 quizzy 的外部网络，直连容器名 `quizzy-mysql`，只用其中的 `fit_app` 库。
 # 代价：两个应用共享一个 MySQL 实例（故障域与备份范围合并）——取舍见 ADR 0005。
 #
 # ⚠️ 端口为什么是 8082：8081 已被 quizzy-web 占用（`ss -tlnp | grep 8081` 可查）。
@@ -34,14 +34,18 @@ x-logging: &default-logging
 
 # quizzy compose 的默认网络（`name: quizzy` → `<项目名>_default`）。
 # ⚠️ external: true = 这个网络由外面创建并拥有，fit-app **不会**创建也不会销毁它；
-#    代价是 quizzy 若重建（down/up）导致网络重建，fit-app 的 server 要跟着重启一次。
+#    代价是 quizzy 若重建（down/up）导致网络重建，fit-app 的 `fit-app-server` 要跟着重启一次。
 networks:
   quizzy:
     external: true
     name: quizzy_default
 
 services:
-  server:
+  fit-app-server:
+    # ⚠️ 服务名必须用**专属名**（不用 server 这类通用词）：compose 会把服务名自动加为它所在
+    #    **每个**网络的别名，且无法按网络移除——2026-10-12 撞名事故的根因就是通用名 `server`
+    #    与 quizzy 的服务在网络里重名，Docker DNS 轮询把 quizzy 约一半 /api 劫持到这边。
+    #    取舍与备选见 ADR 0006。
     # 镜像 tag 跟随版本号，但由部署时传入（这里永远是变量，不写死）。
     image: ${IMAGE_REGISTRY:?未设置 IMAGE_REGISTRY}/${IMAGE_NAMESPACE:?未设置 IMAGE_NAMESPACE}/fit-app-server:${APP_VERSION:?未设置 APP_VERSION}
     container_name: fit-app-server
@@ -49,8 +53,12 @@ services:
     # 内核级内存硬顶：JVM 的**理论上限 ≈ -Xmx + 242MB**，这里留约 1.3 倍余量。
     mem_limit: 640m
     networks:
-      - default
-      - quizzy
+      default:
+        # ⚠️ `server` 是**兼容层别名**：web 镜像内的 nginx 用它找后端（frontend/nginx.conf 的
+        #    `set $backend http://server:8080`，改它要重发镜像）。别名只在 fit-app 自己的网络里。
+        aliases:
+          - server
+      quizzy: {}   # 进 quizzy 网络时**不带** server 别名——通用名正是事故根因
     environment:
       # ⚠️ 主机是**容器名** quizzy-mysql（走 quizzy_default 网络的 Docker 内置 DNS），
       #    不是 localhost——容器内的 localhost 是它自己。
@@ -88,7 +96,7 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     depends_on:
-      server:
+      fit-app-server:
         condition: service_healthy
     # 只绑回环：对外入口交给宿主反代，由它反代到 127.0.0.1:8082。
     # 绑回环而不是 0.0.0.0，是为了①不与宿主上已有的服务（quizzy 的 8081）抢端口、

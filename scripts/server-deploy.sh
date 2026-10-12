@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 云上部署：拉取镜像仓库里指定版本的镜像，重启 server / web。
+# 云上部署：拉取镜像仓库里指定版本的镜像，重启 fit-app-server / web。
 # 由发布流水线经 SSH 调用；也可在服务器上手动跑（回滚就是手动跑一个旧版本）。
 #
-#   bash server-deploy.sh <版本号> [web|server|all]      # 版本号不带 v，如 1.1.0
+#   bash server-deploy.sh <版本号> [web|fit-app-server|all]   # 版本号不带 v，如 1.1.0
 #
 # 从部署脚本继承下来的设计（要改这里之前先读这几条）：
 #   * 数据库是**别人的容器**（quizzy-mysql，见 ADR 0005）：只检查它在跑，绝不 up / 重建 / 停止；
@@ -26,18 +26,18 @@ RAW_VERSION="${1:-}"
 SCOPE="${2:-all}"
 
 # ⚠️ 两组名字别混：compose **服务名**（compose 子命令的参数）与 **容器名**（docker 子命令的参数）。
-#    服务名定义在 docker-compose.prod.yml 的 services: 下（server / web），
+#    服务名定义在 docker-compose.prod.yml 的 services: 下（fit-app-server / web），
 #    容器名是 container_name（fit-app-server / fit-app-web）。
 #    给 compose 传容器名会报 `no such service`；给 docker 传服务名会报 `No such object`。
 case "$SCOPE" in
-  all)    SERVICES=(server web) ;;
-  server) SERVICES=(server) ;;
-  web)    SERVICES=(web) ;;
-  *)      echo "用法：$0 <版本号，如 1.1.0> [web|server|all]" >&2; exit 1 ;;
+  all)            SERVICES=(fit-app-server web) ;;
+  fit-app-server) SERVICES=(fit-app-server) ;;
+  web)            SERVICES=(web) ;;
+  *)              echo "用法：$0 <版本号，如 1.1.0> [web|fit-app-server|all]" >&2; exit 1 ;;
 esac
 
 if [ -z "$RAW_VERSION" ]; then
-  echo "用法：$0 <版本号，如 1.1.0> [web|server|all]" >&2
+  echo "用法：$0 <版本号，如 1.1.0> [web|fit-app-server|all]" >&2
   echo "服务器上没有 git，版本号必须显式给（CI 传 tag 去掉 v 前缀之后的值）。" >&2
   exit 1
 fi
@@ -123,7 +123,7 @@ fi
 echo "==> 拉取镜像 $APP_VERSION"
 compose pull "${SERVICES[@]}" || fail "拉取镜像失败（仓库上有 $APP_VERSION 这个 tag 吗？）" "${SERVICES[@]}"
 
-# --no-deps：不动依赖链（server/web 都在 SERVICES 里显式给出，不需要额外拉起谁）
+# --no-deps：不动依赖链（fit-app-server/web 都在 SERVICES 里显式给出，不需要额外拉起谁）
 echo "==> 重建并启动：${SERVICES[*]}"
 compose up -d --no-deps "${SERVICES[@]}" || fail "compose up 失败" "${SERVICES[@]}"
 
@@ -131,7 +131,7 @@ compose up -d --no-deps "${SERVICES[@]}" || fail "compose up 失败" "${SERVICES
 echo "==> 等待容器就绪"
 # wait_ready 走 docker inspect，要用**容器名**；fail 里的 compose logs 用**服务名**
 case "$SCOPE" in
-  server|all) wait_ready "fit-app-server" 180 || fail "后端未通过健康检查" server ;;
+  fit-app-server|all) wait_ready "fit-app-server" 180 || fail "后端未通过健康检查" fit-app-server ;;
 esac
 case "$SCOPE" in
   web|all)    wait_ready "fit-app-web" 60    || fail "前端容器没起来" web ;;
@@ -140,7 +140,7 @@ esac
 # ---- 6. 探一下真实端口（只告警，不中断）----
 if command -v curl >/dev/null 2>&1; then
   case "$SCOPE" in
-    server|all)
+    fit-app-server|all)
       docker exec "fit-app-server" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8080/v3/api-docs \
         && echo "    后端 /v3/api-docs 正常" \
         || echo "    ⚠️ 后端探测失败，看容器日志" ;;
