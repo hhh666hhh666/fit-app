@@ -55,6 +55,11 @@ function goHome() {
   uni.reLaunch({ url: '/pages/home/index' })
 }
 
+/** 点一行 → 训练详情（带 id；detail 页自己拉 GET /api/workouts/{id}） */
+function openDetail(id: number) {
+  uni.navigateTo({ url: `/pages/detail/index?id=${id}` })
+}
+
 function monthPending() {
   uni.showToast({ title: '月份筛选建设中', icon: 'none' })
 }
@@ -86,7 +91,7 @@ function monthPending() {
           <text class="col-mid">项目 &amp; 主项容量 / DETAILS</text>
           <text class="col-time">用时 / TIME</text>
         </view>
-        <view v-for="item in items" :key="item.id" class="lrow">
+        <view v-for="item in items" :key="item.id" class="lrow" @click="openDetail(item.id)">
           <view class="lrow__date">
             <text class="lrow__date-main ft-num">{{ formatDateLabel(item.createdAt) }}</text>
             <text class="lrow__date-week">{{ weekdayOf(item.createdAt) }}</text>
