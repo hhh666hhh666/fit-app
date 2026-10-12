@@ -20,6 +20,22 @@ cp .env.example .env    # 然后至少把 JWT 密钥换成随机值（生成命�
 ⚠️ `.env` **不入库**（`.gitignore` 已拦），它是每台机器各填各的。
 `docker compose` 会读它，`git` 不会碰它——这就是为什么不把真值写进 `docker-compose.*.yml`。
 
+## 本机 dev 的应用端口：后端 8083、前端 5175
+
+固定约定（2026-10-12 定的），起因是本机 8080 常被 quizzy 的 dev 后端占用，而 8081／8082
+是两台容器 web 的端口。落点两处，**改端口必须同时改**：
+
+| 端 | 落点 | 值 |
+|---|---|---|
+| 后端 | `backend/src/main/resources/application.yml` 的 `server.port` | `${SERVER_PORT:8083}` |
+| 前端 | `frontend/vite.config.ts` 的 `server.proxy['/api'].target` | `http://127.0.0.1:8083` |
+
+⚠️ **云上容器内的后端仍是 8080，不要跟着改**：`docker-compose.prod.yml` 注入 `SERVER_PORT: 8080`，
+它与 `frontend/nginx.conf` 的反代、compose 的 healthcheck、`scripts/server-deploy.sh` 的探测是一套。
+「8083」只约束本机裸跑。
+
+⚠️ 起本机后端前先确认端口归属——8080 上有服务不代表是你的后端（症状：注册写错库、接口 500）。
+
 ## 本机端口：3307 而不是 3306
 
 开发机上的 3306 已被**另一个项目的 MySQL 容器**占用，所以 `MYSQL_PORT` 设为 3307，

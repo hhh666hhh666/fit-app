@@ -18,7 +18,7 @@
 # 1. 起数据库（Docker Desktop 需先开着）
 docker compose -f docker-compose.dev.yml up -d
 
-# 2. 起后端（默认 8080）
+# 2. 起后端（默认 8083；避开 8080=quizzy dev、8081/8082=容器 web）
 #    ⚠️ 本机裸跑必须先把 .env 注入进程环境变量（mvn 不读 .env），起法与症状见
 #    docs/operations/configuration.md
 cd backend && mvn -B -ntp spring-boot:run

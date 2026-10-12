@@ -1,5 +1,8 @@
 server:
-  port: 8080
+  # 本机 dev 端口 8083：避开 8080（quizzy 的 dev 后端常驻）与 8081/8082（容器 web）。
+  # ⚠️ 只影响本机裸跑（mvn spring-boot:run / java -jar）；容器内由 compose 注入 SERVER_PORT=8080，
+  #    与 nginx 反代、healthcheck、部署脚本是一套，不要跟着改。
+  port: ${SERVER_PORT:8083}
   servlet:
     encoding:
       charset: UTF-8

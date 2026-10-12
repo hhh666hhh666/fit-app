@@ -35,7 +35,9 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        // 本机 dev 后端端口 8083（见 backend application.yml 的注释：
+        // 避开 8080=quizzy dev、8081/8082=容器 web）。
+        target: 'http://127.0.0.1:8083',
         changeOrigin: true
       }
     }
