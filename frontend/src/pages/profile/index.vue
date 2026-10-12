@@ -43,6 +43,11 @@ const avatarChar = computed(() => username.value.charAt(0).toUpperCase() || 'L')
 const planSummary = computed(() =>
   schedule.plans.length ? `${schedule.plans.length} 个计划` : '还没有计划'
 )
+/** 周表已安排天数（计划或休息都算「已安排」）。 */
+const weekSummary = computed(() => {
+  const n = schedule.week.filter((s) => s !== null).length
+  return n ? `${n} 天已安排` : '未安排'
+})
 
 function goBody() {
   uni.navigateTo({ url: '/pages/body/index' })
@@ -54,6 +59,10 @@ function goLibrary() {
 
 function goPlans() {
   uni.navigateTo({ url: '/pages/plans/index' })
+}
+
+function goWeek() {
+  uni.navigateTo({ url: '/pages/week/index' })
 }
 
 function logout() {
@@ -121,6 +130,11 @@ function logout() {
         <view class="entry" @click="goPlans">
           <text class="entry__label">训练计划</text>
           <text class="entry__value ft-num">{{ planSummary }}</text>
+          <text class="entry__go">›</text>
+        </view>
+        <view class="entry" @click="goWeek">
+          <text class="entry__label">训练安排</text>
+          <text class="entry__value ft-num">{{ weekSummary }}</text>
           <text class="entry__go">›</text>
         </view>
       </view>
