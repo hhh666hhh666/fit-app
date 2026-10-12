@@ -90,6 +90,7 @@ public class FoodService {
                 .set(Food::getInsolubleFiber, dto.getInsolubleFiber())
                 .set(Food::getStarch, dto.getStarch())
                 .set(Food::getLactose, dto.getLactose())
+                .set(Food::getGi, dto.getGi())
                 .set(Food::getVa, dto.getVa())
                 .set(Food::getVd, dto.getVd())
                 .set(Food::getVe, dto.getVe())
@@ -254,6 +255,7 @@ public class FoodService {
         putIfNotNull(m, "insoluble_fiber", f.getInsolubleFiber());
         putIfNotNull(m, "starch", f.getStarch());
         putIfNotNull(m, "lactose", f.getLactose());
+        putIfNotNull(m, "gi", f.getGi());
         putIfNotNull(m, "va", f.getVa());
         putIfNotNull(m, "vd", f.getVd());
         putIfNotNull(m, "ve", f.getVe());

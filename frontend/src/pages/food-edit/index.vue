@@ -10,7 +10,7 @@ import {
 } from '@/api/nutrition'
 import { ensureLogin } from '@/utils/guard'
 
-// ── 食物新增 / 编辑（45 字段：主组常显 +「更多营养」四类折叠）──
+// ── 食物新增 / 编辑（营养成分表 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 
 const editId = ref<number | null>(null)
 const isEdit = computed(() => editId.value != null)
@@ -25,6 +25,8 @@ const form = reactive<Record<string, string>>({
   fat: '',
   carb: '',
   sodium: '',
+  // 扩展字段（不在 45 项正表内）：常显、选填
+  gi: '',
   portionLabel: '',
   portionGrams: ''
 })
@@ -138,6 +140,7 @@ function fillForm(f: FoodItem) {
   form.fat = toStr(f.fat)
   form.carb = toStr(f.carb)
   form.sodium = toStr(f.sodium)
+  form.gi = toStr(f.gi)
   form.portionLabel = f.portionLabel ?? ''
   form.portionGrams = toStr(f.portionGrams)
   for (const g of OPTIONAL_GROUPS) {
@@ -191,6 +194,13 @@ function buildPayload(): FoodPayload | null {
     portionLabel: form.portionLabel.trim() || null,
     portionGrams: numOrNull('portionGrams') ?? null
   }
+  // 扩展字段 GI：选填（空串＝清空），非法数字当场拦下
+  const gi = numOrNull('gi')
+  if (gi === undefined) {
+    uni.showToast({ title: 'GI 数字不正确', icon: 'none' })
+    return null
+  }
+  payload.gi = gi
   for (const g of OPTIONAL_GROUPS) {
     for (const fd of g.fields) {
       const v = numOrNull(fd.key)
@@ -291,6 +301,21 @@ function goBack() {
         <view class="fld">
           <text class="fld__label">钠（mg）</text>
           <input v-model="form.sodium" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+        </view>
+      </view>
+
+      <!-- 升糖指数（扩展字段，常显） -->
+      <view class="ft-card block">
+        <text class="block__title">升糖指数（选填）</text>
+        <view class="fld">
+          <text class="fld__label">GI（葡萄糖＝100）</text>
+          <input
+            v-model="form.gi"
+            type="digit"
+            class="fld__input ft-num"
+            placeholder="–"
+            placeholder-class="ph"
+          />
         </view>
       </view>
 

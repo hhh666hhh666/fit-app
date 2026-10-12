@@ -10,8 +10,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 /**
- * 单条新建 / 编辑食物。字段全集与《食物营养字段参考》一一对应；
+ * 单条新建 / 编辑食物。字段全集与《食物营养字段参考》一一对应（另加扩展字段 GI）；
  * 4+1 必填（能量/蛋白/脂肪/碳水/钠），其余可空。
+ * JSON 导入与手填共用本 DTO，故新增字段在这里加一处即两条路径同时生效。
  */
 @Data
 public class FoodSaveDTO {
@@ -80,6 +81,10 @@ public class FoodSaveDTO {
 
     @DecimalMin(value = "0", message = "数值不能为负")
     private BigDecimal lactose;
+
+    /** 升糖指数 GI（葡萄糖=100 基准）。只限非负，**不设上限**——真实数据表里有 >100 的食物。 */
+    @DecimalMin(value = "0", message = "数值不能为负")
+    private BigDecimal gi;
 
     @DecimalMin(value = "0", message = "数值不能为负")
     private BigDecimal va;

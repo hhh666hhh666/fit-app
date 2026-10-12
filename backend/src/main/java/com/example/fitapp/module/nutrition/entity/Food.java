@@ -9,8 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 食物库的一条。表结构以迁移脚本 {@code V10__nutrition.sql} 为准；
- * 营养字段全集（45 项）见 docs/design/食物营养字段参考.md——4+1 必填（能量/蛋白/脂肪/碳水/钠），其余可空。
+ * 食物库的一条。表结构以迁移脚本 {@code V10__nutrition.sql}、{@code V11__food_gi.sql} 为准；
+ * 营养字段全集（45 项）见 docs/design/食物营养字段参考.md——4+1 必填（能量/蛋白/脂肪/碳水/钠），其余可空；
+ * 另有扩展字段 {@code gi}（选填，不在该表七类之内，口径见该文档「本表之外的扩展字段」）。
  */
 @Data
 @TableName("food")
@@ -65,6 +66,11 @@ public class Food {
     private BigDecimal starch;
 
     private BigDecimal lactose;
+
+    // ── 升糖指数（选填；扩展字段，不在《食物营养字段参考》七类正表内）──
+
+    /** 升糖指数 GI（葡萄糖=100 基准，无单位）。 */
+    private BigDecimal gi;
 
     // ── 维生素（选填）──
 

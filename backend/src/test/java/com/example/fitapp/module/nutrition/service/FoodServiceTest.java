@@ -107,6 +107,24 @@ class FoodServiceTest {
     }
 
     @Test
+    void update_explicitSetCoversGi() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 7L));
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        FoodSaveDTO d = dto("鸡胸肉（生）");
+        d.setGi(new BigDecimal("83.2"));
+
+        service().update(7L, 10L, d);
+
+        // 新增营养字段最容易漏的一步：实体与 DTO 都加了，却忘了在显式 set 链里带上——
+        // 于是「新建能存、编辑存不进去」，且不报错。这里直接断言 set 子句里有 gi。
+        var captor = ArgumentCaptor.forClass(
+                com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper.class);
+        verify(foodMapper).update(ArgumentMatchers.<Food>isNull(), captor.capture());
+        assertTrue(captor.getValue().getSqlSet().contains("gi"),
+                "update 的显式 set 里没有 gi：" + captor.getValue().getSqlSet());
+    }
+
+    @Test
     void delete_notOwn_throws() {
         when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 99L));
         assertThrows(BusinessException.class, () -> service().delete(7L, 10L));
@@ -137,6 +155,36 @@ class FoodServiceTest {
         assertEquals(new BigDecimal("139.10"), egg.getKcal());
         assertEquals("1个", egg.getPortionLabel());
         assertEquals(new BigDecimal("50"), egg.getPortionGrams());
+    }
+
+    @Test
+    void import_mapsGi() {
+        when(foodMapper.selectList(any())).thenReturn(List.of());
+        String json = """
+                [ { "name": "白米饭", "kcal": 116, "protein": 2.6, "fat": 0.3, "carb": 25.9, "sodium": 2, "gi": 83.2 } ]
+                """;
+
+        ImportResultVO result = service().importText(7L, json);
+
+        assertEquals(1, result.getImported());
+        ArgumentCaptor<Food> captor = ArgumentCaptor.forClass(Food.class);
+        verify(foodMapper).insert(captor.capture());
+        assertEquals(new BigDecimal("83.2"), captor.getValue().getGi());
+    }
+
+    @Test
+    void import_negativeGi_fails() {
+        when(foodMapper.selectList(any())).thenReturn(List.of());
+        String json = """
+                [ { "name": "负GI", "kcal": 1, "protein": 1, "fat": 1, "carb": 1, "sodium": 1, "gi": -1 } ]
+                """;
+
+        ImportResultVO result = service().importText(7L, json);
+
+        assertEquals(0, result.getImported());
+        assertEquals(1, result.getFailed().size());
+        assertEquals("负GI", result.getFailed().get(0).getName());
+        verify(foodMapper, never()).insert(any(Food.class));
     }
 
     @Test

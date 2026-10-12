@@ -27,6 +27,8 @@ export interface FoodItem {
   insolubleFiber?: number | null
   starch?: number | null
   lactose?: number | null
+  /** 升糖指数 GI（葡萄糖＝100 基准；扩展字段，不在国标营养标签内）。 */
+  gi?: number | null
   va?: number | null
   vd?: number | null
   ve?: number | null
