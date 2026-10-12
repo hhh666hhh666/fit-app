@@ -7,6 +7,18 @@
 
 <!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
 
+## [0.1.1] - 2026-10-12
+
+首个**成功上线**的版本（0.1.0 卡在部署段，见下）。
+
+### Fixed
+
+- 部署脚本给 compose 传的是**容器名**而不是**服务名**，`pull`/`up` 一律报 `no such service`——首次真实部署才暴露
+
+### Changed
+
+- 镜像仓库由阿里云 ACR 换到 **ghcr.io**：ACR 新个人版域名 `crpi-*.personal.craliyuncs.com` 当天从全球 DNS 消失（各公共 DNS 均 NXDOMAIN），服务器 `docker pull` 报 `no such host`；ghcr.io 服务器可达、CI 用内置 `GITHUB_TOKEN` 推送（不再需要 ACR_USERNAME／ACR_PASSWORD 两个 Secrets）。配套变量名 `ACR_*` → `IMAGE_*`
+
 ## [0.1.0] - 2026-10-12
 
 首个可用版本：训练记录闭环（动作库／组次／计划／周安排／日志／统计／身体档案）＋ 认证，云端部署到 `fit.11-2.cn`。

@@ -20,3 +20,12 @@ fit-app 要上公网（ADR 0001：壳 App 加载线上地址，训练现场与�
 - **发布真值**：ACR 与 quizzy 共用实例 `crpi-1e1fwsxsm0ra0pky.cn-chengdu.personal.craliyuncs.com`，命名空间各用各的（`fit-app` / `quizzy`）；`DEPLOY_HOST=8.137.172.6`、`DEPLOY_USER=root`；产物落 `/srv/fit-app`。
 - **前端链路**：`frontend/Dockerfile`（node:22-slim 构建 → nginx:alpine）+ `frontend/nginx.conf`（`/api/` 反代到 `server:8080`，resolver 走 Docker 内置 DNS）。⚠️ uni-app 的 H5 产物路径是 `dist/build/h5`，比 vite 多一层。
 - 路由是 hash 模式（`src/manifest.json` 的 `h5.router.mode`），宿主反代不需要 SPA 回退；`deploy/nginx/site.conf.example` 里的目标端口同步改成 8082。
+
+> ⚠️ **后续（2026-10-12，部署当天）**：本卡写定时的镜像仓库是阿里云 ACR（与 quizzy 共用一个实例）。
+> 首次部署当天，该实例的域名 `crpi-1e1fwsxsm0ra0pky.cn-chengdu.personal.craliyuncs.com`
+> 从全球 DNS 消失（阿里／腾讯／Cloudflare／Google 各公共 DNS 均为 NXDOMAIN；GitHub runner
+> 在域名消失前约 40 分钟还成功推送过镜像，属「记录被删后缓存仍在」），服务器 `docker pull`
+> 报 `no such host`，链路断。**镜像仓库就此换到 ghcr.io**：服务器可达、CI 用内置 `GITHUB_TOKEN`
+> 推送（`permissions: packages: write`，不再需要 ACR 的两个 Secrets）、包设 public 后服务器匿名拉取。
+> 两个变量顺带改名为中性的 `IMAGE_REGISTRY` / `IMAGE_NAMESPACE`。ACR 实例本身还在，
+> 待控制台确认当前地址后再决定是否切回——**其余的部署决策（子域、复用 quizzy MySQL、8082、CI 发布）不变**。

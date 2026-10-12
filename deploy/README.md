@@ -7,9 +7,10 @@
 
 ## 首次上线前的准备清单
 
-1. **镜像仓库**：建好命名空间，拿到**用户名与固定密码**（不是 AccessKey——个人版镜像仓库通常不支持 AccessKey 推送）。
+1. **镜像仓库 = ghcr.io**：无需任何配置——CI 用内置 `GITHUB_TOKEN` 推送（workflow 已声明 `packages: write`）。
+   首次推送后，把两个包（fit-app-server / fit-app-web）的可见性改成 **public**，服务器才能匿名拉取。
 2. **服务器**：装好容器运行时；确认 80/443 上的对外入口归谁管（若已有面板或反代，就让它反代到本项目的 web 端口，别抢端口）。
-3. **仓库 Secrets**：`ACR_USERNAME` / `ACR_PASSWORD` / `DEPLOY_SSH_KEY` / `DEPLOY_SSH_KNOWN_HOSTS`（后两个可选但推荐）。
+3. **仓库 Secrets**：`DEPLOY_SSH_KEY` / `DEPLOY_SSH_KNOWN_HOSTS`（后者可选，不配则 CI 现场 ssh-keyscan）。
 4. **服务器上的 `.env`**：照 `.env.cloud.example` 填好，放在 `/srv/fit-app/.env`。**这个文件不入库**。
 5. **数据库**：云上**不自带 MySQL**——复用同机 quizzy 的 `quizzy-mysql` 容器里的 `fit_app` 库
    （[ADR 0005](../docs/adr/0005-deploy-with-quizzy-infra.md)）。前提：quizzy 已在跑，

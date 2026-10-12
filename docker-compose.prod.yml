@@ -17,6 +17,11 @@
 #
 # ⚠️ 端口为什么是 8082：8081 已被 quizzy-web 占用（`ss -tlnp | grep 8081` 可查）。
 #    改端口时要同步改宝塔反代的「目标 URL」与 deploy/nginx/site.conf.example。
+#
+# ── 镜像仓库：ghcr.io（2026-10-12 从阿里云 ACR 换过来）──
+# ACR 新个人版的域名 `crpi-*.personal.craliyuncs.com` 当天在全球 DNS 消失（NXDOMAIN），
+# 服务器拉不到镜像。ghcr.io 服务器可达、CI 用内置 GITHUB_TOKEN 推送（零新增 Secrets）。
+# 变量名用中性的 IMAGE_REGISTRY / IMAGE_NAMESPACE，将来再换 registry 不用改名。
 
 name: fit-app   # 固定项目名，免得容器/网络名随 compose 目录名变化而漂移
 
@@ -38,7 +43,7 @@ networks:
 services:
   server:
     # 镜像 tag 跟随版本号，但由部署时传入（这里永远是变量，不写死）。
-    image: ${ACR_REGISTRY:?未设置 ACR_REGISTRY}/${ACR_NAMESPACE:?未设置 ACR_NAMESPACE}/fit-app-server:${APP_VERSION:?未设置 APP_VERSION}
+    image: ${IMAGE_REGISTRY:?未设置 IMAGE_REGISTRY}/${IMAGE_NAMESPACE:?未设置 IMAGE_NAMESPACE}/fit-app-server:${APP_VERSION:?未设置 APP_VERSION}
     container_name: fit-app-server
     restart: unless-stopped
     # 内核级内存硬顶：JVM 的**理论上限 ≈ -Xmx + 242MB**，这里留约 1.3 倍余量。
@@ -78,7 +83,7 @@ services:
     logging: *default-logging
 
   web:
-    image: ${ACR_REGISTRY}/${ACR_NAMESPACE}/fit-app-web:${APP_VERSION}
+    image: ${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/fit-app-web:${APP_VERSION}
     container_name: fit-app-web
     restart: unless-stopped
     mem_limit: 128m
