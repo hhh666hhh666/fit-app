@@ -1,0 +1,22 @@
+# 临时探针（用完删）：在 GitHub runner 上解析 ACR 域名并报出 IP。
+# 背景：本地与服务器的 DNS 都对该域名返回 NXDOMAIN，但本仓库的发布流水线
+# 在 2026-10-12 16:35（UTC）还成功推送过镜像——runner 侧的解析结果值钱。
+name: probe-acr-dns
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 解析与连通性
+        run: |
+          set +e
+          D=crpi-1e1fwsxsm0ra0pky.cn-chengdu.personal.craliyuncs.com
+          echo "=== getent hosts ==="
+          getent hosts "$D" || echo "getent: 无结果"
+          echo "=== curl 连一次（401/200 都算通）==="
+          curl -s -o /dev/null -w "http=%{http_code} ip=%{remote_ip}\n" --max-time 10 "https://$D/v2/"
+          echo "=== 换 Cloudflare DNS 再看一眼 ==="
+          curl -s --max-time 10 "https://cloudflare-dns.com/dns-query?name=$D&type=A" -H 'accept: application/dns-json' | head -c 400
