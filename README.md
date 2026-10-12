@@ -34,7 +34,8 @@ cd frontend && npm install && npm run dev:h5
 | 目录 | 是什么 |
 |------|--------|
 | `backend/` | Spring Boot + MyBatis-Plus + Flyway |
-| `frontend/` | uni-app（Vue 3 + TypeScript）→ H5；Android 侧由 WebView 壳装载（ADR 0002） |
+| `frontend/` | uni-app（Vue 3 + TypeScript）→ H5 |
+| `android-shell/` | Android WebView 壳，加载线上地址（ADR 0002）；构建与产物见其 README |
 | `docs/` | 文档体系（索引见 `docs/README.md`） |
 | `scripts/` | 机械守卫脚本 |
 | `deploy/` | 部署侧配置模板（可选章节生成） |

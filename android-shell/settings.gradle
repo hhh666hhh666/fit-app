@@ -1,0 +1,23 @@
+pluginManagement {
+    // 依赖拉取三源：阿里云镜像优先（国内直连快），google/central 兜底。
+    // gradle.properties 里配了 v2rayN 的 http 代理（systemProp.*），
+    // 兜底请求走代理时由 v2rayN 按路由表分流（国外走代理、国内直连）。
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "fit-app-shell"
+include ':app'

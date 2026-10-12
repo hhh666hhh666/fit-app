@@ -1,0 +1,6 @@
+// 根构建脚本：只声明插件版本，模块里应用。
+// AGP 8.5.2 + Gradle 8.9 + JDK 21 是验证过的组合（AGP 8.5 要求 Gradle 8.7+）。
+// 与 quizzy 的壳同一套组合，差别只在模块内的 namespace 与加载地址。
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}

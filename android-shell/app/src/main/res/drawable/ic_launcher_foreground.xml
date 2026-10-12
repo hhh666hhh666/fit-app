@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  图标前景：荧光笔绿的一只哑铃（直角硬朗风，贴「训练日志」的设计语言）。
+  vector drawable 而非 png：minSdk 26 只需要 anydpi-v26 的 adaptive icon，
+  矢量在所有密度下都清晰，也省掉五套密度的 png。
+  安全区：adaptive icon 的可见区域是中心 72x72（viewPort 108 的 2/3），
+  图案刻意收在 x=23..85 / y=38..70 之间。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 横杆 -->
+    <path
+        android:fillColor="#D9F24B"
+        android:pathData="M37,49 L71,49 L71,59 L37,59 Z" />
+    <!-- 左配重片 -->
+    <path
+        android:fillColor="#D9F24B"
+        android:pathData="M23,40 L37,40 L37,68 L23,68 Z" />
+    <!-- 右配重片 -->
+    <path
+        android:fillColor="#D9F24B"
+        android:pathData="M71,40 L85,40 L85,68 L71,68 Z" />
+</vector>

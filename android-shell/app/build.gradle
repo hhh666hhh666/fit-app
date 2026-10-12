@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 签名配置从 local.properties 读（Android 惯例文件，不入库；见 .gitignore）。
+// 密码的真相源只在构建机本地，不写进仓库、不进对话。
+def secrets = new Properties()
+def secretsFile = rootProject.file('local.properties')
+if (secretsFile.exists()) {
+    secretsFile.withInputStream { secrets.load(it) }
+}
+
+android {
+    namespace 'com.fitapp.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.fitapp.app"
+        minSdk 26
+        targetSdk 34
+        // 与线上版本对齐：git tag v0.1.1 → versionName 0.1.1；
+        // versionCode 是单调递增的整数（同一 keystore 下覆盖安装才认它），
+        // 每次发版都要 +1——这里 2 对应 v0.1.1（1 是 v0.1.0，未上线过）。
+        versionCode 2
+        versionName "0.1.1"
+    }
+
+    signingConfigs {
+        release {
+            storeFile secrets['fitapp.storeFile'] ? file(secrets['fitapp.storeFile']) : null
+            storePassword secrets['fitapp.storePassword']
+            keyAlias secrets['fitapp.keyAlias']
+            keyPassword secrets['fitapp.keyPassword']
+        }
+    }
+
+    buildTypes {
+        release {
+            // 壳应用不做混淆（全部代码就是这个 WebView Activity）
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

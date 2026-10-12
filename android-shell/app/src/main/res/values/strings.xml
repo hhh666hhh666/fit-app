@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">fit-app</string>
+    <!-- 壳加载的线上地址。写进这里（而不是 Java 常量）方便替换环境。 -->
+    <string name="app_url">https://fit.11-2.cn/</string>
+</resources>

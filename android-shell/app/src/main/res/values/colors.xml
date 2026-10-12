@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 图标底色：设计语言的墨黑（见 docs/design 与前端 tokens.css） -->
+    <color name="ic_launcher_background">#17191D</color>
+    <!-- 图标前景：荧光笔绿 -->
+    <color name="ic_launcher_foreground">#D9F24B</color>
+</resources>

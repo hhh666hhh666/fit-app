@@ -18,3 +18,9 @@ Status: accepted
 - 构建走本机工具链（JDK 21 ／ Gradle 8.9 ／ Android SDK 已就绪）；apk 侧载安装；keystore 不入库、务必备份（丢失将无法覆盖升级）。
 - 小组件／手环／真离线等原生能力不在壳的现成能力内，需要时另行评估（见 `docs/todo/` 待办）。
 - iOS 无路径（自用设备为 Android，且 Windows 本机不可构建）。
+
+> ⚠️ **后续（2026-10-12）**：壳已落地——`android-shell/` 建仓并构建出**可安装 apk**
+> （`com.fitapp.app`，versionCode 2 / versionName 0.1.1，签名 keystore 在 `.workbuddy/android-secrets/` 不入库）。
+> 加载地址 `https://fit.11-2.cn/`（站点已于同日上线）。执行顺序与 Consequences 里预想的一致：
+> 先网站 → 上云 → 打壳。apk 未随版本发布流水线走（本机构建、人工交付），
+> 将来若要「每次发版自动出 apk」，再评估把 Gradle 构建搬进 CI。
