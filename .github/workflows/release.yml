@@ -85,7 +85,9 @@ jobs:
         run: |
           set -euo pipefail
           prev=0
-          for f in backend/src/main/resources/db/migration/V*.sql; do
+          # ⚠️ glob 是**字典序**：两位数版本号会排错（V10 排在 V1 之前，'_' vs '0' 的字符序）——
+          #    必须 sort -V 按数值版本排。V10 首次出现时暴露（2026-10-12 v0.3.0 Release 卡在「迁移重放」）。
+          for f in $(printf '%s\n' backend/src/main/resources/db/migration/V*.sql | sort -V); do
             base="$(basename "$f")"
             # 文件名要合 Flyway 约定，否则应用启动时会静默忽略它
             if ! printf '%s' "$base" | grep -qE '^V[0-9]+__[^/]+\.sql$'; then
