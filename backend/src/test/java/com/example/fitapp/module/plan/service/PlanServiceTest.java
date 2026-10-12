@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,6 +74,7 @@ class PlanServiceTest {
             item.setExerciseId(id);
             item.setTargetSets(4);
             item.setTargetReps(8);
+            item.setTargetWeight(new BigDecimal("60"));
             return item;
         }).toList());
         return dto;
@@ -104,6 +106,8 @@ class PlanServiceTest {
         assertEquals("杠铃卧推", peCaptor.getValue().getName());
         assertEquals("chest", peCaptor.getValue().getMuscle());
         assertEquals(0, peCaptor.getValue().getSortOrder());
+        // 目标重量（含组次）必须整体透传落库，漏映射 = 静默丢数据
+        assertEquals(new BigDecimal("60"), peCaptor.getValue().getTargetWeight());
     }
 
     @Test

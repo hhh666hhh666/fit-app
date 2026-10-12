@@ -2,6 +2,7 @@ package com.example.fitapp.module.plan.vo;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -29,5 +30,8 @@ public class PlanDetailVO {
         private Integer targetSets;
 
         private Integer targetReps;
+
+        /** 目标重量 kg；null = 未设。 */
+        private BigDecimal targetWeight;
     }
 }

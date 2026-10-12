@@ -1,6 +1,8 @@
 package com.example.fitapp.module.plan.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -9,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -41,5 +44,10 @@ public class PlanSaveDTO {
         @Min(value = 1, message = "目标次数至少为 1")
         @Max(value = 100, message = "目标次数过多")
         private Integer targetReps;
+
+        /** 目标重量 kg；null = 不设。会话页「开始训练」预填负荷默认值用。 */
+        @DecimalMin(value = "0", message = "目标重量不能为负")
+        @DecimalMax(value = "999.99", message = "目标重量过大")
+        private BigDecimal targetWeight;
     }
 }

@@ -20,6 +20,8 @@ export interface PlanExerciseItem {
   muscle: string
   targetSets?: number | null
   targetReps?: number | null
+  /** 目标重量 kg；未设缺省（会话页预填负荷默认值用）。 */
+  targetWeight?: number | null
 }
 
 export interface PlanDetail {
@@ -30,7 +32,12 @@ export interface PlanDetail {
 
 export interface PlanSavePayload {
   name: string
-  exercises: { exerciseId: number; targetSets?: number | null; targetReps?: number | null }[]
+  exercises: {
+    exerciseId: number
+    targetSets?: number | null
+    targetReps?: number | null
+    targetWeight?: number | null
+  }[]
 }
 
 /** 周表一格：后端省略 null 字段，读出来 planId 可能是 undefined——使用处做 ?? null 归一。 */

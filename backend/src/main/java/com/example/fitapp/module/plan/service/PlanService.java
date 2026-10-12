@@ -130,6 +130,7 @@ public class PlanService {
             pe.setMuscle(e.getMuscle());
             pe.setTargetSets(item.getTargetSets());
             pe.setTargetReps(item.getTargetReps());
+            pe.setTargetWeight(item.getTargetWeight());
             pe.setSortOrder(order++);
             planExerciseMapper.insert(pe);
         }
@@ -171,6 +172,7 @@ public class PlanService {
             i.setMuscle(r.getMuscle());
             i.setTargetSets(r.getTargetSets());
             i.setTargetReps(r.getTargetReps());
+            i.setTargetWeight(r.getTargetWeight());
             return i;
         }).toList());
         return vo;

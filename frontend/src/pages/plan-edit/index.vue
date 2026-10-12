@@ -14,6 +14,7 @@ interface Row {
   muscle: string
   targetSets: number | null
   targetReps: number | null
+  targetWeight: number | null
 }
 
 const pick = usePickStore()
@@ -42,7 +43,8 @@ async function loadDetail(id: number) {
       name: e.name,
       muscle: e.muscle,
       targetSets: e.targetSets ?? null,
-      targetReps: e.targetReps ?? null
+      targetReps: e.targetReps ?? null,
+      targetWeight: e.targetWeight ?? null
     }))
   } catch {
     // unwrap 已提示
@@ -63,7 +65,8 @@ onShow(() => {
     name: p.name,
     muscle: p.muscle,
     targetSets: null,
-    targetReps: null
+    targetReps: null,
+    targetWeight: null
   })
 })
 
@@ -72,10 +75,16 @@ const totalSets = computed(() => rows.value.reduce((sum, r) => sum + (r.targetSe
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
 function targetText(r: Row): string {
-  if (r.targetSets == null && r.targetReps == null) return '未设目标'
-  if (r.targetSets != null && r.targetReps != null) return `目标 ${r.targetSets} 组 × ${r.targetReps} 次`
-  if (r.targetSets != null) return `目标 ${r.targetSets} 组`
-  return `目标 ${r.targetReps} 次`
+  const parts: string[] = []
+  if (r.targetSets != null && r.targetReps != null) {
+    parts.push(`目标 ${r.targetSets} 组 × ${r.targetReps} 次`)
+  } else if (r.targetSets != null) {
+    parts.push(`目标 ${r.targetSets} 组`)
+  } else if (r.targetReps != null) {
+    parts.push(`目标 ${r.targetReps} 次`)
+  }
+  if (r.targetWeight != null) parts.push(`${r.targetWeight} kg`)
+  return parts.length ? parts.join(' · ') : '未设目标'
 }
 
 // ── 行操作：调整目标 / 上移 / 下移 / 移除（拖拽排序留后续迭代）──
@@ -102,7 +111,7 @@ function move(from: number, to: number) {
 }
 
 // ── 目标组次编辑弹层 ──
-const targetSheet = ref({ show: false, index: -1, sets: '', reps: '' })
+const targetSheet = ref({ show: false, index: -1, sets: '', reps: '', weight: '' })
 
 function openTargetEditor(i: number) {
   const r = rows.value[i]
@@ -110,7 +119,8 @@ function openTargetEditor(i: number) {
     show: true,
     index: i,
     sets: r.targetSets != null ? String(r.targetSets) : '',
-    reps: r.targetReps != null ? String(r.targetReps) : ''
+    reps: r.targetReps != null ? String(r.targetReps) : '',
+    weight: r.targetWeight != null ? String(r.targetWeight) : ''
   }
 }
 
@@ -119,12 +129,18 @@ function confirmTarget() {
   if (t.index < 0) return
   const sets = t.sets.trim() === '' ? null : Number(t.sets)
   const reps = t.reps.trim() === '' ? null : Number(t.reps)
+  const weight = t.weight.trim() === '' ? null : Number(t.weight)
   if ((sets != null && (sets < 1 || sets > 20)) || (reps != null && (reps < 1 || reps > 100))) {
     uni.showToast({ title: '组数 1–20、次数 1–100', icon: 'none' })
     return
   }
+  if (weight != null && (!Number.isFinite(weight) || weight < 0 || weight > 999.99)) {
+    uni.showToast({ title: '重量 0–999.9 kg', icon: 'none' })
+    return
+  }
   rows.value[t.index].targetSets = sets
   rows.value[t.index].targetReps = reps
+  rows.value[t.index].targetWeight = weight
   targetSheet.value.show = false
 }
 
@@ -150,7 +166,8 @@ async function save() {
     exercises: rows.value.map((r) => ({
       exerciseId: r.exerciseId,
       targetSets: r.targetSets,
-      targetReps: r.targetReps
+      targetReps: r.targetReps,
+      targetWeight: r.targetWeight
     }))
   }
   saving.value = true
@@ -284,7 +301,11 @@ function goBack() {
         <text class="ts__label">每组次数</text>
         <input v-model="targetSheet.reps" type="number" class="ts__input ft-num" placeholder="–" />
       </view>
-      <text class="ts__hint">留空 = 不设目标</text>
+      <view class="ts__row">
+        <text class="ts__label">重量 (kg)</text>
+        <input v-model="targetSheet.weight" type="digit" class="ts__input ft-num" placeholder="–" />
+      </view>
+      <text class="ts__hint">留空 = 不设目标；开始训练时按目标预填</text>
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="confirmTarget">确定</view>
     </view>
   </view>
