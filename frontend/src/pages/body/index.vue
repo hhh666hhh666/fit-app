@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { onReady, onShow } from '@dcloudio/uni-app'
+import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
 import { createBodyRecord, getBodyOverview, getBodyRecords } from '@/api/body'
 import type { BodyOverview, BodyRecordRow } from '@/api/body'
 import { formatDateLabel, formatThousands } from '@/utils/format'
@@ -32,9 +32,21 @@ async function load() {
   }
 }
 
+/** 从饮食卡「记体重」带参进入（?record=1）：加载后自动打开录入弹层。 */
+const pendingRecord = ref(false)
+
+onLoad((query) => {
+  const q = (query || {}) as Record<string, string | undefined>
+  pendingRecord.value = q.record === '1'
+})
+
 onShow(() => {
   if (!ensureLogin()) return
   load()
+  if (pendingRecord.value) {
+    pendingRecord.value = false
+    openSheet()
+  }
 })
 
 const series = computed(() => overview.value?.weightSeries ?? [])

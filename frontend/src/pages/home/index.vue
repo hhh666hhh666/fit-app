@@ -2,8 +2,13 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
+import FtDietRings from '@/components/FtDietRings.vue'
+import MealSheet from '@/components/MealSheet.vue'
 import { useScheduleStore } from '@/stores/schedule'
+import { useDietStore } from '@/stores/diet'
+import { addWater, getDay, type DayOverview, type MealKey } from '@/api/nutrition'
 import { getWorkout, listWorkouts } from '@/api/workout'
+import { buildDietRings } from '@/utils/diet'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
@@ -13,24 +18,62 @@ const today = (() => {
   return `${d.getMonth() + 1}月${d.getDate()}日 · 周${week}`
 })()
 
-// 饮食记录（第二阶段开放；当前为空态预览，与设计稿一致）
-const diet = {
-  kcal: 0,
-  target: '目标 --',
-  rings: [
-    { key: 'protein', label: '蛋白(g)', value: 0, total: 0, percent: 0 },
-    { key: 'carb', label: '碳水(g)', value: 0, total: 0, percent: 0 },
-    { key: 'fat', label: '脂肪(g)', value: 0, total: 0, percent: 0 },
-    { key: 'water', label: '饮水(ml)', value: 0, total: 0, percent: 0 }
-  ],
-  shortcuts: [
-    { key: 'breakfast', label: '早餐' },
-    { key: 'lunch', label: '午餐' },
-    { key: 'dinner', label: '晚餐' },
-    { key: 'snack', label: '加餐' },
-    { key: 'water', label: '饮水' },
-    { key: 'weight', label: '记体重' }
-  ]
+// 饮食记录（真数据：今日概览 → 大卡/四环/快捷；数字区点开「饮食」页）
+const dietStore = useDietStore()
+const dietDay = ref<DayOverview | null>(null)
+const dietShortcuts = [
+  { key: 'breakfast', label: '早餐' },
+  { key: 'lunch', label: '午餐' },
+  { key: 'dinner', label: '晚餐' },
+  { key: 'snack', label: '加餐' },
+  { key: 'water', label: '饮水' },
+  { key: 'weight', label: '记体重' }
+]
+const sheetMeal = ref<MealKey | null>(null)
+const todayKey = (() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})()
+
+async function refreshDiet() {
+  try {
+    dietDay.value = await getDay(todayKey)
+    void dietStore.load(false)
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+const dietKcal = computed(() => Math.round(Number(dietDay.value?.totals.kcal ?? 0)))
+const dietTargetText = computed(() => {
+  const t = dietDay.value?.targets.kcal
+  return t == null ? '目标 --' : `目标 ${Math.round(Number(t))}`
+})
+const dietRings = computed(() => buildDietRings(dietDay.value))
+
+function goDiet() {
+  uni.navigateTo({ url: '/pages/diet/index' })
+}
+
+function onDietShortcut(key: string) {
+  if (key === 'water') {
+    void bumpWater()
+  } else if (key === 'weight') {
+    uni.navigateTo({ url: '/pages/body/index?record=1' })
+  } else {
+    sheetMeal.value = key as MealKey
+  }
+}
+
+async function bumpWater() {
+  const step = dietStore.settings?.waterStepMl ?? 250
+  try {
+    const ml = await addWater(todayKey, step)
+    if (dietDay.value) dietDay.value.water = { ...dietDay.value.water, ml }
+    uni.showToast({ title: `饮水 +${step} ml`, icon: 'none', duration: 800 })
+  } catch {
+    // request 层已统一提示
+  }
 }
 
 // ── 上次训练（真数据：最近一次训练 + 各动作最后一组；该动作本次刷新过 PR 则荧光）──
@@ -103,6 +146,7 @@ onShow(() => {
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
+  void refreshDiet()
 })
 
 const bottomHint = computed(() => {
@@ -134,10 +178,6 @@ function goWeek() {
   sheet.value = null
   uni.navigateTo({ url: '/pages/week/index' })
 }
-
-function dietPending() {
-  uni.showToast({ title: '饮食记录 · 第二阶段开放', icon: 'none' })
-}
 </script>
 
 <template>
@@ -149,31 +189,27 @@ function dietPending() {
         <text class="home__head-link" @click="goLibrary">动作库</text>
       </view>
 
-      <!-- 饮食记录卡（第二阶段开放，此处按定稿稿空态预留） -->
+      <!-- 饮食记录卡（真数据；数字区/四环点开「饮食」页，快捷直接记账） -->
       <view class="ft-card diet">
         <view class="diet__head">
           <text class="diet__title">饮食记录</text>
-          <text class="diet__link" @click="dietPending">记一笔</text>
         </view>
 
-        <view class="diet__kcal">
-          <text class="diet__kcal-num ft-num">{{ diet.kcal }}</text>
-          <text class="diet__kcal-unit"> / {{ diet.target }} 大卡</text>
-        </view>
-
-        <view class="diet__rings">
-          <view v-for="r in diet.rings" :key="r.key" class="diet__ring-col">
-            <view class="diet__ring" :class="'diet__ring--' + r.key">
-              <text class="diet__ring-num ft-num">{{ r.value }}</text>
-              <text class="diet__ring-sub ft-num">{{ r.value }} / {{ r.total }}</text>
-            </view>
-            <text class="diet__ring-label">{{ r.label }}</text>
-            <text class="diet__ring-pct ft-num">{{ r.percent }}%</text>
+        <view class="diet__tap" @click="goDiet">
+          <view class="diet__kcal">
+            <text class="diet__kcal-num ft-num">{{ dietKcal }}</text>
+            <text class="diet__kcal-unit"> / {{ dietTargetText }} 大卡</text>
           </view>
+          <FtDietRings :rings="dietRings" />
         </view>
 
         <view class="diet__shortcuts">
-          <view v-for="s in diet.shortcuts" :key="s.key" class="diet__shortcut" @click="dietPending">
+          <view
+            v-for="s in dietShortcuts"
+            :key="s.key"
+            class="diet__shortcut"
+            @click="onDietShortcut(s.key)"
+          >
             <view class="diet__ico" :class="'diet__ico--' + s.key" />
             <text class="diet__shortcut-label">{{ s.label }}</text>
           </view>
@@ -247,6 +283,15 @@ function dietPending() {
         调整训练安排
       </view>
     </view>
+
+    <!-- 饮食记录弹层 -->
+    <MealSheet
+      v-if="sheetMeal"
+      :date="todayKey"
+      :meal="sheetMeal"
+      @close="sheetMeal = null"
+      @changed="refreshDiet"
+    />
   </view>
 </template>
 
@@ -287,11 +332,6 @@ function dietPending() {
   color: $app-ink;
 }
 
-.diet__link {
-  font-size: $text-base;
-  color: $app-ink-muted;
-}
-
 .diet__kcal {
   display: flex;
   align-items: baseline;
@@ -310,66 +350,8 @@ function dietPending() {
   color: $app-ink-muted;
 }
 
-.diet__rings {
-  display: flex;
-  justify-content: space-between;
+.diet__tap {
   margin-bottom: 26rpx;
-}
-
-.diet__ring-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 25%;
-}
-
-.diet__ring {
-  width: 116rpx;
-  height: 116rpx;
-  border-radius: 50%;
-  border: 6rpx solid $app-line;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-}
-
-.diet__ring--protein {
-  border-color: $ring-protein;
-}
-.diet__ring--carb {
-  border-color: $ring-carb;
-}
-.diet__ring--fat {
-  border-color: $ring-fat;
-}
-.diet__ring--water {
-  border-color: $ring-water;
-}
-
-.diet__ring-num {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-  line-height: 1.1;
-}
-
-.diet__ring-sub {
-  font-size: 18rpx;
-  color: $app-ink-subtle;
-  line-height: 1.2;
-}
-
-.diet__ring-label {
-  margin-top: 10rpx;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-.diet__ring-pct {
-  font-size: 18rpx;
-  color: $app-ink-subtle;
 }
 
 .diet__shortcuts {

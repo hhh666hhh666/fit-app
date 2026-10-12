@@ -4,6 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { listWorkouts } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
+import { listFoods } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -14,6 +15,7 @@ const username = ref('训练者')
 const totalCount = ref(0)
 const totalVolumeT = ref(0)
 const exerciseCount = ref(0)
+const foodCount = ref(-1)
 
 const schedule = useScheduleStore()
 
@@ -27,12 +29,17 @@ onShow(() => {
 async function loadStats() {
   try {
     // 自用工具初期记录量小；封顶 200 条，超过按「200+」显示（不装精确数）
-    const [workouts, exercises] = await Promise.all([listWorkouts(200), listExercises()])
+    const [workouts, exercises, foods] = await Promise.all([
+      listWorkouts(200),
+      listExercises(),
+      listFoods()
+    ])
     totalCount.value = workouts.length
     totalVolumeT.value = Math.round(
       workouts.reduce((sum, w) => sum + (Number(w.totalVolume) || 0), 0) / 1000
     )
     exerciseCount.value = exercises.length
+    foodCount.value = foods.length
   } catch {
     // unwrap 已提示
   }
@@ -49,6 +56,8 @@ const weekSummary = computed(() => {
   return n ? `${n} 天已安排` : '未安排'
 })
 
+const foodSummary = computed(() => (foodCount.value < 0 ? '—' : `${foodCount.value} 种食物`))
+
 function goBody() {
   uni.navigateTo({ url: '/pages/body/index' })
 }
@@ -63,6 +72,14 @@ function goPlans() {
 
 function goWeek() {
   uni.navigateTo({ url: '/pages/week/index' })
+}
+
+function goFoods() {
+  uni.navigateTo({ url: '/pages/foods/index' })
+}
+
+function goSettings() {
+  uni.navigateTo({ url: '/pages/settings/index' })
 }
 
 function logout() {
@@ -135,6 +152,16 @@ function logout() {
         <view class="entry" @click="goWeek">
           <text class="entry__label">训练安排</text>
           <text class="entry__value ft-num">{{ weekSummary }}</text>
+          <text class="entry__go">›</text>
+        </view>
+        <view class="entry" @click="goFoods">
+          <text class="entry__label">食物库</text>
+          <text class="entry__value ft-num">{{ foodSummary }}</text>
+          <text class="entry__go">›</text>
+        </view>
+        <view class="entry" @click="goSettings">
+          <text class="entry__label">设置</text>
+          <text class="entry__value ft-num">饮食目标 · 图片压缩</text>
           <text class="entry__go">›</text>
         </view>
       </view>

@@ -51,6 +51,22 @@
       "style": { "navigationBarTitleText": "编辑计划" }
     },
     {
+      "path": "pages/diet/index",
+      "style": { "navigationBarTitleText": "饮食记录" }
+    },
+    {
+      "path": "pages/foods/index",
+      "style": { "navigationBarTitleText": "食物库" }
+    },
+    {
+      "path": "pages/food-edit/index",
+      "style": { "navigationBarTitleText": "编辑食物" }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": { "navigationBarTitleText": "设置" }
+    },
+    {
       "path": "pages/week/index",
       "style": { "navigationBarTitleText": "训练安排" }
     },
