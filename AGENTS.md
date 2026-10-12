@@ -1,6 +1,6 @@
 # fit-app · 给 AI 的规矩
 
-适用任何 AI 工具。**权威版本在 `.codebuddy/rules/`（四条，每次会话自动加载）；本文件只做路由与收尾清单，不复述规则内容**——两边冲突以那边为准，新增或改名规则要同步下面这张表。
+适用任何 AI 工具。**权威版本在 `.codebuddy/rules/`（五条，每次会话自动加载）；本文件只做路由与收尾清单，不复述规则内容**——两边冲突以那边为准，新增或改名规则要同步下面这张表。
 
 Spring Boot + Vue 的自用项目。领域词看 `CONTEXT.md`，文档总索引看 `docs/README.md`。
 
@@ -10,6 +10,7 @@ Spring Boot + Vue 的自用项目。领域词看 `CONTEXT.md`，文档总索引�
 - **改代码 = 改文档**：改了行为就顺手改文档；移动 / 删除文件后全仓搜旧名 → `.codebuddy/rules/docs-with-code.md`
 - **会话工作台**：任务要动文件，动手**之前**先建 `docs/worklog/` 工作台 → `.codebuddy/rules/session-log.md`
 - **外部设计 skill**：用哪个、什么禁区（`ui-ux-pro-max` 禁用 `--persist`） → `.codebuddy/rules/design-tools.md`
+- **本机 SSH 与服务器入口**：密钥位置、连接别名与红线 → `.codebuddy/rules/server-ssh.md`
 
 规则的体积预算：**单条 ≤ 100 行**，常驻规则越少越好。
 
