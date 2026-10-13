@@ -3,18 +3,24 @@ import { computed, reactive, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   createFood,
-  listFoods,
+  getFood,
   updateFood,
   type FoodItem,
   type FoodPayload
 } from '@/api/nutrition'
+import { OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
 
-// ── 食物新增 / 编辑（营养成分表 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
+// ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 
 const editId = ref<number | null>(null)
+/** 「复制为自定义」的来源（预置食物 id）；有值时表单预填但保存走新建。 */
+const copyFromId = ref<number | null>(null)
 const isEdit = computed(() => editId.value != null)
 const saving = ref(false)
+const pageTitle = computed(() =>
+  isEdit.value ? '编辑食物' : copyFromId.value != null ? '复制为自定义' : '新增食物'
+)
 
 /** 表单：数值字段一律字符串（空串 = 未填），提交时转换。 */
 const form = reactive<Record<string, string>>({
@@ -31,75 +37,6 @@ const form = reactive<Record<string, string>>({
   portionGrams: ''
 })
 
-/** 可选营养分组（键名与后端 snake_case 一一对应，提交时转 camelCase 结构）。 */
-const OPTIONAL_GROUPS: { title: string; fields: { key: string; label: string }[] }[] = [
-  {
-    title: '脂类相关',
-    fields: [
-      { key: 'saturatedFat', label: '饱和脂肪酸 (g)' },
-      { key: 'transFat', label: '反式脂肪酸 (g)' },
-      { key: 'monoFat', label: '单不饱和脂肪酸 (g)' },
-      { key: 'polyFat', label: '多不饱和脂肪酸 (g)' },
-      { key: 'cholesterol', label: '胆固醇 (mg)' }
-    ]
-  },
-  {
-    title: '碳水相关',
-    fields: [
-      { key: 'sugar', label: '糖 (g)' },
-      { key: 'fiber', label: '膳食纤维 (g)' },
-      { key: 'solubleFiber', label: '可溶性膳食纤维 (g)' },
-      { key: 'insolubleFiber', label: '不溶性膳食纤维 (g)' },
-      { key: 'starch', label: '淀粉 (g)' },
-      { key: 'lactose', label: '乳糖 (g)' }
-    ]
-  },
-  {
-    title: '维生素',
-    fields: [
-      { key: 'va', label: '维生素A (μg RE)' },
-      { key: 'vd', label: '维生素D (μg)' },
-      { key: 've', label: '维生素E (mg α-TE)' },
-      { key: 'vb1', label: '维生素B1 (mg)' },
-      { key: 'vb2', label: '维生素B2 (mg)' },
-      { key: 'vb6', label: '维生素B6 (mg)' },
-      { key: 'vb12', label: '维生素B12 (μg)' },
-      { key: 'vc', label: '维生素C (mg)' },
-      { key: 'niacin', label: '烟酸 (mg)' },
-      { key: 'folate', label: '叶酸 (μg DFE)' },
-      { key: 'pantothenic', label: '泛酸 (mg)' },
-      { key: 'biotin', label: '生物素 (μg)' }
-    ]
-  },
-  {
-    title: '矿物质',
-    fields: [
-      { key: 'calcium', label: '钙 (mg)' },
-      { key: 'phosphorus', label: '磷 (mg)' },
-      { key: 'potassium', label: '钾 (mg)' },
-      { key: 'magnesium', label: '镁 (mg)' },
-      { key: 'iron', label: '铁 (mg)' },
-      { key: 'zinc', label: '锌 (mg)' },
-      { key: 'iodine', label: '碘 (μg)' },
-      { key: 'selenium', label: '硒 (μg)' },
-      { key: 'copper', label: '铜 (mg)' },
-      { key: 'manganese', label: '锰 (mg)' },
-      { key: 'fluoride', label: '氟 (mg)' },
-      { key: 'chromium', label: '铬 (μg)' },
-      { key: 'molybdenum', label: '钼 (μg)' }
-    ]
-  },
-  {
-    title: '理化成分',
-    fields: [
-      { key: 'water', label: '水分 (g)' },
-      { key: 'ash', label: '灰分 (g)' },
-      { key: 'alcohol', label: '乙醇 (g)' },
-      { key: 'organicAcid', label: '有机酸 (g)' }
-    ]
-  }
-]
-
 /** 折叠状态（默认全收起）。 */
 const openGroups = ref<Record<string, boolean>>({})
 
@@ -113,6 +50,12 @@ onLoad((query) => {
   if (id) {
     editId.value = id
     void loadExisting()
+    return
+  }
+  const copy = Number(q.copyFrom)
+  if (copy) {
+    copyFromId.value = copy
+    void loadExisting()
   }
 })
 
@@ -121,11 +64,19 @@ onShow(() => {
 })
 
 async function loadExisting() {
-  if (editId.value == null) return
+  const id = editId.value ?? copyFromId.value
+  if (id == null) return
   try {
-    const list = await listFoods()
-    const f = list.find((x) => x.id === editId.value)
-    if (f) fillForm(f)
+    const f = await getFood(id)
+    if (f.preset && editId.value != null) {
+      // 防御：编辑目标若指到预置（正常入口不会），自动降级为「复制」；服务端同样会挡改
+      copyFromId.value = editId.value
+      editId.value = null
+    }
+    fillForm(f)
+    if (copyFromId.value != null) {
+      uni.showToast({ title: '已带出预设数据，可修改后保存', icon: 'none' })
+    }
   } catch {
     // request 层已统一提示
   }
@@ -244,7 +195,7 @@ function goBack() {
     <view class="fe__body">
       <view class="fe__head">
         <text class="fe__back" @click="goBack">‹</text>
-        <text class="fe__title">{{ isEdit ? '编辑食物' : '新增食物' }}</text>
+        <text class="fe__title">{{ pageTitle }}</text>
         <view class="fe__head-space" />
       </view>
 

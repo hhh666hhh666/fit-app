@@ -11,6 +11,12 @@ export interface FoodItem {
   id: number
   name: string
   unit: 'g' | 'ml'
+  /** 分类（预置数据带《中国食物成分表》大类；用户自建无）。 */
+  category?: string | null
+  /** 浏览次数（详情页查看次数；食物库列表按此降序）。 */
+  viewCount?: number | null
+  /** 收藏（置顶标记）：收藏者排在食物库列表最前，同为收藏再按浏览次数降序。 */
+  favorite?: boolean | null
   kcal: number
   protein: number
   fat: number
@@ -60,6 +66,8 @@ export interface FoodItem {
   organicAcid?: number | null
   portionLabel?: string | null
   portionGrams?: number | null
+  /** 系统预置（只读，可「复制为自定义」）；lite 列表也会带此标志。 */
+  preset?: boolean | null
 }
 
 /** 新建 / 编辑食物的提交体。 */
@@ -124,8 +132,39 @@ export interface ImportResult {
 
 // ── 食物库 ──
 
-export function listFoods(q?: string) {
-  return unwrap(request.get<FoodItem[]>('/foods', q ? { q } : undefined))
+/** 列表/搜索（预置＋自有合并，按浏览次数降序）；lite=轻量字段（列表与记录选择用，不带全套营养），limit/offset 分页。 */
+export function listFoods(q?: string, opts?: { lite?: boolean; limit?: number; offset?: number }) {
+  const params: Record<string, unknown> = {}
+  if (q) params.q = q
+  if (opts?.lite) params.lite = 1
+  if (opts?.limit) params.limit = opts.limit
+  if (opts?.offset) params.offset = opts.offset
+  return unwrap(request.get<FoodItem[]>('/foods', Object.keys(params).length ? params : undefined))
+}
+
+/** 单条（编辑回填 / 复制为自定义用）。 */
+export function getFood(id: number) {
+  return unwrap(request.get<FoodItem>(`/foods/${id}`))
+}
+
+/** 食物数量统计（预置＋自有，可按关键词过滤；「我的」页显示总数、食物库分页判断到底用）。 */
+export function getFoodCount(q?: string) {
+  return unwrap(
+    request.get<{ total: number; preset: number; mine: number }>(
+      '/foods/count',
+      q ? { q } : undefined
+    )
+  )
+}
+
+/** 浏览次数 +1（详情页查看时调用；预置与自有均可）。 */
+export function incrementFoodView(id: number) {
+  return unwrap(request.post<void>(`/foods/${id}/view`))
+}
+
+/** 收藏 / 取消收藏（收藏＝食物库列表置顶；预置与自有均可）。 */
+export function setFoodFavorite(id: number, favorite: boolean) {
+  return unwrap(request.put<void>(`/foods/${id}/favorite`, undefined, { favorite }))
 }
 
 export function createFood(payload: FoodPayload) {

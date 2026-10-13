@@ -36,6 +36,8 @@ const saving = ref(false)
 const photoUrl = ref<string | null>(null)
 
 // ── 选食物 ──
+/** 轻量列表条数上限（预置 1800+ 条：搜索走服务端，初始只带前 N 条）。 */
+const FOOD_LIMIT = 200
 const keyword = ref('')
 const foods = ref<FoodItem[]>([])
 const selected = ref<FoodItem | null>(null)
@@ -76,7 +78,11 @@ watch(keyword, () => {
 
 async function searchFoods() {
   try {
-    foods.value = await listFoods(keyword.value.trim() || undefined)
+    // 预置＋自有合并；lite 轻量字段 + 条数上限（搜索交给服务端）
+    foods.value = await listFoods(keyword.value.trim() || undefined, {
+      lite: true,
+      limit: FOOD_LIMIT
+    })
   } catch {
     // request 层已统一提示
   }
@@ -269,7 +275,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
           <view v-else class="foods">
             <view v-for="f in foods" :key="f.id" class="frow" @click="selectFood(f)">
               <view class="frow__mid">
-                <text class="frow__name">{{ f.name }}</text>
+                <view class="frow__line">
+                  <text class="frow__name">{{ f.name }}</text>
+                  <text v-if="f.preset" class="frow__badge">预设</text>
+                </view>
                 <text class="frow__sub ft-num">
                   每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g
                 </text>
@@ -277,7 +286,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               <text class="frow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
             </view>
             <view v-if="foods.length === 0" class="foods__empty">
-              食物库还是空的——先去「食物库」添加
+              没有找到匹配的食物——可去「食物库」新增
             </view>
           </view>
         </view>
@@ -552,12 +561,32 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   gap: 4rpx;
 }
 
+.frow__line {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
 .frow__name {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: $text-base;
   color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.frow__badge {
+  flex: none;
+  padding: 4rpx 8rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid $app-line;
+  background: $app-canvas;
+  font-size: 18rpx;
+  line-height: 1;
+  color: $app-ink-muted;
 }
 
 .frow__sub {

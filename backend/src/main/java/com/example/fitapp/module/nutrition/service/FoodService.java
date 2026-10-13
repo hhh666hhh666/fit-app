@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
@@ -28,8 +29,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 食物库：列表 / 单条增改删 / JSON 文本导入 / 导出。
- * 同名唯一（同用户内，导入遇同名跳过）；编辑为**整体覆盖**（空值要能清掉，走显式 set——全局 not_null 会跳过 null）。
+ * 食物库：列表（收藏置顶 → 浏览次数降序 → 名称）/ 单条增改删 / 浏览次数 +1 / 收藏标记 /
+ * JSON 文本导入 / 导出。
+ * 库内两种来源：**系统预置**（user_id 为空，只读，可「复制为自定义」）＋ **用户自建**；
+ * 列表/搜索两者合并返回；编辑为**整体覆盖**（空值要能清掉，走显式 set——全局 not_null 会跳过 null）。
  */
 @Service
 @RequiredArgsConstructor
@@ -37,16 +40,103 @@ public class FoodService {
 
     private static final BigDecimal KJ_PER_KCAL = new BigDecimal("4.184");
     private static final Set<String> UNITS = Set.of("g", "ml");
+    /** 轻量列表的条数上限（防一次性拉全库）。 */
+    private static final int LITE_MAX_LIMIT = 500;
 
     private final FoodMapper foodMapper;
     private final ObjectMapper objectMapper;
     private final Validator validator;
 
+    /** 列表/搜索：预置 + 自有合并，按浏览次数降序（常用上浮，同值按名称）。 */
     public List<Food> list(Long userId, String q) {
+        List<Food> foods = foodMapper.selectList(baseQuery(userId, q));
+        foods.forEach(this::fillPreset);
+        return foods;
+    }
+
+    /**
+     * 列表轻量模式：只带列表与记录选择所需字段（配 Jackson non_null，其余字段不输出）。
+     * limit/offset 用于滚动分页（食物库页每页 100 条）；limit 为空表示不分页。
+     */
+    public List<Food> listLite(Long userId, String q, Integer limit, Integer offset) {
+        LambdaQueryWrapper<Food> w = baseQuery(userId, q);
+        if (limit != null) {
+            int size = Math.min(Math.max(limit, 1), LITE_MAX_LIMIT);
+            int start = offset == null ? 0 : Math.max(offset, 0);
+            w.last("LIMIT " + start + ", " + size);
+        }
+        return foodMapper.selectList(w).stream().map(this::toLite).toList();
+    }
+
+    /** 浏览次数 +1（详情页查看时调用）。预置与自有均可浏览；不存在或他人私有 → 404。 */
+    public void incrementView(Long userId, Long id) {
+        Food food = foodMapper.selectById(id);
+        if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+        }
+        foodMapper.incrementViewCount(id);
+    }
+
+    /** 收藏 / 取消收藏（收藏＝列表置顶）。预置与自有均可收藏；不存在或他人私有 → 404。 */
+    public void setFavorite(Long userId, Long id, boolean favorite) {
+        Food food = foodMapper.selectById(id);
+        if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+        }
+        foodMapper.update(null, Wrappers.<Food>lambdaUpdate()
+                .eq(Food::getId, id)
+                .set(Food::getFavorite, favorite));
+    }
+
+    /** 单条（预置与自有均可读）：编辑回填、复制为自定义、详情查看用。 */
+    public Food get(Long userId, Long id) {
+        Food food = foodMapper.selectById(id);
+        if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+        }
+        fillPreset(food);
+        return food;
+    }
+
+    /** 数量统计（预置＋自有，可按关键词过滤）：供「我的」页显示总数、食物库滚动分页判断是否到底。 */
+    public Map<String, Long> count(Long userId, String q) {
+        long preset = foodMapper.selectCount(scopeQuery(null, q));
+        long mine = foodMapper.selectCount(scopeQuery(userId, q));
+        Map<String, Long> m = new LinkedHashMap<>();
+        m.put("total", preset + mine);
+        m.put("preset", preset);
+        m.put("mine", mine);
+        return m;
+    }
+
+    private LambdaQueryWrapper<Food> scopeQuery(Long ownerId, String q) {
         String kw = q == null ? null : q.trim();
+        LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery()
+                .like(StringUtils.hasText(kw), Food::getName, kw);
+        if (ownerId == null) {
+            w.isNull(Food::getUserId);
+        } else {
+            w.eq(Food::getUserId, ownerId);
+        }
+        return w;
+    }
+
+    private LambdaQueryWrapper<Food> baseQuery(Long userId, String q) {
+        String kw = q == null ? null : q.trim();
+        return Wrappers.<Food>lambdaQuery()
+                .and(w -> w.eq(Food::getUserId, userId).or().isNull(Food::getUserId))
+                .like(StringUtils.hasText(kw), Food::getName, kw)
+                // 排序：① 收藏置顶 ② 个人常用度（浏览次数降序）③ 名称、id 升序（保证分页稳定）
+                .orderByDesc(Food::getFavorite)
+                .orderByDesc(Food::getViewCount)
+                .orderByAsc(Food::getName)
+                .orderByAsc(Food::getId);
+    }
+
+    /** 只查自有（不含预置）：导出、导入查重专用。 */
+    private List<Food> ownList(Long userId) {
         return foodMapper.selectList(Wrappers.<Food>lambdaQuery()
                 .eq(Food::getUserId, userId)
-                .like(StringUtils.hasText(kw), Food::getName, kw)
                 .orderByAsc(Food::getName)
                 .orderByAsc(Food::getId));
     }
@@ -60,6 +150,7 @@ public class FoodService {
         food.setName(name);
         food.setUnit(normalizeUnit(dto.getUnit()));
         foodMapper.insert(food);
+        food.setPreset(false);
         return food;
     }
 
@@ -122,7 +213,9 @@ public class FoodService {
                 .set(Food::getOrganicAcid, dto.getOrganicAcid())
                 .set(Food::getPortionLabel, dto.getPortionLabel())
                 .set(Food::getPortionGrams, dto.getPortionGrams()));
-        return foodMapper.selectById(id);
+        Food updated = foodMapper.selectById(id);
+        fillPreset(updated);
+        return updated;
     }
 
     public void delete(Long userId, Long id) {
@@ -130,9 +223,9 @@ public class FoodService {
         foodMapper.deleteById(id);
     }
 
-    /** 导出全库：与导入对称的 snake_case 结构（只含非空字段）。 */
+    /** 导出全库：只导**自有**（预置系统自带、无需备份）；与导入对称的 snake_case 结构（只含非空字段）。 */
     public List<Map<String, Object>> exportAll(Long userId) {
-        return list(userId, null).stream().map(this::toJsonMap).toList();
+        return ownList(userId).stream().map(this::toJsonMap).toList();
     }
 
     /**
@@ -160,7 +253,8 @@ public class FoodService {
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        Set<String> seen = list(userId, null).stream().map(Food::getName).collect(Collectors.toSet());
+        // 查重只看自有：允许与预置同名（预置是系统数据，用户可基于同名建自己的版本）
+        Set<String> seen = ownList(userId).stream().map(Food::getName).collect(Collectors.toSet());
         ImportResultVO result = new ImportResultVO();
 
         for (JsonNode node : nodes) {
@@ -316,9 +410,40 @@ public class FoodService {
 
     private Food requireOwn(Long userId, Long id) {
         Food food = foodMapper.selectById(id);
-        if (food == null || !userId.equals(food.getUserId())) {
+        if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
             throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
         }
+        if (food.getUserId() == null) {
+            // 系统预置：只读（与动作库预设同规则）；要微调走「复制为自定义」。
+            throw new BusinessException(ResultCode.FORBIDDEN, "预置食物不可修改或删除");
+        }
         return food;
+    }
+
+    private void fillPreset(Food f) {
+        if (f != null) {
+            f.setPreset(f.getUserId() == null);
+        }
+    }
+
+    /** 轻量视图：只留列表/记录选择所需字段，其余置空（Jackson non_null 下不输出）。 */
+    private Food toLite(Food f) {
+        Food lite = new Food();
+        lite.setId(f.getId());
+        lite.setName(f.getName());
+        lite.setUnit(f.getUnit());
+        lite.setCategory(f.getCategory());
+        lite.setViewCount(f.getViewCount());
+        lite.setFavorite(f.getFavorite());
+        lite.setKcal(f.getKcal());
+        lite.setProtein(f.getProtein());
+        lite.setFat(f.getFat());
+        lite.setCarb(f.getCarb());
+        lite.setSodium(f.getSodium());
+        lite.setGi(f.getGi());
+        lite.setPortionLabel(f.getPortionLabel());
+        lite.setPortionGrams(f.getPortionGrams());
+        lite.setPreset(f.getUserId() == null);
+        return lite;
     }
 }

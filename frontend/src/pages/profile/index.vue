@@ -4,7 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { listWorkouts } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
-import { listFoods } from '@/api/nutrition'
+import { getFoodCount } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -29,17 +29,18 @@ onShow(() => {
 async function loadStats() {
   try {
     // 自用工具初期记录量小；封顶 200 条，超过按「200+」显示（不装精确数）
-    const [workouts, exercises, foods] = await Promise.all([
+    const [workouts, exercises, foodStat] = await Promise.all([
       listWorkouts(200),
       listExercises(),
-      listFoods()
+      // 食物库含预置 1800+ 条：走统计接口拿精确总数（不拉列表）
+      getFoodCount()
     ])
     totalCount.value = workouts.length
     totalVolumeT.value = Math.round(
       workouts.reduce((sum, w) => sum + (Number(w.totalVolume) || 0), 0) / 1000
     )
     exerciseCount.value = exercises.length
-    foodCount.value = foods.length
+    foodCount.value = foodStat.total
   } catch {
     // unwrap 已提示
   }
@@ -56,7 +57,9 @@ const weekSummary = computed(() => {
   return n ? `${n} 天已安排` : '未安排'
 })
 
-const foodSummary = computed(() => (foodCount.value < 0 ? '—' : `${foodCount.value} 种食物`))
+const foodSummary = computed(() =>
+  foodCount.value < 0 ? '—' : `${foodCount.value} 种食物`
+)
 
 function goBody() {
   uni.navigateTo({ url: '/pages/body/index' })

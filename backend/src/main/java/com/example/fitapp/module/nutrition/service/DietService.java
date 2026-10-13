@@ -297,7 +297,8 @@ public class DietService {
 
     private Food requireOwnFood(Long userId, Long foodId) {
         Food food = foodMapper.selectById(foodId);
-        if (food == null || !userId.equals(food.getUserId())) {
+        // 允许系统预置（user_id 为空）：预置食物可直接被记录（快照照写）
+        if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
             throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
         }
         return food;

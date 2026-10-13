@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, watch } from 'vue'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import {
-  deleteFood,
   exportFoods,
+  getFoodCount,
   importFoods,
   listFoods,
   type FoodItem,
@@ -11,21 +11,36 @@ import {
 } from '@/api/nutrition'
 import { ensureLogin } from '@/utils/guard'
 
-// ── 食物库：列表 / 搜索 / 增改删（编辑跳独立页）/ JSON 导入导出 ──
+// ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
+//    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
 
-const all = ref<FoodItem[]>([])
+const PAGE_SIZE = 100
+
+const list = ref<FoodItem[]>([])
+const total = ref(0)
 const loading = ref(false)
+const loadingMore = ref(false)
+const finished = ref(false)
 const keyword = ref('')
 
 onShow(() => {
   if (!ensureLogin()) return
-  void load()
+  void reload()
 })
 
-async function load() {
+/** 重新加载第一页（进入页面 / 换关键词时）：并取回总数用于「到底」判断与展示。 */
+async function reload() {
   loading.value = true
+  finished.value = false
   try {
-    all.value = await listFoods()
+    const kw = keyword.value.trim() || undefined
+    const [items, cnt] = await Promise.all([
+      listFoods(kw, { lite: true, limit: PAGE_SIZE, offset: 0 }),
+      getFoodCount(kw)
+    ])
+    list.value = items
+    total.value = cnt.total
+    finished.value = items.length >= cnt.total
   } catch {
     // request 层已统一提示
   } finally {
@@ -33,10 +48,29 @@ async function load() {
   }
 }
 
-const filtered = computed(() => {
-  const kw = keyword.value.trim()
-  if (!kw) return all.value
-  return all.value.filter((f) => f.name.includes(kw))
+/** 触底加载下一页。 */
+async function loadMore() {
+  if (loading.value || loadingMore.value || finished.value) return
+  loadingMore.value = true
+  try {
+    const kw = keyword.value.trim() || undefined
+    const items = await listFoods(kw, { lite: true, limit: PAGE_SIZE, offset: list.value.length })
+    list.value = list.value.concat(items)
+    finished.value = items.length === 0 || list.value.length >= total.value
+  } catch {
+    // request 层已统一提示
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+onReachBottom(() => void loadMore())
+
+// 关键词防抖（服务端搜索）
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(keyword, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => void reload(), 250)
 })
 
 function goBack() {
@@ -48,35 +82,8 @@ function goNew() {
 }
 
 function onTap(f: FoodItem) {
-  uni.showActionSheet({
-    itemList: ['编辑', '删除'],
-    success: ({ tapIndex }) => {
-      if (tapIndex === 0) {
-        uni.navigateTo({ url: `/pages/food-edit/index?id=${f.id}` })
-      } else if (tapIndex === 1) {
-        void remove(f)
-      }
-    }
-  })
-}
-
-function remove(f: FoodItem) {
-  uni.showModal({
-    title: '删除食物',
-    content: `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。`,
-    confirmText: '删除',
-    confirmColor: '#C4453C',
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await deleteFood(f.id)
-        all.value = all.value.filter((x) => x.id !== f.id)
-        uni.showToast({ title: '已删除', icon: 'none' })
-      } catch {
-        // request 层已统一提示
-      }
-    }
-  })
+  // 点条目 → 食物详情页（预置＝复制为自定义；自有＝编辑/删除，均在详情页内）
+  uni.navigateTo({ url: `/pages/food-detail/index?id=${f.id}` })
 }
 
 function perText(f: FoodItem): string {
@@ -100,7 +107,7 @@ async function doImport() {
   s.busy = true
   try {
     s.result = await importFoods(s.text)
-    await load()
+    await reload()
   } catch {
     // request 层已统一提示
   } finally {
@@ -156,19 +163,30 @@ function copyExport() {
       <view class="ops">
         <text class="ops__btn" @click="openImport">导入 JSON</text>
         <text class="ops__btn" @click="doExport">导出 JSON</text>
-        <text class="ops__meta ft-num">{{ all.length }} 项</text>
+        <text class="ops__meta ft-num">{{
+          keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种`
+        }}</text>
       </view>
 
+      <text class="ops__note">「预设」＝系统内置只读数据（可复制为自定义）；名称带 * 的营养数据来自公开资料补全，供参考</text>
+
       <view class="flist">
-        <view v-for="f in filtered" :key="f.id" class="frow" @click="onTap(f)">
+        <view v-for="f in list" :key="f.id" class="frow" @click="onTap(f)">
           <view class="frow__mid">
-            <text class="frow__name">{{ f.name }}</text>
+            <view class="frow__line">
+              <text class="frow__name">{{ f.name }}</text>
+              <text v-if="f.preset" class="frow__badge">预设</text>
+            </view>
             <text class="frow__sub ft-num">{{ perText(f) }}</text>
           </view>
           <text class="frow__go">›</text>
         </view>
-        <view v-if="!loading && filtered.length === 0" class="flist__empty">
-          {{ all.length === 0 ? '还没有食物——点右上「+ 新增」，或导入 JSON' : '没有匹配的食物' }}
+        <view v-if="!loading && list.length === 0" class="flist__empty">
+          {{ keyword.trim() ? '没有匹配的食物' : '还没有食物——点右上「+ 新增」' }}
+        </view>
+        <view v-else-if="loadingMore" class="flist__more">加载中…</view>
+        <view v-else-if="finished && list.length > 0" class="flist__more">
+          共 {{ total }} 种食物
         </view>
       </view>
     </view>
@@ -304,6 +322,14 @@ function copyExport() {
   color: $app-ink-subtle;
 }
 
+.ops__note {
+  display: block;
+  padding: 0 8rpx 16rpx;
+  font-size: $text-xs;
+  line-height: 1.5;
+  color: $app-ink-subtle;
+}
+
 .flist {
   background: $app-surface;
   border: 1rpx solid $app-line-soft;
@@ -329,13 +355,33 @@ function copyExport() {
   gap: 6rpx;
 }
 
+.frow__line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
 .frow__name {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: $text-md;
   font-weight: 600;
   color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.frow__badge {
+  flex: none;
+  padding: 5rpx 10rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid $app-line;
+  background: $app-canvas;
+  font-size: 20rpx;
+  line-height: 1;
+  color: $app-ink-muted;
 }
 
 .frow__sub {
@@ -355,6 +401,14 @@ function copyExport() {
   text-align: center;
   font-size: $text-sm;
   color: $app-ink-subtle;
+}
+
+.flist__more {
+  padding: 20rpx 24rpx;
+  text-align: center;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+  border-top: 1rpx solid $app-line-soft;
 }
 
 /* ── 弹层 ── */

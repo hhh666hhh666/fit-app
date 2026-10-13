@@ -3,6 +3,7 @@ package com.example.fitapp.module.nutrition.service;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.example.fitapp.common.BusinessException;
+import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
@@ -21,8 +22,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -129,6 +132,170 @@ class FoodServiceTest {
         when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 99L));
         assertThrows(BusinessException.class, () -> service().delete(7L, 10L));
         verify(foodMapper, never()).deleteById(any(Long.class));
+    }
+
+    // ── 系统预置（user_id 为空）：只读 + 列表/轻量模式 ──
+
+    private static Food presetFood(long id) {
+        Food f = new Food();
+        f.setId(id);
+        f.setUserId(null);
+        f.setName("苹果（代表值）");
+        return f;
+    }
+
+    @Test
+    void delete_presetFood_forbidden() {
+        when(foodMapper.selectById(99L)).thenReturn(presetFood(99L));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service().delete(7L, 99L));
+
+        assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
+        verify(foodMapper, never()).deleteById(any(Long.class));
+    }
+
+    @Test
+    void update_presetFood_forbidden() {
+        when(foodMapper.selectById(99L)).thenReturn(presetFood(99L));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service().update(7L, 99L, dto("苹果（代表值）")));
+
+        assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
+        verify(foodMapper, never()).update(ArgumentMatchers.<Food>isNull(), any());
+    }
+
+    @Test
+    void get_presetFood_isReadableAndFlagged() {
+        when(foodMapper.selectById(99L)).thenReturn(presetFood(99L));
+
+        Food f = service().get(7L, 99L);
+
+        assertEquals(Boolean.TRUE, f.getPreset());
+        assertEquals("苹果（代表值）", f.getName());
+    }
+
+    @Test
+    void count_sumsPresetAndMine() {
+        // 调用顺序：先查预置（isNull），后查自有（eq）
+        when(foodMapper.selectCount(any())).thenReturn(10L, 3L);
+
+        Map<String, Long> m = service().count(7L, null);
+
+        assertEquals(13L, m.get("total"));
+        assertEquals(10L, m.get("preset"));
+        assertEquals(3L, m.get("mine"));
+    }
+
+    @Test
+    void listLite_stripsHeavyFieldsAndFlagsPreset() {
+        Food full = ownFood(1L, 7L);
+        full.setKcal(new BigDecimal("118"));
+        full.setCalcium(new BigDecimal("100"));
+        Food preset = presetFood(99L);
+        when(foodMapper.selectList(any())).thenReturn(List.of(full, preset));
+
+        List<Food> lite = service().listLite(7L, null, 10, 0);
+
+        assertEquals(2, lite.size());
+        assertEquals(new BigDecimal("118"), lite.get(0).getKcal());
+        assertNull(lite.get(0).getCalcium(), "轻量模式不应带矿物质等重字段");
+        assertEquals(Boolean.FALSE, lite.get(0).getPreset());
+        assertEquals(Boolean.TRUE, lite.get(1).getPreset());
+    }
+
+    // ── 浏览次数（详情页查看时 +1；预置与自有均可浏览）──
+
+    @Test
+    void incrementView_presetFood_allowed() {
+        when(foodMapper.selectById(99L)).thenReturn(presetFood(99L));
+
+        service().incrementView(7L, 99L);
+
+        verify(foodMapper).incrementViewCount(99L);
+    }
+
+    @Test
+    void incrementView_ownFood_allowed() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 7L));
+
+        service().incrementView(7L, 10L);
+
+        verify(foodMapper).incrementViewCount(10L);
+    }
+
+    @Test
+    void incrementView_notFound_throws() {
+        when(foodMapper.selectById(5L)).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> service().incrementView(7L, 5L));
+        verify(foodMapper, never()).incrementViewCount(any(Long.class));
+    }
+
+    @Test
+    void incrementView_otherUsersFood_throws() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 99L));
+
+        assertThrows(BusinessException.class, () -> service().incrementView(7L, 10L));
+        verify(foodMapper, never()).incrementViewCount(any(Long.class));
+    }
+
+    // ── 收藏（置顶标记）：预置与自有均可收藏 / 取消 ──
+
+    @Test
+    void setFavorite_presetFood_writesFavoriteColumn() {
+        when(foodMapper.selectById(99L)).thenReturn(presetFood(99L));
+
+        service().setFavorite(7L, 99L, true);
+
+        var captor = ArgumentCaptor.forClass(
+                com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper.class);
+        verify(foodMapper).update(ArgumentMatchers.<Food>isNull(), captor.capture());
+        assertTrue(String.join(",", captor.getValue().getSqlSet()).contains("favorite"),
+                "收藏更新未写 favorite 列：" + captor.getValue().getSqlSet());
+    }
+
+    @Test
+    void setFavorite_ownFood_canUnset() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 7L));
+
+        service().setFavorite(7L, 10L, false);
+
+        verify(foodMapper).update(ArgumentMatchers.<Food>isNull(), any());
+    }
+
+    @Test
+    void setFavorite_notFound_throws() {
+        when(foodMapper.selectById(5L)).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> service().setFavorite(7L, 5L, true));
+        verify(foodMapper, never()).update(ArgumentMatchers.<Food>isNull(), any());
+    }
+
+    @Test
+    void setFavorite_otherUsersFood_throws() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 99L));
+
+        assertThrows(BusinessException.class, () -> service().setFavorite(7L, 10L, true));
+        verify(foodMapper, never()).update(ArgumentMatchers.<Food>isNull(), any());
+    }
+
+    // ── 列表排序：收藏置顶 → 浏览次数降序 → 名称 ──
+
+    @Test
+    void listOrder_favoriteFirst_thenViewCount() {
+        when(foodMapper.selectList(any())).thenReturn(List.of());
+
+        service().listLite(7L, null, 10, 0);
+
+        var captor = ArgumentCaptor.forClass(
+                com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(foodMapper).selectList(captor.capture());
+        String sql = captor.getValue().getSqlSegment().toUpperCase();
+        int fav = sql.indexOf("FAVORITE");
+        int view = sql.indexOf("VIEW_COUNT");
+        assertTrue(fav >= 0 && view >= 0 && fav < view,
+                "排序应为「收藏优先、再按浏览次数」：" + sql);
     }
 
     @Test

@@ -44,7 +44,8 @@ const request = {
   get: <T>(url: string, params?: Record<string, unknown>) => send<T>('GET', url, undefined, params),
   post: <T>(url: string, data?: unknown, params?: Record<string, unknown>) =>
     send<T>('POST', url, data, params),
-  put: <T>(url: string, data?: unknown) => send<T>('PUT', url, data),
+  put: <T>(url: string, data?: unknown, params?: Record<string, unknown>) =>
+    send<T>('PUT', url, data, params),
   delete: <T>(url: string) => send<T>('DELETE', url)
 }
 
