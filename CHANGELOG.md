@@ -30,6 +30,10 @@
 - 食物库列表默认排序由「按名称」改为**收藏置顶 → 按浏览次数降序**；lite 列表的分页由「前 300 条上限」改为「每页 100 条触底加载」
 - 食物详情页的「复制为自定义」由底栏按钮改为**页面最底部的一行纯文本**（非按钮样式）；详情页右上角让位给收藏星标
 
+### Fixed
+
+- **Android 版「拍照记录这一餐」点了没反应**（手机浏览器正常、App 里无任何反应）：壳（WebView）缺 `WebChromeClient.onShowFileChooser`——H5 版 `uni.chooseImage` 底层是「隐藏 `<input type="file">` ＋ `click()`」，浏览器会接管这个点击弹出系统选择器，**WebView 默认不接管、直接吞掉**。已补上该回调，提供「相册 ＋ 拍照」两个来源（拍照输出走 FileProvider 授权应用私有目录，故**无需申请相机/存储权限**）——`android-shell/app/src/main/java/com/fitapp/app/MainActivity.java`
+
 ## [0.3.0] - 2026-10-12
 
 ### Added
