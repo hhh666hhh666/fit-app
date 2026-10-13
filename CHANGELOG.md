@@ -42,6 +42,7 @@
 ### Fixed
 
 - **Android 版「拍照记录这一餐」点了没反应**（手机浏览器正常、App 里无任何反应）：壳（WebView）缺 `WebChromeClient.onShowFileChooser`——H5 版 `uni.chooseImage` 底层是「隐藏 `<input type="file">` ＋ `click()`」，浏览器会接管这个点击弹出系统选择器，**WebView 默认不接管、直接吞掉**。已补上该回调，提供「相册 ＋ 拍照」两个来源（拍照输出走 FileProvider 授权应用私有目录，故**无需申请相机/存储权限**）——`android-shell/app/src/main/java/com/fitapp/app/MainActivity.java`
+- **CI 迁移重放缺字符集参数**：mysql 客户端默认连接字符集是 latin1，中文被按单字节解释、一个汉字变 3 个字符，VARCHAR 长度凭空 ×3，导致 V13 预置数据里较长的食物名在严格模式下报 `1406 Data too long`。已显式加 `--default-character-set=utf8mb4`（本机与线上走 Flyway + JDBC，字符集由连接 URL 指定，从未暴露此问题）
 
 ## [0.3.0] - 2026-10-12
 

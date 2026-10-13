@@ -99,8 +99,14 @@ jobs:
             fi
             prev="$n"
             echo "==> 应用 $base"
+            # ⚠️ mysql 客户端默认连接字符集可能是 latin1（实测本机 docker 容器就是）：中文会被
+            #    按单字节解释、一个汉字变 3 个字符 → VARCHAR 长度凭空 ×3，于是 V13 里较长的
+            #    食物名会在严格模式下报 1406（Data too long for column 'name'）。
+            #    必须显式指定 utf8mb4。
+            #    （本机与线上走 Flyway + JDBC，字符集由连接 URL 指定，所以这条路径从未暴露问题；
+            #     它是「CLI 重放」这条验证路径独有的坑——v0.4.0 首次把 V11~V13 带进这里才撞上。）
             docker run --rm --network host -i mysql:8 \
-              mysql -h127.0.0.1 -uroot -proot fit_app < "$f"
+              mysql --default-character-set=utf8mb4 -h127.0.0.1 -uroot -proot fit_app < "$f"
           done
           echo "==> 全部迁移在 MySQL 8 上重放成功"
 
