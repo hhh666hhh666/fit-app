@@ -6,6 +6,7 @@ import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.plan.entity.Plan;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
+import com.example.fitapp.module.workout.dto.WorkoutUpdateDTO;
 import com.example.fitapp.module.workout.entity.Workout;
 import com.example.fitapp.module.workout.entity.WorkoutBlock;
 import com.example.fitapp.module.workout.entity.WorkoutSet;
@@ -47,21 +48,10 @@ public class WorkoutService {
     @Transactional
     public WorkoutDetailVO create(Long userId, WorkoutCreateDTO dto) {
         LocalDateTime now = LocalDateTime.now();
-        BigDecimal total = dto.getBlocks().stream()
-                .flatMap(b -> b.getSets().stream())
-                .map(s -> s.getWeight().multiply(BigDecimal.valueOf(s.getReps())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = sumVolume(dto.getBlocks());
 
         // PR 判定的起点＝这些动作的历史最大单组容量（weight×reps）；本训练内逐组递进更新
-        Set<Long> exerciseIds = dto.getBlocks().stream()
-                .map(WorkoutCreateDTO.BlockDTO::getExerciseId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, BigDecimal> runningMax = new HashMap<>(
-                exerciseIds.isEmpty()
-                        ? Map.of()
-                        : workoutMapper.selectMaxSetVolume(userId, exerciseIds).stream()
-                                .collect(Collectors.toMap(ExerciseMaxVO::getExerciseId, ExerciseMaxVO::getMaxVol)));
+        Map<Long, BigDecimal> runningMax = historyMax(userId, dto.getBlocks(), null);
 
         Workout w = new Workout();
         w.setUserId(userId);
@@ -73,11 +63,146 @@ public class WorkoutService {
         w.setNote(dto.getNote() == null ? "" : dto.getNote());
         workoutMapper.insert(w);
 
-        List<WorkoutDetailVO.Block> blocks = new ArrayList<>();
+        List<WorkoutDetailVO.Block> blocks = writeBlocks(w.getId(), dto.getBlocks(), runningMax);
+        return toDetail(w, now, blocks);
+    }
+
+    /**
+     * 修改已有训练（详情页「编辑 → ✓」）：标题/备注覆盖，动作与组次**整体覆盖**（删旧写新），
+     * 总容量重算；PR 按「排除本记录自身」的历史基线重判。来源计划、开始时间、时长不动。
+     */
+    @Transactional
+    public WorkoutDetailVO update(Long userId, Long id, WorkoutUpdateDTO dto) {
+        Workout w = requireOwn(userId, id);
+        List<WorkoutCreateDTO.BlockDTO> blocks = dto.getBlocks();
+
+        w.setTitle(dto.getTitle().trim());
+        w.setNote(dto.getNote() == null ? "" : dto.getNote());
+        w.setTotalVolume(sumVolume(blocks));
+        w.setUpdatedAt(LocalDateTime.now());
+        workoutMapper.updateById(w);
+
+        // 动作与组次整体覆盖：先清旧（组次 → 动作条），再按新数据写回
+        workoutMapper.deleteSetsByWorkoutId(id);
+        blockMapper.delete(Wrappers.<WorkoutBlock>lambdaQuery().eq(WorkoutBlock::getWorkoutId, id));
+
+        Map<Long, BigDecimal> runningMax = historyMax(userId, blocks, id);
+        List<WorkoutDetailVO.Block> vbs = writeBlocks(id, blocks, runningMax);
+        return toDetail(w, w.getCreatedAt(), vbs);
+    }
+
+    public List<WorkoutListItemVO> list(Long userId, int limit) {
+        return workoutMapper.selectListItems(userId, limit);
+    }
+
+    public WorkoutDetailVO detail(Long userId, Long id) {
+        Workout w = requireOwn(userId, id);
+        List<WorkoutBlock> blocks = blockMapper.selectList(
+                Wrappers.<WorkoutBlock>lambdaQuery()
+                        .eq(WorkoutBlock::getWorkoutId, id)
+                        .orderByAsc(WorkoutBlock::getSortOrder)
+                        .orderByAsc(WorkoutBlock::getId));
+        List<WorkoutDetailVO.Block> vbs = new ArrayList<>();
+        for (WorkoutBlock b : blocks) {
+            List<WorkoutSet> sets = setMapper.selectList(
+                    Wrappers.<WorkoutSet>lambdaQuery()
+                            .eq(WorkoutSet::getBlockId, b.getId())
+                            .orderByAsc(WorkoutSet::getSetIndex));
+            WorkoutDetailVO.Block vb = new WorkoutDetailVO.Block();
+            vb.setExerciseId(b.getExerciseId());
+            vb.setName(b.getExerciseName());
+            vb.setSets(sets.stream().map(s -> {
+                WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
+                item.setWeight(s.getWeight());
+                item.setReps(s.getReps());
+                item.setPr(Boolean.TRUE.equals(s.getPr()));
+                return item;
+            }).toList());
+            vbs.add(vb);
+        }
+        return toDetail(w, w.getCreatedAt(), vbs);
+    }
+
+    public void updateNote(Long userId, Long id, String note) {
+        Workout w = requireOwn(userId, id);
+        w.setNote(note == null ? "" : note);
+        workoutMapper.updateById(w);
+    }
+
+    @Transactional
+    public void delete(Long userId, Long id) {
+        requireOwn(userId, id);
+        deleteOne(id);
+    }
+
+    /**
+     * 批量删除（日志页长按多选删除）：先整体校验归属，再逐条删——任一不归属则整批回滚，
+     * 不留「删了一半」的中间态。ids 去重后再删，避免重复 id 触发多余的删组次。
+     */
+    @Transactional
+    public void batchDelete(Long userId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        List<Long> distinct = ids.stream().distinct().toList();
+        for (Long id : distinct) {
+            requireOwn(userId, id);
+        }
+        for (Long id : distinct) {
+            deleteOne(id);
+        }
+    }
+
+    private void deleteOne(Long id) {
+        workoutMapper.deleteSetsByWorkoutId(id);
+        blockMapper.delete(Wrappers.<WorkoutBlock>lambdaQuery().eq(WorkoutBlock::getWorkoutId, id));
+        workoutMapper.deleteById(id);
+    }
+
+    /** 某动作的「上次数据」；没有记录时返回 null。 */
+    public LastRecordVO lastRecord(Long userId, Long exerciseId) {
+        return workoutMapper.selectLastRecord(userId, exerciseId);
+    }
+
+    /** 总容量＝Σ(重量×次数)，服务端自算、不信前端。 */
+    private BigDecimal sumVolume(List<WorkoutCreateDTO.BlockDTO> blocks) {
+        return blocks.stream()
+                .flatMap(b -> b.getSets().stream())
+                .map(s -> s.getWeight().multiply(BigDecimal.valueOf(s.getReps())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 这些动作的历史最大单组容量（weight×reps）——PR 判定的历史起点。
+     * {@code excludeWorkoutId} 非空时排除该次训练（编辑场景：不拿自己当基线）。
+     * 无挂库动作时不查库，直接空表。
+     */
+    private Map<Long, BigDecimal> historyMax(Long userId,
+                                             List<WorkoutCreateDTO.BlockDTO> blocks,
+                                             Long excludeWorkoutId) {
+        Set<Long> exerciseIds = blocks.stream()
+                .map(WorkoutCreateDTO.BlockDTO::getExerciseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (exerciseIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        List<ExerciseMaxVO> rows = excludeWorkoutId == null
+                ? workoutMapper.selectMaxSetVolume(userId, exerciseIds)
+                : workoutMapper.selectMaxSetVolumeExcluding(userId, exerciseIds, excludeWorkoutId);
+        return new HashMap<>(rows.stream()
+                .collect(Collectors.toMap(ExerciseMaxVO::getExerciseId, ExerciseMaxVO::getMaxVol)));
+    }
+
+    /** 写入动作条目与组次（序号从 1 起、跨动作重置），并顺带组装明细 VO。 */
+    private List<WorkoutDetailVO.Block> writeBlocks(Long workoutId,
+                                                    List<WorkoutCreateDTO.BlockDTO> blocks,
+                                                    Map<Long, BigDecimal> runningMax) {
+        List<WorkoutDetailVO.Block> out = new ArrayList<>();
         int order = 0;
-        for (WorkoutCreateDTO.BlockDTO b : dto.getBlocks()) {
+        for (WorkoutCreateDTO.BlockDTO b : blocks) {
             WorkoutBlock block = new WorkoutBlock();
-            block.setWorkoutId(w.getId());
+            block.setWorkoutId(workoutId);
             block.setExerciseId(b.getExerciseId());
             block.setExerciseName(b.getName().trim());
             block.setSortOrder(order++);
@@ -102,61 +227,12 @@ public class WorkoutService {
             }
 
             WorkoutDetailVO.Block vb = new WorkoutDetailVO.Block();
+            vb.setExerciseId(b.getExerciseId());
             vb.setName(block.getExerciseName());
             vb.setSets(sets);
-            blocks.add(vb);
+            out.add(vb);
         }
-        return toDetail(w, now, blocks);
-    }
-
-    public List<WorkoutListItemVO> list(Long userId, int limit) {
-        return workoutMapper.selectListItems(userId, limit);
-    }
-
-    public WorkoutDetailVO detail(Long userId, Long id) {
-        Workout w = requireOwn(userId, id);
-        List<WorkoutBlock> blocks = blockMapper.selectList(
-                Wrappers.<WorkoutBlock>lambdaQuery()
-                        .eq(WorkoutBlock::getWorkoutId, id)
-                        .orderByAsc(WorkoutBlock::getSortOrder)
-                        .orderByAsc(WorkoutBlock::getId));
-        List<WorkoutDetailVO.Block> vbs = new ArrayList<>();
-        for (WorkoutBlock b : blocks) {
-            List<WorkoutSet> sets = setMapper.selectList(
-                    Wrappers.<WorkoutSet>lambdaQuery()
-                            .eq(WorkoutSet::getBlockId, b.getId())
-                            .orderByAsc(WorkoutSet::getSetIndex));
-            WorkoutDetailVO.Block vb = new WorkoutDetailVO.Block();
-            vb.setName(b.getExerciseName());
-            vb.setSets(sets.stream().map(s -> {
-                WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
-                item.setWeight(s.getWeight());
-                item.setReps(s.getReps());
-                item.setPr(Boolean.TRUE.equals(s.getPr()));
-                return item;
-            }).toList());
-            vbs.add(vb);
-        }
-        return toDetail(w, w.getCreatedAt(), vbs);
-    }
-
-    public void updateNote(Long userId, Long id, String note) {
-        Workout w = requireOwn(userId, id);
-        w.setNote(note == null ? "" : note);
-        workoutMapper.updateById(w);
-    }
-
-    @Transactional
-    public void delete(Long userId, Long id) {
-        requireOwn(userId, id);
-        workoutMapper.deleteSetsByWorkoutId(id);
-        blockMapper.delete(Wrappers.<WorkoutBlock>lambdaQuery().eq(WorkoutBlock::getWorkoutId, id));
-        workoutMapper.deleteById(id);
-    }
-
-    /** 某动作的「上次数据」；没有记录时返回 null。 */
-    public LastRecordVO lastRecord(Long userId, Long exerciseId) {
-        return workoutMapper.selectLastRecord(userId, exerciseId);
+        return out;
     }
 
     /**

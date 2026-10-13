@@ -4,6 +4,7 @@ import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.module.plan.entity.Plan;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
+import com.example.fitapp.module.workout.dto.WorkoutUpdateDTO;
 import com.example.fitapp.module.workout.entity.Workout;
 import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -244,5 +246,110 @@ class WorkoutServiceTest {
 
         verify(workoutMapper, never()).selectMaxSetVolume(any(), any());
         assertEquals(List.of(false, false, false), insertedPrFlags());
+    }
+
+    // ── 修改记录（详情页「编辑 → ✓」）──
+
+    private Workout existingWorkout(long id, long userId) {
+        Workout w = new Workout();
+        w.setId(id);
+        w.setUserId(userId);
+        w.setTitle("旧标题");
+        w.setDurationSec(300);
+        w.setTotalVolume(new BigDecimal("100"));
+        w.setNote("旧备注");
+        w.setCreatedAt(LocalDateTime.of(2026, 10, 13, 10, 0));
+        return w;
+    }
+
+    private WorkoutUpdateDTO updateDto(String title, String[][] sets) {
+        WorkoutUpdateDTO dto = new WorkoutUpdateDTO();
+        dto.setTitle(title);
+        dto.setNote("新备注");
+        WorkoutCreateDTO.BlockDTO b = new WorkoutCreateDTO.BlockDTO();
+        b.setName("杠铃卧推");
+        b.setSets(Arrays.stream(sets)
+                .map(s -> set(s[0], Integer.parseInt(s[1])))
+                .toList());
+        dto.setBlocks(List.of(b));
+        return dto;
+    }
+
+    @Test
+    void update_overwritesTitle_recomputesVolume_reindexesSets() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 1L));
+
+        service().update(1L, 1L, updateDto(" 新标题 ", new String[][]{{"60", "8"}, {"60", "7"}}));
+
+        ArgumentCaptor<Workout> wc = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).updateById(wc.capture());
+        assertEquals("新标题", wc.getValue().getTitle());
+        assertEquals("新备注", wc.getValue().getNote());
+        // 60×8 + 60×7 = 900（旧值 100 被覆盖，重算而非累加）
+        assertEquals(0, wc.getValue().getTotalVolume().compareTo(new BigDecimal("900")));
+
+        // 组次整体覆盖：先清旧（组次→动作条）再写新，序号从 1 起
+        verify(workoutMapper).deleteSetsByWorkoutId(1L);
+        verify(blockMapper).delete(any());
+        ArgumentCaptor<WorkoutSet> sc = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper, times(2)).insert(sc.capture());
+        assertEquals(List.of(1, 2), sc.getAllValues().stream().map(WorkoutSet::getSetIndex).toList());
+    }
+
+    @Test
+    void update_prBaselineExcludesSelf() {
+        when(workoutMapper.selectById(9L)).thenReturn(existingWorkout(9L, 1L));
+        WorkoutUpdateDTO dto = updateDto("推", new String[][]{{"61", "8"}});
+        dto.getBlocks().get(0).setExerciseId(5L);
+        ExerciseMaxVO hist = new ExerciseMaxVO();
+        hist.setExerciseId(5L);
+        hist.setMaxVol(new BigDecimal("480")); // 60×8
+        when(workoutMapper.selectMaxSetVolumeExcluding(eq(1L), any(), eq(9L))).thenReturn(List.of(hist));
+
+        service().update(1L, 9L, dto);
+
+        // 历史基线排除本记录自身：61×8=488 > 480 → 判 PR
+        verify(workoutMapper).selectMaxSetVolumeExcluding(eq(1L), any(), eq(9L));
+        ArgumentCaptor<WorkoutSet> sc = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper).insert(sc.capture());
+        assertEquals(Boolean.TRUE, sc.getValue().getPr());
+    }
+
+    @Test
+    void update_notOwned_throws_andWritesNothing() {
+        when(workoutMapper.selectById(99L)).thenReturn(null);
+
+        assertThrows(BusinessException.class,
+                () -> service().update(1L, 99L, updateDto("x", new String[][]{{"60", "8"}})));
+
+        verify(workoutMapper, never()).updateById(any(Workout.class));
+        verify(setMapper, never()).insert(any(WorkoutSet.class));
+    }
+
+    // ── 批量删除（日志页长按多选）──
+
+    @Test
+    void batchDelete_deletesEachOwnedOnce_dedupesIds() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 7L));
+        when(workoutMapper.selectById(2L)).thenReturn(existingWorkout(2L, 7L));
+
+        service().batchDelete(7L, List.of(1L, 2L, 1L)); // 重复 id 去重
+
+        verify(workoutMapper, times(1)).deleteSetsByWorkoutId(1L);
+        verify(workoutMapper, times(1)).deleteSetsByWorkoutId(2L);
+        verify(workoutMapper).deleteById(1L);
+        verify(workoutMapper).deleteById(2L);
+    }
+
+    @Test
+    void batchDelete_notOwned_deletesNothing() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 1L));
+        when(workoutMapper.selectById(99L)).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> service().batchDelete(1L, List.of(1L, 99L)));
+
+        // 先整体校验归属：有一条非法则整批不动（@Transactional 语义）
+        verify(workoutMapper, never()).deleteById(any(Long.class));
+        verify(workoutMapper, never()).deleteSetsByWorkoutId(any());
     }
 }

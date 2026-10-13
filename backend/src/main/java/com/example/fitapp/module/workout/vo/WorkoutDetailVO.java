@@ -29,6 +29,9 @@ public class WorkoutDetailVO {
     @Data
     public static class Block {
 
+        /** 关联动作库的 id（未挂库的临场动作为 null）；详情页编辑保存时回传，用于重算 PR。 */
+        private Long exerciseId;
+
         private String name;
 
         private List<SetItem> sets;

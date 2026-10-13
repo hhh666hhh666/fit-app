@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// 训练详情（照设计稿 .workbuddy/stitch/screen/detail.png 还原）。
-// 从日志页点进来；接 GET /api/workouts/{id}。
+// 训练详情（从日志页点进来；接 GET /api/workouts/{id}）。
+// 右上角「编辑」进入就地编辑：标题、各组重量/次数、备注可改；按钮变 ✓，点 ✓ 保存（PUT /api/workouts/{id}）。
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { getWorkout, updateWorkoutNote } from '@/api/workout'
+import { getWorkout, updateWorkout, updateWorkoutNote } from '@/api/workout'
 import type { WorkoutDetail } from '@/api/workout'
 import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -12,16 +12,36 @@ const detail = ref<WorkoutDetail | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
 
+// ── 编辑态：草稿与只读详情分离，改坏了不脏原数据；点 ✓ 才提交 ──
+const editing = ref(false)
+const saving = ref(false)
+type DraftSet = { weight: string; reps: string }
+type DraftBlock = { exerciseId: number | null; name: string; sets: DraftSet[] }
+const draft = ref<{ title: string; note: string; blocks: DraftBlock[] }>({
+  title: '',
+  note: '',
+  blocks: []
+})
+
 const totalSets = computed(() =>
   detail.value ? detail.value.blocks.reduce((sum, b) => sum + b.sets.length, 0) : 0
 )
 
-const volumeText = computed(() =>
-  detail.value ? formatThousands(Number(detail.value.totalVolume)) : '0'
+/** 指标：编辑态随草稿实时变（改重量/次数看得到总容量跟着动）。 */
+const shownSets = computed(() =>
+  editing.value ? draft.value.blocks.reduce((s, b) => s + b.sets.length, 0) : totalSets.value
 )
+const shownVolume = computed(() => {
+  if (!editing.value) return detail.value ? Number(detail.value.totalVolume) : 0
+  return draft.value.blocks.reduce(
+    (sum, b) => sum + b.sets.reduce((v, x) => v + Number(x.weight || 0) * Number(x.reps || 0), 0),
+    0
+  )
+})
+const volumeText = computed(() => formatThousands(shownVolume.value))
 
-/** 单块容量 = Σ(重量×次数)，显示在动作名右侧 */
-function blockVolume(block: { sets: { weight: number; reps: number }[] }): string {
+/** 单块容量 = Σ(重量×次数)，显示在动作名右侧（编辑态与只读态通用）。 */
+function blockVolume(block: { sets: { weight: number | string; reps: number | string }[] }): string {
   return formatThousands(
     block.sets.reduce((sum, s) => sum + Number(s.weight || 0) * Number(s.reps || 0), 0)
   )
@@ -49,11 +69,89 @@ onLoad((query) => {
   load(id)
 })
 
-/** 「编辑」＝滚到备注区（备注本身可直接改，失焦自动保存） */
-function edit() {
-  uni.pageScrollTo({ selector: '.note', duration: 300 })
+/** 顶栏动作：只读 →「编辑」进编辑态；编辑态 → ✓ 保存。 */
+function onHeadAction() {
+  if (!detail.value || saving.value) return
+  if (editing.value) void save()
+  else startEdit()
 }
 
+function startEdit() {
+  const d = detail.value
+  if (!d) return
+  draft.value = {
+    title: d.title,
+    note: d.note ?? '',
+    blocks: d.blocks.map((b) => ({
+      exerciseId: b.exerciseId ?? null,
+      name: b.name,
+      sets: b.sets.map((s) => ({ weight: String(s.weight), reps: String(s.reps) }))
+    }))
+  }
+  editing.value = true
+}
+
+/** 加一组：沿用上一行的值预填。 */
+function addSet(bi: number) {
+  const b = draft.value.blocks[bi]
+  const last = b.sets[b.sets.length - 1]
+  b.sets.push({ weight: last?.weight ?? '', reps: last?.reps ?? '' })
+}
+
+/** 删一组：每个动作至少留一组。 */
+function removeSet(bi: number, si: number) {
+  const b = draft.value.blocks[bi]
+  if (b.sets.length <= 1) {
+    uni.showToast({ title: '每个动作至少保留一组', icon: 'none' })
+    return
+  }
+  b.sets.splice(si, 1)
+}
+
+async function save() {
+  const d = detail.value
+  if (!d) return
+  const title = draft.value.title.trim()
+  if (!title) {
+    uni.showToast({ title: '标题不能为空', icon: 'none' })
+    return
+  }
+  // 组次校验与「结束训练」提交同一口径：重量必填且 ≥0、次数必填且 ≥1
+  for (const b of draft.value.blocks) {
+    for (const s of b.sets) {
+      const w = Number(s.weight)
+      if (!s.weight.trim() || Number.isNaN(w) || w < 0) {
+        uni.showToast({ title: `「${b.name}」有组次未填重量`, icon: 'none' })
+        return
+      }
+      const r = Number(s.reps)
+      if (!s.reps.trim() || !Number.isInteger(r) || r < 1) {
+        uni.showToast({ title: `「${b.name}」有组次未填次数`, icon: 'none' })
+        return
+      }
+    }
+  }
+  saving.value = true
+  try {
+    detail.value = await updateWorkout(d.id, {
+      title,
+      note: draft.value.note,
+      blocks: draft.value.blocks.map((b) => ({
+        exerciseId: b.exerciseId,
+        name: b.name,
+        sets: b.sets.map((s) => ({ weight: Number(s.weight), reps: Number(s.reps) }))
+      }))
+    })
+    editing.value = false
+    uni.showToast({ title: '已保存', icon: 'success' })
+  } catch {
+    // request 层已统一提示；留在编辑态可重试
+  } finally {
+    saving.value = false
+  }
+}
+
+/** 只读态备注失焦即存（轻量保存，不动其它字段）。 */
 async function saveNote() {
   const d = detail.value
   if (!d || !d.id) return
@@ -65,6 +163,21 @@ async function saveNote() {
 }
 
 function back() {
+  if (editing.value) {
+    uni.showModal({
+      title: '放弃修改？',
+      content: '当前改动尚未保存，返回将丢弃。',
+      confirmText: '放弃',
+      confirmColor: '#C4453C',
+      success: ({ confirm }) => {
+        if (confirm) {
+          editing.value = false
+          uni.navigateBack()
+        }
+      }
+    })
+    return
+  }
   uni.navigateBack()
 }
 </script>
@@ -72,14 +185,30 @@ function back() {
 <template>
   <view class="detail">
     <view class="detail__body">
-      <!-- 顶栏：返回 ＋ 日期·标题 ＋ 编辑 -->
+      <!-- 顶栏：返回 ＋ 日期·标题 ＋ 编辑/✓ -->
       <view class="detail__head">
         <text class="detail__back" @click="back">←</text>
-        <text v-if="detail" class="detail__head-title">
-          {{ formatDateLabel(detail.createdAt) }} · {{ detail.title }}
-        </text>
-        <text v-else class="detail__head-title">训练详情</text>
-        <text v-if="detail" class="detail__edit" @click="edit">编辑</text>
+        <view class="detail__head-mid">
+          <text v-if="!detail" class="detail__head-title">训练详情</text>
+          <template v-else-if="editing">
+            <text class="detail__head-date ft-num">{{ formatDateLabel(detail.createdAt) }}</text>
+            <input
+              v-model="draft.title"
+              class="detail__title-input"
+              maxlength="64"
+              placeholder="训练标题"
+              placeholder-class="detail__ph"
+            />
+          </template>
+          <text v-else class="detail__head-title">
+            {{ formatDateLabel(detail.createdAt) }} · {{ detail.title }}
+          </text>
+        </view>
+        <view v-if="detail" class="detail__act" @click="onHeadAction">
+          <!-- 编辑态：文字「编辑」变 ✓；点它即保存 -->
+          <wd-icon v-if="editing" name="check" size="20px" />
+          <text v-else class="detail__edit">编辑</text>
+        </view>
         <text v-else class="detail__edit detail__edit--off">编辑</text>
       </view>
 
@@ -99,7 +228,7 @@ function back() {
           </view>
           <view class="metrics__cell">
             <text class="metrics__label">总组数</text>
-            <text class="metrics__value ft-num">{{ totalSets }}<text class="metrics__unit"> 组</text></text>
+            <text class="metrics__value ft-num">{{ shownSets }}<text class="metrics__unit"> 组</text></text>
           </view>
           <view class="metrics__cell">
             <text class="metrics__label">总容量</text>
@@ -107,33 +236,76 @@ function back() {
           </view>
         </view>
 
-        <!-- 按动作分组的组表 -->
-        <view v-for="(b, i) in detail.blocks" :key="i" class="ft-card block">
-          <view class="block__head">
-            <view class="block__name-line">
-              <text class="block__dot" />
-              <text class="block__name">{{ b.name }}</text>
+        <!-- 只读：按动作分组的组表 -->
+        <template v-if="!editing">
+          <view v-for="(b, i) in detail.blocks" :key="i" class="ft-card block">
+            <view class="block__head">
+              <view class="block__name-line">
+                <text class="block__dot" />
+                <text class="block__name">{{ b.name }}</text>
+              </view>
+              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
             </view>
-            <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
-          </view>
-          <view class="block__sets">
-            <view v-for="(s, j) in b.sets" :key="j" class="set">
-              <text class="set__label" :class="{ 'set__label--pr': s.pr }">
-                第 {{ j + 1 }} 组
-                <text v-if="s.pr" class="set__pr ft-marker">PR</text>
-              </text>
-              <text class="set__value ft-num">{{ s.weight }} kg × {{ s.reps }}</text>
+            <view class="block__sets">
+              <view v-for="(s, j) in b.sets" :key="j" class="set">
+                <text class="set__label" :class="{ 'set__label--pr': s.pr }">
+                  第 {{ j + 1 }} 组
+                  <text v-if="s.pr" class="set__pr ft-marker">PR</text>
+                </text>
+                <text class="set__value ft-num">{{ s.weight }} kg × {{ s.reps }}</text>
+              </view>
             </view>
           </view>
-        </view>
+        </template>
 
-        <!-- 备注（可直接改，失焦保存） -->
+        <!-- 编辑态：逐组改重量/次数，可增删组（动作名不可改） -->
+        <template v-else>
+          <view v-for="(b, i) in draft.blocks" :key="i" class="ft-card block">
+            <view class="block__head">
+              <view class="block__name-line">
+                <text class="block__dot" />
+                <text class="block__name">{{ b.name }}</text>
+              </view>
+              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
+            </view>
+            <view class="block__sets">
+              <view v-for="(s, j) in b.sets" :key="j" class="set">
+                <text class="set__label">第 {{ j + 1 }} 组</text>
+                <view class="set__edit">
+                  <view class="set__inp">
+                    <input v-model="s.weight" type="digit" class="set__field ft-num" />
+                    <text class="set__unit">kg</text>
+                  </view>
+                  <text class="set__x">×</text>
+                  <view class="set__inp">
+                    <input v-model="s.reps" type="number" class="set__field ft-num" />
+                    <text class="set__unit">次</text>
+                  </view>
+                  <text class="set__del" @click="removeSet(i, j)">×</text>
+                </view>
+              </view>
+              <view class="set__add" @click="addSet(i)">+ 加一组</view>
+            </view>
+          </view>
+        </template>
+
+        <!-- 备注：只读态失焦即存；编辑态随 ✓ 一起保存 -->
         <view class="ft-card note">
           <view class="note__head">
             <text class="note__icon">≡</text>
             <text class="note__title">备注</text>
           </view>
           <textarea
+            v-if="editing"
+            v-model="draft.note"
+            class="note__input"
+            placeholder="添加备注…"
+            placeholder-class="note__placeholder"
+            :maxlength="200"
+            auto-height
+          />
+          <textarea
+            v-else
             v-model="detail.note"
             class="note__input"
             placeholder="添加备注…"
@@ -171,9 +343,15 @@ function back() {
   padding: 0 8rpx;
 }
 
-.detail__head-title {
+.detail__head-mid {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.detail__head-title {
   font-size: $text-lg;
   font-weight: 600;
   color: $app-ink;
@@ -182,10 +360,37 @@ function back() {
   text-overflow: ellipsis;
 }
 
+.detail__head-date {
+  font-size: 22rpx;
+  color: $app-ink-muted;
+}
+
+/* 编辑态标题输入：下划线式，和只读标题同字号同字重，切换时不跳版 */
+.detail__title-input {
+  font-size: $text-lg;
+  font-weight: 600;
+  color: $app-ink;
+  border-bottom: 2rpx solid $app-ink;
+  padding: 4rpx 0;
+}
+
+.detail__ph {
+  color: $app-ink-subtle;
+}
+
+.detail__act {
+  flex-shrink: 0;
+  min-width: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: $app-ink;
+  padding: 8rpx 0;
+}
+
 .detail__edit {
   font-size: $text-sm;
   color: $app-ink-muted;
-  flex-shrink: 0;
 }
 
 .detail__edit--off {
@@ -316,6 +521,55 @@ function back() {
 .set__value {
   font-size: $text-md;
   color: $app-ink;
+}
+
+/* ── 编辑态组行 ── */
+.set__edit {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.set__inp {
+  display: flex;
+  align-items: center;
+  border: 1rpx solid $app-ink;
+  border-radius: 8rpx;
+  padding: 6rpx 12rpx;
+}
+
+.set__field {
+  width: 72rpx;
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+  text-align: left;
+}
+
+.set__unit {
+  font-size: 20rpx;
+  color: $app-ink-muted;
+  margin-left: 6rpx;
+}
+
+.set__x {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.set__del {
+  width: 44rpx;
+  text-align: center;
+  font-size: 36rpx;
+  line-height: 1;
+  color: $app-ink-subtle;
+}
+
+.set__add {
+  padding: 18rpx 0 4rpx;
+  font-size: $text-sm;
+  font-weight: 500;
+  color: $app-ink-muted;
 }
 
 /* ── 备注 ── */

@@ -64,6 +64,25 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
     List<ExerciseMaxVO> selectMaxSetVolume(@Param("userId") Long userId,
                                            @Param("exerciseIds") Collection<Long> exerciseIds);
 
+    /**
+     * 同上，但排除某次训练——编辑已有记录时用它取「不含本记录」的历史基线，
+     * 否则把重量改大后会拿自己当历史来比，PR 判定失真。
+     */
+    @Select("""
+            <script>
+            SELECT wb.exercise_id AS exerciseId, MAX(ws.weight * ws.reps) AS maxVol
+            FROM workout_set ws
+            JOIN workout_block wb ON wb.id = ws.block_id
+            JOIN workout w ON w.id = wb.workout_id
+            WHERE w.user_id = #{userId} AND w.id &lt;&gt; #{excludeWorkoutId} AND wb.exercise_id IN
+            <foreach collection="exerciseIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            GROUP BY wb.exercise_id
+            </script>
+            """)
+    List<ExerciseMaxVO> selectMaxSetVolumeExcluding(@Param("userId") Long userId,
+                                                    @Param("exerciseIds") Collection<Long> exerciseIds,
+                                                    @Param("excludeWorkoutId") Long excludeWorkoutId);
+
     /** 某起点以来的训练时间列表（统计页按周分桶用，自用数据量小）。 */
     @Select("""
             SELECT w.created_at FROM workout w

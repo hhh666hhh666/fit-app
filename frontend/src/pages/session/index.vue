@@ -133,7 +133,35 @@ function isActive(i: number) {
   return (curBlock.value?.sets.findIndex((s) => !s.done) ?? -1) === i
 }
 
-/** 点勾 = 仅标记完成（不再自动补行）；本动作全部完成 → 自动切下一动作。 */
+/** 本动作是否全部完成。 */
+function isBlockDone(i: number): boolean {
+  const b = blocks.value[i]
+  return !!b && b.sets.length > 0 && b.sets.every((s) => s.done)
+}
+
+/** 本动作已完成组数（切换条上的 x/y）。 */
+function doneInBlock(i: number): number {
+  return blocks.value[i]?.sets.filter((s) => s.done).length ?? 0
+}
+
+/** 自由切换：点切换条任意动作即跳过去（不丢已勾的组）。 */
+function switchTo(i: number) {
+  if (i === current.value || !blocks.value[i]) return
+  current.value = i
+  loadLastForBlock(i)
+}
+
+/** 从 from 起环形找下一个「还有未完成组」的动作；都完成返回 -1。 */
+function nextUnfinished(from: number): number {
+  const n = blocks.value.length
+  for (let k = 1; k < n; k++) {
+    const idx = (from + k) % n
+    if (!isBlockDone(idx)) return idx
+  }
+  return -1
+}
+
+/** 点勾 = 仅标记完成（不再自动补行）；本动作全部完成 → 自动切到下一个未完成动作。 */
 function completeSet(i: number) {
   const b = curBlock.value
   if (!b) return
@@ -144,11 +172,12 @@ function completeSet(i: number) {
     return
   }
   row.done = true
-  if (b.sets.every((s) => s.done)) {
-    if (current.value < blocks.value.length - 1) {
-      current.value += 1
-      loadLastForBlock(current.value)
-      uni.showToast({ title: `进入下一动作：${curBlock.value?.name ?? ''}`, icon: 'none' })
+  if (isBlockDone(current.value)) {
+    const next = nextUnfinished(current.value)
+    if (next >= 0) {
+      current.value = next
+      loadLastForBlock(next)
+      uni.showToast({ title: `进入下一动作：${blocks.value[next]?.name ?? ''}`, icon: 'none' })
     } else {
       uni.showToast({ title: '全部动作已完成，可点「结束训练」', icon: 'none' })
     }
@@ -162,16 +191,6 @@ function addSet() {
   const last = b.sets[b.sets.length - 1]
   b.sets.push({ w: last?.w ?? '', r: last?.r ?? '', done: false })
 }
-
-/** 手动切到下一个动作（「更换」；已是最后一个动作时无动作）。 */
-function switchNext() {
-  if (current.value >= blocks.value.length - 1) return
-  current.value += 1
-  loadLastForBlock(current.value)
-}
-
-const hasNext = computed(() => current.value < blocks.value.length - 1)
-const nextName = computed(() => blocks.value[current.value + 1]?.name ?? '—')
 
 const doneCount = computed(() =>
   blocks.value.reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
@@ -210,6 +229,24 @@ async function finish() {
     uni.showToast({ title: '还没有完成的组', icon: 'none' })
     return
   }
+  // 有任意动作的任意组未完成 → 先确认是否提前结束
+  const pending = blocks.value.reduce((sum, b) => sum + b.sets.filter((s) => !s.done).length, 0)
+  if (pending > 0) {
+    uni.showModal({
+      title: '提前结束训练？',
+      content: `还有 ${pending} 组未完成，确定现在结束吗？未完成的组不会入库。`,
+      confirmText: '结束',
+      cancelText: '继续',
+      success: ({ confirm }) => {
+        if (confirm) void submit(doneBlocks)
+      }
+    })
+    return
+  }
+  void submit(doneBlocks)
+}
+
+async function submit(doneBlocks: { b: Block; sets: SetRow[] }[]) {
   try {
     const detail = await createWorkout({
       planId: planId.value,
@@ -247,6 +284,28 @@ function comingSoon(tip: string) {
       </view>
 
       <template v-if="curBlock">
+        <!-- 动作切换条：自由切换（可做完 A 一组去做 B，再回来做 A 下一组） -->
+        <scroll-view scroll-x class="switcher">
+          <view class="switcher__inner">
+            <view
+              v-for="(b, i) in blocks"
+              :key="i"
+              class="switcher__chip"
+              :class="{
+                'switcher__chip--active': i === current,
+                'switcher__chip--done': i !== current && isBlockDone(i)
+              }"
+              @click="switchTo(i)"
+            >
+              <text class="switcher__name">{{ b.name }}</text>
+              <view class="switcher__meta">
+                <text v-if="i !== current && isBlockDone(i)" class="switcher__tick">✓</text>
+                <text class="switcher__prog ft-num">{{ doneInBlock(i) }}/{{ b.sets.length }}</text>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+
         <!-- 2. 录入卡 -->
         <view class="card">
           <view class="card__head">
@@ -321,19 +380,10 @@ function comingSoon(tip: string) {
           <text>加一组</text>
         </view>
 
-        <!-- 4. 下一动作 -->
-        <view class="next">
-          <view class="next__row">
-            <view class="next__label-wrap">
-              <text class="next__label">下一个动作：</text>
-              <text class="next__name">{{ nextName }}</text>
-            </view>
-            <text v-if="hasNext" class="next__swap" @click="switchNext">更换</text>
-          </view>
-          <view class="next__add" @click="comingSoon('动作选择建设中')">
-            <text class="add-set__plus">+</text>
-            <text>添加动作</text>
-          </view>
+        <!-- 4. 添加动作（临场增删动作见待办，暂为占位） -->
+        <view class="add-act" @click="comingSoon('动作选择建设中')">
+          <text class="add-set__plus">+</text>
+          <text>添加动作</text>
         </view>
       </template>
 
@@ -402,6 +452,72 @@ function comingSoon(tip: string) {
   font-size: $text-sm;
   font-weight: 500;
   color: $app-ink-muted;
+}
+
+/* ── 动作切换条 ── */
+.switcher {
+  white-space: nowrap;
+  margin-bottom: 24rpx;
+}
+
+.switcher__inner {
+  display: inline-flex;
+  gap: 16rpx;
+  padding-bottom: 4rpx;
+}
+
+.switcher__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 168rpx;
+  padding: 16rpx 24rpx;
+  background: $app-surface;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-md;
+}
+
+.switcher__chip--active {
+  background: $app-ink;
+  border-color: $app-ink;
+}
+
+.switcher__chip--done {
+  background: $app-canvas;
+}
+
+.switcher__name {
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+  max-width: 240rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switcher__chip--active .switcher__name {
+  color: #ffffff;
+}
+
+.switcher__meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.switcher__tick {
+  font-size: 20rpx;
+  line-height: 1;
+  color: $app-ink;
+}
+
+.switcher__prog {
+  font-size: 20rpx;
+  color: $app-ink-muted;
+}
+
+.switcher__chip--active .switcher__prog {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* ── 录入卡 ── */
@@ -614,7 +730,6 @@ function comingSoon(tip: string) {
   align-items: center;
   gap: 8rpx;
   padding: 8rpx 8rpx;
-  margin-bottom: 48rpx;
   font-size: $text-sm;
   font-weight: 500;
   color: $app-ink-muted;
@@ -624,43 +739,14 @@ function comingSoon(tip: string) {
   font-size: $text-md;
 }
 
-/* ── 下一动作 ── */
-.next {
-  border-top: 1rpx solid $app-line;
-  padding: 32rpx 8rpx 0;
-}
-
-.next__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24rpx;
-  font-size: $text-sm;
-}
-
-.next__label-wrap {
-  display: flex;
-  align-items: center;
-}
-
-.next__label {
-  color: $app-ink-muted;
-}
-
-.next__name {
-  color: $app-ink;
-  font-weight: 500;
-}
-
-.next__swap {
-  color: $app-ink-muted;
-}
-
-.next__add {
+/* ── 添加动作（占位） ── */
+.add-act {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  padding: 8rpx 0;
+  border-top: 1rpx solid $app-line;
+  margin-top: 24rpx;
+  padding: 28rpx 8rpx 0;
   font-size: $text-sm;
   font-weight: 500;
   color: $app-ink-muted;

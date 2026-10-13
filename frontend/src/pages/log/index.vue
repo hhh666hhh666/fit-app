@@ -2,13 +2,21 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
-import { listWorkouts } from '@/api/workout'
+import { batchDeleteWorkouts, listWorkouts } from '@/api/workout'
 import type { WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
 const items = ref<WorkoutListItem[]>([])
 const loading = ref(true)
+
+// ── 多选删除：长按记录进入多选态；多选态下点击行＝切换勾选（不再进详情）──
+const selectMode = ref(false)
+const selected = ref<Set<number>>(new Set())
+const selectedCount = computed(() => selected.value.size)
+const allSelected = computed(
+  () => items.value.length > 0 && selected.value.size === items.value.length
+)
 
 const WEEK_CHARS = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -51,13 +59,61 @@ function lineOf(item: WorkoutListItem): string {
     : `${formatThousands(Number(item.totalVolume))} kg`
 }
 
-function goHome() {
-  uni.reLaunch({ url: '/pages/home/index' })
-}
-
 /** 点一行 → 训练详情（带 id；detail 页自己拉 GET /api/workouts/{id}） */
 function openDetail(id: number) {
   uni.navigateTo({ url: `/pages/detail/index?id=${id}` })
+}
+
+// ── 多选态操作 ──
+
+function toggleSelect(id: number) {
+  const s = new Set(selected.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selected.value = s
+}
+
+function onRowClick(item: WorkoutListItem) {
+  if (selectMode.value) toggleSelect(item.id)
+  else openDetail(item.id)
+}
+
+/** 长按任一记录进入多选态并选中它。 */
+function onRowLongPress(item: WorkoutListItem) {
+  if (selectMode.value) return
+  selectMode.value = true
+  selected.value = new Set([item.id])
+}
+
+function exitSelect() {
+  selectMode.value = false
+  selected.value = new Set()
+}
+
+function toggleAll() {
+  selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))
+}
+
+function doDelete() {
+  const ids = [...selected.value]
+  if (ids.length === 0) return
+  uni.showModal({
+    title: '删除训练记录',
+    content: `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
+    confirmText: '删除',
+    confirmColor: '#C4453C',
+    success: async ({ confirm }) => {
+      if (!confirm) return
+      try {
+        await batchDeleteWorkouts(ids)
+        items.value = items.value.filter((x) => !selected.value.has(x.id))
+        exitSelect()
+        uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
+      } catch {
+        // request 层已统一提示
+      }
+    }
+  })
 }
 
 function monthPending() {
@@ -68,10 +124,26 @@ function monthPending() {
 <template>
   <view class="log">
     <view class="log__body">
-      <!-- 顶栏 -->
+      <!-- 顶栏：常规＝标题＋月份；多选态＝取消＋已选＋全选/删除 -->
       <view class="log__head">
-        <text class="log__title">训练日志</text>
-        <text class="log__month ft-num" @click="monthPending">{{ monthLabel }} ▾</text>
+        <template v-if="!selectMode">
+          <text class="log__title">训练日志</text>
+          <text class="log__month ft-num" @click="monthPending">{{ monthLabel }} ▾</text>
+        </template>
+        <template v-else>
+          <text class="log__cancel" @click="exitSelect">取消</text>
+          <text class="log__sel ft-num">已选 {{ selectedCount }} 项</text>
+          <view class="log__acts">
+            <text class="log__all" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
+            <text
+              class="log__del"
+              :class="{ 'log__del--off': selectedCount === 0 }"
+              @click="doDelete"
+            >
+              删除
+            </text>
+          </view>
+        </template>
       </view>
 
       <!-- 月概览条 -->
@@ -87,11 +159,26 @@ function monthPending() {
       <view v-else-if="items.length === 0" class="ft-empty">还没有训练记录——去练一次吧</view>
       <view v-else class="ledger">
         <view class="ledger__thead">
+          <view v-if="selectMode" class="col-check" />
           <text class="col-date">日期 / DATE</text>
           <text class="col-mid">项目 &amp; 主项容量 / DETAILS</text>
           <text class="col-time">用时 / TIME</text>
         </view>
-        <view v-for="item in items" :key="item.id" class="lrow" @click="openDetail(item.id)">
+        <view
+          v-for="item in items"
+          :key="item.id"
+          class="lrow"
+          :class="{ 'lrow--sel': selectMode && selected.has(item.id) }"
+          @click="onRowClick(item)"
+          @longpress="onRowLongPress(item)"
+        >
+          <view
+            v-if="selectMode"
+            class="lrow__check"
+            :class="{ 'lrow__check--on': selected.has(item.id) }"
+          >
+            <wd-icon v-if="selected.has(item.id)" name="check" size="13px" color="#ffffff" />
+          </view>
           <view class="lrow__date">
             <text class="lrow__date-main ft-num">{{ formatDateLabel(item.createdAt) }}</text>
             <text class="lrow__date-week">{{ weekdayOf(item.createdAt) }}</text>
@@ -106,12 +193,6 @@ function monthPending() {
             <text class="ft-num">{{ minutes(item) }} 分钟</text>
           </view>
         </view>
-      </view>
-
-      <!-- 新建入口 -->
-      <view class="log__new" @click="goHome">
-        <text class="log__new-plus">+</text>
-        <text>新建训练记录</text>
       </view>
 
       <view class="log__pad" />
@@ -147,6 +228,41 @@ function monthPending() {
   border: 1rpx solid $app-line;
   border-radius: 8rpx;
   padding: 8rpx 16rpx;
+}
+
+/* ── 多选态顶栏 ── */
+.log__cancel {
+  font-size: $text-base;
+  color: $app-ink-muted;
+  padding: 8rpx 0;
+}
+
+.log__sel {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.log__acts {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+}
+
+.log__all {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.log__del {
+  font-size: $text-sm;
+  font-weight: 500;
+  color: #c4453c;
+  padding: 8rpx 0;
+}
+
+.log__del--off {
+  opacity: 0.35;
 }
 
 /* ── 月概览条 ── */
@@ -193,6 +309,11 @@ function monthPending() {
   color: $app-ink-muted;
 }
 
+.col-check {
+  width: 56rpx;
+  flex-shrink: 0;
+}
+
 .col-date {
   width: 170rpx;
   flex-shrink: 0;
@@ -216,6 +337,29 @@ function monthPending() {
 
 .lrow + .lrow {
   border-top: 1rpx solid $app-line-soft;
+}
+
+/* 多选态：选中行浅底；勾选圈与行等高对齐 */
+.lrow--sel {
+  background: $app-canvas;
+}
+
+.lrow__check {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid $app-line;
+  background: $app-surface;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.lrow__check--on {
+  background: $app-ink;
+  border-color: $app-ink;
 }
 
 .lrow__date {
@@ -272,24 +416,6 @@ function monthPending() {
   font-size: $text-sm;
   color: $app-ink-muted;
   flex-shrink: 0;
-}
-
-/* ── 新建按钮 ── */
-.log__new {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10rpx;
-  height: 88rpx;
-  background: $app-ink;
-  color: #ffffff;
-  font-size: $text-md;
-  font-weight: 500;
-  border-radius: 16rpx;
-}
-
-.log__new-plus {
-  font-size: $text-lg;
 }
 
 .log__pad {
