@@ -14,7 +14,8 @@ import {
   type MealItem,
   type MealKey
 } from '@/api/nutrition'
-import { fetchPhotoUrl, pickAndUploadPhoto, releasePhotoUrl } from '@/utils/photo'
+import { deletePhoto, fetchPhotoUrl, pickAndUploadPhoto, releasePhotoUrl } from '@/utils/photo'
+import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 
@@ -39,6 +40,8 @@ const saving = ref(false)
 
 // ── 照片 ──
 const photoUrl = ref<string | null>(null)
+/** 全屏看图开关（单张：给 PhotoViewer 传长度 1 的数组）。 */
+const viewer = ref(false)
 
 // ── 选食物 ──
 /** 轻量列表条数上限（预置 1800+ 条：搜索走服务端，初始只带前 N 条）。 */
@@ -113,6 +116,30 @@ async function shoot() {
     await loadPhoto()
     emit('changed')
   }
+}
+
+/** 点图看大图（单张，可双指缩放）。 */
+function viewPhoto() {
+  if (photoUrl.value) viewer.value = true
+}
+
+/** 删除这一餐的照片（二次确认、不可恢复）。 */
+function removePhoto() {
+  uni.showModal({
+    title: '删除这张照片？',
+    content: '删除后不可恢复；这一餐的饮食条目不受影响。',
+    confirmText: '删除',
+    cancelText: '取消',
+    success: async ({ confirm }) => {
+      if (!confirm) return
+      const ok = await deletePhoto(props.date, props.meal)
+      if (!ok) return
+      releasePhotoUrl(photoUrl.value)
+      photoUrl.value = null
+      uni.showToast({ title: '已删除', icon: 'none' })
+      emit('changed')
+    }
+  })
 }
 
 // ── 食物组合 ──
@@ -289,15 +316,15 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
       <view v-if="loading" class="ms__loading">加载中…</view>
 
       <template v-else>
-        <!-- 照片 -->
+        <!-- 照片：点图看大图；角标给「更换」「删除」（ADR 0014） -->
         <view class="photo">
-          <image
-            v-if="photoUrl"
-            class="photo__img"
-            :src="photoUrl"
-            mode="aspectFill"
-            @click="shoot"
-          />
+          <view v-if="photoUrl" class="photo__box">
+            <image class="photo__img" :src="photoUrl" mode="aspectFit" @click="viewPhoto" />
+            <view class="photo__ops">
+              <text class="photo__op" @click.stop="shoot">更换</text>
+              <text class="photo__op" @click.stop="removePhoto">删除</text>
+            </view>
+          </view>
           <view v-else class="photo__empty" @click="shoot">+ 拍照记录这一餐</view>
         </view>
 
@@ -429,6 +456,14 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
       @close="comboSheet.show = false"
       @saved="onComboSaved"
     />
+
+    <!-- 全屏看图（单张；与相册共用同一组件） -->
+    <PhotoViewer
+      v-if="viewer && photoUrl"
+      :urls="[photoUrl]"
+      :caption="`${date} · ${MEAL_LABEL[meal]}`"
+      @close="viewer = false"
+    />
   </view>
 </template>
 
@@ -516,11 +551,34 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   margin-bottom: 22rpx;
 }
 
+.photo__box {
+  position: relative;
+}
+
+/* aspectFit：按原图比例完整显示、不裁切（竖拍的餐盘不再被拦腰切） */
 .photo__img {
   width: 100%;
-  height: 260rpx;
+  height: 480rpx;
   border-radius: $radius-lg;
   border: 1rpx solid $app-line-soft;
+  background: $app-canvas;
+}
+
+/* 角标：更换 / 删除 */
+.photo__ops {
+  position: absolute;
+  right: 16rpx;
+  bottom: 16rpx;
+  display: flex;
+  gap: 12rpx;
+}
+
+.photo__op {
+  padding: 6rpx 18rpx;
+  border-radius: 8rpx;
+  font-size: $text-xs;
+  color: #ffffff;
+  background: rgba(10, 11, 13, 0.55);
 }
 
 .photo__empty {

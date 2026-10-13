@@ -76,3 +76,7 @@ fitapp:
     #    正式环境必须在 .env 里设置 FITAPP_JWT_SECRET。
     secret: ${FITAPP_JWT_SECRET:fitapp-default-jwt-secret-please-replace-in-production-0123456789abcdef}
     expire-days: ${FITAPP_JWT_EXPIRE_DAYS:7}
+  storage:
+    # 餐照总占用上限（字节，原图＋缩略图）。达到即拒绝上传（ADR 0013），改这里就能调。
+    # 默认 20 GB：按默认压缩档一天满拍 4 张约够 45 年；若长期用「无损」档约三年半触顶。
+    photo-quota-bytes: ${FITAPP_PHOTO_QUOTA_BYTES:21474836480}

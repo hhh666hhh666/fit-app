@@ -20,12 +20,20 @@ import com.example.fitapp.module.nutrition.vo.DailyNutritionRow;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
 import com.example.fitapp.module.nutrition.vo.SettingVO;
+import com.example.fitapp.module.nutrition.vo.StorageVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.imageio.ImageIO;
 
 /**
  * 饮食记录：当日总览 / 条目增改删 / 每餐照片（上传即替换）/ 饮水加减 / 趋势。
@@ -49,12 +58,19 @@ public class DietService {
     private static final Set<String> PHOTO_MIME = Set.of("image/jpeg", "image/png", "image/webp");
     private static final long MAX_PHOTO_BYTES = 10L * 1024 * 1024;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
+    /** 缩略图长边上限（px）：相册与列表加载它，点开才拉原图。 */
+    private static final int THUMB_MAX_EDGE = 320;
+    private static final long BYTES_PER_GB = 1024L * 1024 * 1024;
 
     private final MealLogMapper mealLogMapper;
     private final MealPhotoMapper mealPhotoMapper;
     private final DietDailyMapper dietDailyMapper;
     private final FoodMapper foodMapper;
     private final SettingService settingService;
+
+    /** 餐照总占用上限（字节，原图＋缩略图）；达上限即拒绝上传（ADR 0013，值在 application.yml）。 */
+    @Value("${fitapp.storage.photo-quota-bytes:21474836480}")
+    private long photoQuotaBytes;
 
     // ── 当日总览 ──
 
@@ -202,6 +218,17 @@ public class DietService {
                 .eq(MealPhoto::getUserId, userId)
                 .eq(MealPhoto::getLogDate, date)
                 .eq(MealPhoto::getMeal, meal));
+
+        // 容量闸（ADR 0013）：达上限直接拒绝。替换时按**净增**算（旧图会被换掉）。
+        long used = mealPhotoMapper.sumBytes(userId);
+        long oldSize = (existing == null || existing.getSizeBytes() == null) ? 0L : existing.getSizeBytes();
+        long delta = bytes.length - oldSize;
+        if (used + delta > photoQuotaBytes) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
+        }
+
+        byte[] thumb = makeThumb(bytes);
         if (existing == null) {
             MealPhoto p = new MealPhoto();
             p.setUserId(userId);
@@ -210,13 +237,83 @@ public class DietService {
             p.setMime(mime);
             p.setSizeBytes(bytes.length);
             p.setImage(bytes);
+            p.setThumb(thumb);
             mealPhotoMapper.insert(p);
         } else {
             existing.setMime(mime);
             existing.setSizeBytes(bytes.length);
             existing.setImage(bytes);
+            existing.setThumb(thumb);
             mealPhotoMapper.updateById(existing);
         }
+    }
+
+    /** 删除某餐照片（不可恢复；ADR 0013）。不存在 → 404。 */
+    public void deletePhoto(Long userId, String dateStr, String meal) {
+        LocalDate date = parseDate(dateStr);
+        int n = mealPhotoMapper.delete(Wrappers.<MealPhoto>lambdaQuery()
+                .eq(MealPhoto::getUserId, userId)
+                .eq(MealPhoto::getLogDate, date)
+                .eq(MealPhoto::getMeal, meal));
+        if (n == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "照片不存在");
+        }
+    }
+
+    /** 存储占用（ADR 0013）：目前只统计图片一类（原图 ＋ 缩略图）。 */
+    public StorageVO storage(Long userId) {
+        StorageVO vo = new StorageVO();
+        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId));
+        vo.setPhotoCount((int) mealPhotoMapper.countByUser(userId));
+        vo.setPhotoQuotaBytes(photoQuotaBytes);
+        return vo;
+    }
+
+    /** 相册列表：按日期倒序、同日按早→晚；只出元数据，图片数据由前端逐个取。 */
+    public List<MealPhoto> album(Long userId, Integer offset, Integer limit) {
+        int size = (limit == null || limit < 1) ? 60 : Math.min(limit, 200);
+        int start = (offset == null || offset < 0) ? 0 : offset;
+        return mealPhotoMapper.selectAlbum(userId, start, size);
+    }
+
+    /**
+     * 生成长边 ≤320 的 JPEG 缩略图。解码失败（异常格式等）返回 null——
+     * 读取端遇到空会回退用原图，所以这里不抛错、不阻断上传。
+     */
+    private static byte[] makeThumb(byte[] src) {
+        try (ByteArrayInputStream in = new ByteArrayInputStream(src)) {
+            BufferedImage img = ImageIO.read(in);
+            if (img == null) {
+                return null;
+            }
+            int w = img.getWidth();
+            int h = img.getHeight();
+            double scale = Math.min(1.0, (double) THUMB_MAX_EDGE / Math.max(w, h));
+            int tw = Math.max(1, (int) Math.round(w * scale));
+            int th = Math.max(1, (int) Math.round(h * scale));
+            // JPEG 无 alpha 通道：先铺白底，免得透明区域变黑
+            BufferedImage out = new BufferedImage(tw, th, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = out.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, tw, th);
+            g.drawImage(img, 0, 0, tw, th, null);
+            g.dispose();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ImageIO.write(out, "jpg", bos);
+            return bos.toByteArray();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 上限的展示文案（GB，最多一位小数）。 */
+    private String quotaText() {
+        return BigDecimal.valueOf(photoQuotaBytes)
+                .divide(BigDecimal.valueOf(BYTES_PER_GB), 1, RoundingMode.HALF_UP)
+                .stripTrailingZeros()
+                .toPlainString() + " GB";
     }
 
     /** 读照片；不存在返回 null（由 Controller 转 404）。 */

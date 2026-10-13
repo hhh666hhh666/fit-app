@@ -153,3 +153,40 @@ export function releasePhotoUrl(url: string | null) {
     URL.revokeObjectURL(url)
   }
 }
+
+/** 取某餐照片的**缩略图**临时地址（相册与列表用）；无照片返回 null。老数据无缩略图时后端回退原图。 */
+export async function fetchPhotoThumbUrl(date: string, meal: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `/api/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
+      { headers: authHeader() }
+    )
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return blob.size ? URL.createObjectURL(blob) : null
+  } catch {
+    return null
+  }
+}
+
+/** 删除某餐照片（不可恢复）。成功返回 true；失败已 toast。 */
+export async function deletePhoto(date: string, meal: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `/api/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
+      { method: 'DELETE', headers: authHeader() }
+    )
+    let body: { code?: number; message?: string } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      /* 非 JSON（如 nginx 错误页） */
+    }
+    if (res.ok && body && body.code === 0) return true
+    uni.showToast({ title: (body && body.message) || '删除失败', icon: 'none' })
+    return false
+  } catch {
+    uni.showToast({ title: '删除失败', icon: 'none' })
+    return false
+  }
+}

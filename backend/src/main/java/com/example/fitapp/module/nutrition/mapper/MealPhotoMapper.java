@@ -16,4 +16,30 @@ public interface MealPhotoMapper extends BaseMapper<MealPhoto> {
             WHERE user_id = #{userId} AND log_date = #{date}
             """)
     List<String> selectMealsWithPhoto(@Param("userId") Long userId, @Param("date") LocalDate date);
+
+    /** 照片总占用（原图 ＋ 缩略图字节数）。 */
+    @Select("""
+            SELECT COALESCE(SUM(size_bytes + COALESCE(LENGTH(thumb), 0)), 0)
+            FROM meal_photo WHERE user_id = #{userId}
+            """)
+    long sumBytes(@Param("userId") Long userId);
+
+    /** 照片张数。 */
+    @Select("SELECT COUNT(*) FROM meal_photo WHERE user_id = #{userId}")
+    long countByUser(@Param("userId") Long userId);
+
+    /**
+     * 相册列表：按日期倒序、同日按早→晚（**不取 BLOB**，只出元数据）。
+     * 缩略图由前端逐个走 `/api/diet/photos/{date}/{meal}/thumb` 取。
+     */
+    @Select("""
+            SELECT id, user_id, log_date, meal, mime, size_bytes, created_at, updated_at
+            FROM meal_photo
+            WHERE user_id = #{userId}
+            ORDER BY log_date DESC, FIELD(meal, 'breakfast', 'lunch', 'dinner', 'snack')
+            LIMIT #{offset}, #{limit}
+            """)
+    List<MealPhoto> selectAlbum(@Param("userId") Long userId,
+                               @Param("offset") int offset,
+                               @Param("limit") int limit);
 }

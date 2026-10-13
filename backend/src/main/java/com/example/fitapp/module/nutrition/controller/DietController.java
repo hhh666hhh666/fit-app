@@ -9,6 +9,7 @@ import com.example.fitapp.module.nutrition.entity.MealPhoto;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
+import com.example.fitapp.module.nutrition.vo.StorageVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
@@ -88,6 +89,42 @@ public class DietController {
                 // 照片会被替换——客户端不存缓存，每次取新图
                 .cacheControl(CacheControl.noStore())
                 .body(p.getImage());
+    }
+
+    /** 相册列表（按日期倒序、同日早→晚；只出元数据，图片数据由前端逐个取）。 */
+    @GetMapping("/photos")
+    public Result<List<MealPhoto>> album(@RequestParam(required = false) Integer offset,
+                                         @RequestParam(required = false) Integer limit) {
+        return Result.success(dietService.album(UserContext.requireUserId(), offset, limit));
+    }
+
+    /** 缩略图（相册与列表用；无缩略图的老数据回退原图）。 */
+    @GetMapping("/photos/{date}/{meal}/thumb")
+    public ResponseEntity<byte[]> photoThumb(@PathVariable String date, @PathVariable String meal) {
+        MealPhoto p = dietService.getPhoto(UserContext.requireUserId(), date, meal);
+        if (p == null) {
+            return ResponseEntity.notFound().build();
+        }
+        boolean hasThumb = p.getThumb() != null && p.getThumb().length > 0;
+        byte[] data = hasThumb ? p.getThumb() : p.getImage();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(hasThumb ? "image/jpeg" : p.getMime()))
+                .contentLength(data.length)
+                .cacheControl(CacheControl.noStore())
+                .body(data);
+    }
+
+    /** 删除某餐照片（不可恢复）。 */
+    @DeleteMapping("/photos/{date}/{meal}")
+    public Result<Void> deletePhoto(@PathVariable String date, @PathVariable String meal) {
+        dietService.deletePhoto(UserContext.requireUserId(), date, meal);
+        return Result.success();
+    }
+
+    /** 存储占用（ADR 0013）：目前只统计图片一类（已用 / 张数 / 上限）。 */
+    @GetMapping("/storage")
+    public Result<StorageVO> storage() {
+        return Result.success(dietService.storage(UserContext.requireUserId()));
     }
 
     /** 饮水加减一笔，返回该日最新累计（ml）。 */

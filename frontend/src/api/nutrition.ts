@@ -216,6 +216,34 @@ export function getTrend(days = 30) {
   return unwrap(request.get<{ days: TrendPoint[] }>('/diet/trend', { days }))
 }
 
+// ── 餐照的存储占用（ADR 0013）──
+
+export interface StorageInfo {
+  /** 图片已用（字节，原图 ＋ 缩略图）。 */
+  photoBytes: number
+  /** 照片张数。 */
+  photoCount: number
+  /** 图片上限（字节）。 */
+  photoQuotaBytes: number
+}
+
+export function getStorage() {
+  return unwrap(request.get<StorageInfo>('/diet/storage'))
+}
+
+/** 相册里的一条（只有元数据；图片数据走缩略图 / 原图接口）。 */
+export interface AlbumPhoto {
+  id: number
+  logDate: string
+  meal: MealKey
+  sizeBytes: number
+}
+
+/** 相册列表（按日期倒序、同日早→晚）。 */
+export function listAlbum(offset = 0, limit = 60) {
+  return unwrap(request.get<AlbumPhoto[]>('/diet/photos', { offset, limit }))
+}
+
 // ── 食物组合（一串食物 ＋ 固定克数；ADR 0012）──
 
 /** 组合里的一条：foodId 为 null 表示那样食物已被删（仍列出名字，但无单位与热量、不计入合计）。 */

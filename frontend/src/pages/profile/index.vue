@@ -4,7 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { listWorkouts } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
-import { getFoodCount } from '@/api/nutrition'
+import { getFoodCount, getStorage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -16,6 +16,7 @@ const totalCount = ref(0)
 const totalVolumeT = ref(0)
 const exerciseCount = ref(0)
 const foodCount = ref(-1)
+const storage = ref<StorageInfo | null>(null)
 
 const schedule = useScheduleStore()
 
@@ -24,6 +25,7 @@ onShow(() => {
   username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
   schedule.load()
   loadStats()
+  void loadStorage()
 })
 
 async function loadStats() {
@@ -45,6 +47,37 @@ async function loadStats() {
     // unwrap 已提示
   }
 }
+
+/** 存储占用（ADR 0013）：目前只统计图片。 */
+async function loadStorage() {
+  try {
+    storage.value = await getStorage()
+  } catch {
+    // unwrap 已提示
+  }
+}
+
+/** 字节数转人话（B / KB / MB / GB）。 */
+function fmtBytes(n: number | undefined): string {
+  if (n == null) return '—'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+const photoUsedText = computed(() => fmtBytes(storage.value?.photoBytes))
+const photoQuotaText = computed(() => fmtBytes(storage.value?.photoQuotaBytes))
+const photoCountText = computed(() =>
+  storage.value ? `共 ${storage.value.photoCount} 张` : '—'
+)
+/** 已用占比（0~1）；接近上限时进度条转警示色。 */
+const photoRatio = computed(() => {
+  const s = storage.value
+  if (!s || !s.photoQuotaBytes) return 0
+  return Math.min(1, s.photoBytes / s.photoQuotaBytes)
+})
+const photoPct = computed(() => `${(photoRatio.value * 100).toFixed(2)}%`)
 
 const countText = computed(() => (totalCount.value >= 200 ? '200+' : String(totalCount.value)))
 const avatarChar = computed(() => username.value.charAt(0).toUpperCase() || 'L')
@@ -83,6 +116,10 @@ function goFoods() {
 
 function goSettings() {
   uni.navigateTo({ url: '/pages/settings/index' })
+}
+
+function goAlbum() {
+  uni.navigateTo({ url: '/pages/album/index' })
 }
 
 function logout() {
@@ -162,11 +199,32 @@ function logout() {
           <text class="entry__value ft-num">{{ foodSummary }}</text>
           <text class="entry__go">›</text>
         </view>
+        <view class="entry" @click="goAlbum">
+          <text class="entry__label">照片</text>
+          <text class="entry__value ft-num">{{ photoCountText }}</text>
+          <text class="entry__go">›</text>
+        </view>
         <view class="entry" @click="goSettings">
           <text class="entry__label">设置</text>
           <text class="entry__value ft-num">饮食目标 · 图片压缩</text>
           <text class="entry__go">›</text>
         </view>
+      </view>
+
+      <!-- 存储占用（ADR 0013）：目前只统计餐照 -->
+      <view class="ft-card storage">
+        <view class="storage__head">
+          <text class="storage__label">存储占用</text>
+          <text class="storage__val ft-num">{{ photoUsedText }} / {{ photoQuotaText }}</text>
+        </view>
+        <view class="storage__bar">
+          <view
+            class="storage__fill"
+            :class="{ 'storage__fill--warn': photoRatio >= 0.9 }"
+            :style="{ width: photoPct }"
+          />
+        </view>
+        <text class="storage__hint">目前只统计餐照；达到上限后将无法再上传新照片</text>
       </view>
 
       <text class="prof__logout" @click="logout">退出登录</text>
@@ -307,6 +365,54 @@ function logout() {
   line-height: 1;
   color: $app-ink-subtle;
   padding-left: 14rpx;
+}
+
+/* ── 存储占用 ── */
+.storage {
+  padding: 28rpx 32rpx;
+}
+
+.storage__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 18rpx;
+}
+
+.storage__label {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.storage__val {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.storage__bar {
+  height: 12rpx;
+  background: $app-canvas;
+  border: 1rpx solid $app-line;
+  border-radius: 6rpx;
+  overflow: hidden;
+}
+
+.storage__fill {
+  height: 100%;
+  background: $app-ink;
+}
+
+/* 接近上限：进度条转警示色 */
+.storage__fill--warn {
+  background: #c4453c;
+}
+
+.storage__hint {
+  display: block;
+  padding-top: 14rpx;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
 }
 
 /* ── 退出 ── */

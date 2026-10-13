@@ -22,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -57,8 +58,11 @@ class DietServiceTest {
     @Mock
     private SettingService settingService;
 
+    /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
-        return new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper, settingService);
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper, settingService);
+        ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
+        return s;
     }
 
     private static Food chicken() {
@@ -168,6 +172,25 @@ class DietServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "a.gif", "image/gif", new byte[]{1});
         assertThrows(BusinessException.class, () -> service().savePhoto(7L, "2026-10-12", "lunch", file));
         verify(mealPhotoMapper, never()).insert(any(MealPhoto.class));
+    }
+
+    @Test
+    void savePhoto_overQuota_throws() {
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper, settingService);
+        // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
+        ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
+        when(mealPhotoMapper.selectOne(any())).thenReturn(null);
+        when(mealPhotoMapper.sumBytes(7L)).thenReturn(0L);
+        MockMultipartFile file = new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        assertThrows(BusinessException.class, () -> s.savePhoto(7L, "2026-10-12", "lunch", file));
+        verify(mealPhotoMapper, never()).insert(any(MealPhoto.class));
+    }
+
+    @Test
+    void deletePhoto_absent_throws() {
+        when(mealPhotoMapper.delete(any())).thenReturn(0);
+        assertThrows(BusinessException.class, () -> service().deletePhoto(7L, "2026-10-12", "lunch"));
     }
 
     @Test

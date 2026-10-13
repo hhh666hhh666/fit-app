@@ -31,6 +31,9 @@ public class MealPhoto {
     /** 图片数据（前端已压缩）。 */
     private byte[] image;
 
+    /** 缩略图（长边 ≤320 的 JPEG，上传时后端生成）；老数据为 NULL，读取时回退用原图。 */
+    private byte[] thumb;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
