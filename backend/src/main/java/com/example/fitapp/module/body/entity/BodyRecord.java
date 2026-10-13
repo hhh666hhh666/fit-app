@@ -6,12 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * 身体档案的一次测定。表结构以迁移脚本 {@code V8__body_record.sql} 为准。
- * 体重与四围均可空（记哪项填哪项，至少一项）；允许同日多条（note 区分场景）。
+ * 体重与四围均可空（记哪项填哪项，至少一项）；允许同日多条（时刻与 note 区分场景）。
  */
 @Data
 @TableName("body_record")
@@ -22,8 +21,8 @@ public class BodyRecord {
 
     private Long userId;
 
-    /** 测定日期（日期粒度）。 */
-    private LocalDate measuredAt;
+    /** 测定时刻（精确到分；同一天可多条）。 */
+    private LocalDateTime measuredAt;
 
     /** 体重 kg。 */
     private BigDecimal weight;

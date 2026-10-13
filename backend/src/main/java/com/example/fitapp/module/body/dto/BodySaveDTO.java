@@ -6,15 +6,15 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
- * 录入一次测定：体重与四围记哪项填哪项（至少一项，服务端校验）；日期缺省为今天。
+ * 录入（或修改）一次测定：体重与四围记哪项填哪项（至少一项，服务端校验）；时刻缺省为现在。
  */
 @Data
 public class BodySaveDTO {
 
-    private LocalDate measuredAt;
+    private LocalDateTime measuredAt;
 
     @DecimalMin(value = "20", message = "体重数值不正确")
     @DecimalMax(value = "400", message = "体重数值不正确")

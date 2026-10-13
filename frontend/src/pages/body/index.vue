@@ -1,13 +1,28 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
-import { createBodyRecord, getBodyOverview, getBodyRecords } from '@/api/body'
+import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
+import {
+  batchDeleteBodyRecords,
+  createBodyRecord,
+  getBodyOverview,
+  getBodyRecords,
+  updateBodyRecord
+} from '@/api/body'
 import type { BodyOverview, BodyRecordRow } from '@/api/body'
 import FtTrendChart from '@/components/FtTrendChart.vue'
-import { formatDateLabel, formatThousands } from '@/utils/format'
+import {
+  formatDateLabel,
+  formatDateTimeLabel,
+  formatThousands,
+  nowTime,
+  toIsoMinute,
+  todayKey
+} from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
-// ── 身体档案（设计稿：.workbuddy/stitch/screen/body.png）──
+// ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
+
+const PAGE_SIZE = 20
 
 function goBack() {
   uni.navigateBack()
@@ -16,19 +31,38 @@ function goBack() {
 const overview = ref<BodyOverview | null>(null)
 const records = ref<BodyRecordRow[]>([])
 const loading = ref(true)
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 async function load() {
   loading.value = true
   try {
-    const [ov, rows] = await Promise.all([getBodyOverview(), getBodyRecords(20)])
+    const [ov, rows] = await Promise.all([getBodyOverview(), getBodyRecords(PAGE_SIZE, 0)])
     overview.value = ov
     records.value = rows
+    hasMore.value = rows.length >= PAGE_SIZE
   } catch {
     // request 层已统一提示
   } finally {
     loading.value = false
   }
 }
+
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  try {
+    const rows = await getBodyRecords(PAGE_SIZE, records.value.length)
+    records.value = [...records.value, ...rows]
+    hasMore.value = rows.length >= PAGE_SIZE
+  } catch {
+    // request 层已统一提示
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+onReachBottom(loadMore)
 
 /** 从饮食卡「记体重」带参进入（?record=1）：加载后自动打开录入弹层。 */
 const pendingRecord = ref(false)
@@ -47,56 +81,186 @@ onShow(() => {
   }
 })
 
-const series = computed(() => overview.value?.weightSeries ?? [])
-
-// ── 折线：交给 FtTrendChart（可缩放时间轴，ADR 0015）──
-const firstWeight = computed(() => series.value[0]?.weight ?? null)
-const lastWeight = computed(() => series.value[series.value.length - 1]?.weight ?? null)
-
-/** 喂给图表组件的逐点序列（体重值域窄，组件那边用 zeroBased=false 定 y 轴）。 */
+// ── 体重图（序列已由后端按日聚合、取当天最小）──
 const weightPoints = computed(() =>
-  series.value.map((p) => ({ date: p.date, value: Number(p.weight) }))
+  (overview.value?.weightSeries ?? []).map((p) => ({ date: p.date, value: Number(p.weight) }))
+)
+const firstWeight = computed(() => weightPoints.value[0]?.value ?? null)
+const lastWeight = computed(() => weightPoints.value[weightPoints.value.length - 1]?.value ?? null)
+
+// ── 围度图：一张图 + 部位分段条切换（四个部位数值跨度大，共用 y 轴会压扁）──
+type GirthKey = 'chest' | 'waist' | 'hip' | 'arm'
+const GIRTH_PARTS: { key: GirthKey; label: string }[] = [
+  { key: 'chest', label: '胸围' },
+  { key: 'waist', label: '腰围' },
+  { key: 'hip', label: '臀围' },
+  { key: 'arm', label: '臂围' }
+]
+const girthPart = ref<GirthKey>('chest')
+
+const girthPoints = computed(() => {
+  const key = girthPart.value
+  return (overview.value?.girthSeries ?? [])
+    .filter((p) => p[key] != null)
+    .map((p) => ({ date: p.date, value: Number(p[key]) }))
+})
+const girthRange = computed(() => {
+  const pts = girthPoints.value
+  if (pts.length < 2) return ''
+  return `${pts[0].value} → ${pts[pts.length - 1].value} cm`
+})
+
+// ── 多选删除：长按进入多选态；多选态下点行＝切换勾选（不再进编辑）──
+const selectMode = ref(false)
+const selected = ref<Set<number>>(new Set())
+const selectedCount = computed(() => selected.value.size)
+const allSelected = computed(
+  () => records.value.length > 0 && selected.value.size === records.value.length
 )
 
-// ── 录入弹层 ──
-const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/**
+ * H5 上长按触发后浏览器还会补发一次 click——不挡的话刚被长按选中的那条会被
+ * 这次 click 又取消掉（选数 1→0，表现为「长按没反应」）。长按期间挂短窗口吞掉 click。
+ */
+let clickLockUntil = 0
+
+function toggleSelect(id: number) {
+  const s = new Set(selected.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selected.value = s
 }
+
+function onRowClick(r: BodyRecordRow) {
+  if (Date.now() < clickLockUntil) return
+  if (selectMode.value) toggleSelect(r.id)
+  else openEdit(r)
+}
+
+function onRowLongPress(r: BodyRecordRow) {
+  if (selectMode.value) return
+  clickLockUntil = Date.now() + 400
+  selectMode.value = true
+  selected.value = new Set([r.id])
+}
+
+function exitSelect() {
+  selectMode.value = false
+  selected.value = new Set()
+}
+
+function toggleAll() {
+  selected.value = allSelected.value ? new Set() : new Set(records.value.map((r) => r.id))
+}
+
+function doDelete() {
+  const ids = [...selected.value]
+  if (ids.length === 0) return
+  uni.showModal({
+    title: '删除身体档案记录',
+    content:
+      ids.length === 1
+        ? '删除这条记录？删除后不可恢复。'
+        : `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
+    confirmText: '删除',
+    confirmColor: '#C4453C',
+    success: async ({ confirm }) => {
+      if (!confirm) return
+      try {
+        await batchDeleteBodyRecords(ids)
+        exitSelect()
+        uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
+        await load() // 卡片与两张图都要按新数据重算
+      } catch {
+        // request 层已统一提示
+      }
+    }
+  })
+}
+
+// ── 录入 / 编辑弹层（同一个，靠 editId 区分）──
 const sheet = ref({
   show: false,
-  measuredAt: today(),
+  editId: null as number | null,
+  date: todayKey(),
+  time: nowTime(),
   weight: '',
   chest: '',
   waist: '',
   hip: '',
   arm: '',
   note: '',
-  saving: false
+  saving: false,
+  /** 新增时预填来源的测定时刻（用于「上次 ×月×日」提示）；编辑时为 null。 */
+  prefilledFrom: null as string | null
 })
 
+function numOrBlank(v: number | null | undefined): string {
+  return v == null ? '' : String(v)
+}
+
+/** 新增：日期时间取「现在」，体重与四围预填上次数值（省敲键盘）。 */
 function openSheet() {
+  const last = records.value[0] ?? null
   sheet.value = {
     show: true,
-    measuredAt: today(),
-    weight: '',
-    chest: '',
-    waist: '',
-    hip: '',
-    arm: '',
+    editId: null,
+    date: todayKey(),
+    time: nowTime(),
+    weight: numOrBlank(last?.weight),
+    chest: numOrBlank(last?.chest),
+    waist: numOrBlank(last?.waist),
+    hip: numOrBlank(last?.hip),
+    arm: numOrBlank(last?.arm),
     note: '',
-    saving: false
+    saving: false,
+    prefilledFrom: last?.date ?? null
   }
 }
 
+/** 编辑：点明细行进来，值全部预填（含时刻），弹层里不放删除——删除统一走长按。 */
+function openEdit(r: BodyRecordRow) {
+  const [date, time] = splitIso(r.date)
+  sheet.value = {
+    show: true,
+    editId: r.id,
+    date,
+    time,
+    weight: numOrBlank(r.weight),
+    chest: numOrBlank(r.chest),
+    waist: numOrBlank(r.waist),
+    hip: numOrBlank(r.hip),
+    arm: numOrBlank(r.arm),
+    note: r.note ?? '',
+    saving: false,
+    prefilledFrom: null
+  }
+}
+
+/** `2026-10-13T23:51:00` → ['2026-10-13', '23:51'] */
+function splitIso(iso: string): [string, string] {
+  const [d, t = '00:00:00'] = iso.split('T')
+  return [d, t.slice(0, 5)]
+}
+
+/** 预填值的来源提示：不标的话，只想记体重时容易把上个月的围度当成今天的存进去。 */
+const lastHint = computed(() => {
+  const d = sheet.value.prefilledFrom
+  return d ? `上次 ${formatDateLabel(d)}` : ''
+})
+
 function onDateChange(e: { detail: { value: string } }) {
-  sheet.value.measuredAt = e.detail.value
+  sheet.value.date = e.detail.value
+}
+
+function onTimeChange(e: { detail: { value: string } }) {
+  sheet.value.time = e.detail.value
 }
 
 async function save() {
   const f = sheet.value
   const payload = {
-    measuredAt: f.measuredAt,
+    measuredAt: toIsoMinute(f.date, f.time),
     weight: f.weight ? Number(f.weight) : null,
     chest: f.chest ? Number(f.chest) : null,
     waist: f.waist ? Number(f.waist) : null,
@@ -104,24 +268,31 @@ async function save() {
     arm: f.arm ? Number(f.arm) : null,
     note: f.note.trim()
   }
-  if (payload.weight == null && payload.chest == null && payload.waist == null
-    && payload.hip == null && payload.arm == null) {
+  if (
+    payload.weight == null &&
+    payload.chest == null &&
+    payload.waist == null &&
+    payload.hip == null &&
+    payload.arm == null
+  ) {
     uni.showToast({ title: '体重和围度至少填一项', icon: 'none' })
     return
   }
   f.saving = true
   try {
-    await createBodyRecord(payload)
+    if (f.editId != null) await updateBodyRecord(f.editId, payload)
+    else await createBodyRecord(payload)
     sheet.value.show = false
-    uni.showToast({ title: '已记录', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'success' })
     await load()
   } catch {
-    // unwrap 已提示
+    // request 层已统一提示
   } finally {
     f.saving = false
   }
 }
 
+// ── 展示用小工具 ──
 function signed(v: number | null | undefined): string {
   if (v == null) return ''
   const n = Number(v)
@@ -131,14 +302,41 @@ function signed(v: number | null | undefined): string {
 function girthValue(v: number | null | undefined): string {
   return v == null ? '–' : String(v)
 }
+
+/** 明细行第二行：把量过的围度挤成一行小字，没量的不出现。 */
+function girthLine(r: BodyRecordRow): string {
+  const parts: string[] = []
+  if (r.chest != null) parts.push(`胸 ${r.chest}`)
+  if (r.waist != null) parts.push(`腰 ${r.waist}`)
+  if (r.hip != null) parts.push(`臀 ${r.hip}`)
+  if (r.arm != null) parts.push(`臂 ${r.arm}`)
+  return parts.join(' · ')
+}
 </script>
 
 <template>
   <view class="bodypg">
+    <!-- 顶栏：常规＝返回＋标题；多选态＝取消＋已选＋全选/删除（照日志页） -->
     <view class="bodypg__head">
-      <text class="bodypg__back" @click="goBack">‹</text>
-      <text class="bodypg__title">身体档案</text>
-      <view class="bodypg__head-space" />
+      <template v-if="!selectMode">
+        <text class="bodypg__back" @click="goBack">‹</text>
+        <text class="bodypg__title">身体档案</text>
+        <view class="bodypg__head-space" />
+      </template>
+      <template v-else>
+        <text class="bodypg__cancel" @click="exitSelect">取消</text>
+        <text class="bodypg__sel ft-num">已选 {{ selectedCount }} 项</text>
+        <view class="bodypg__acts">
+          <text class="bodypg__all" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
+          <text
+            class="bodypg__del"
+            :class="{ 'bodypg__del--off': selectedCount === 0 }"
+            @click="doDelete"
+          >
+            删除
+          </text>
+        </view>
+      </template>
     </view>
 
     <view v-if="loading" class="ft-loading">加载中…</view>
@@ -168,7 +366,7 @@ function girthValue(v: number | null | undefined): string {
         </view>
       </view>
 
-      <!-- 基础围度卡 -->
+      <!-- 基础围度卡（最新一次） -->
       <view class="ft-card gcard">
         <view class="gcard__head">
           <text class="gcard__label">基础围度</text>
@@ -209,59 +407,124 @@ function girthValue(v: number | null | undefined): string {
         <text v-else class="gcard__empty">还没有围度记录——「记一笔」里可以一起量</text>
       </view>
 
-      <!-- 近 3 个月体重 -->
+      <!-- 体重趋势 -->
       <view class="ft-card chartcard">
         <view class="chartcard__head">
-          <text class="chartcard__title">近 3 个月体重</text>
+          <text class="chartcard__title">体重趋势</text>
           <text v-if="firstWeight != null && lastWeight != null" class="chartcard__range ft-num">
             {{ formatThousands(firstWeight) }} → {{ formatThousands(lastWeight) }} kg
           </text>
         </view>
         <FtTrendChart
-          v-if="series.length >= 2"
+          v-if="weightPoints.length >= 2"
           :points="weightPoints"
           :height="180"
           :zero-based="false"
         />
         <text v-else class="chartcard__empty">再记一次体重，就能看到趋势线</text>
-        <text v-if="series.length >= 2" class="chartcard__tip">
-          单指按住看数值 · 双指捏合缩放 · 双指拖动平移
+        <text v-if="weightPoints.length >= 2" class="chartcard__tip">
+          同一天记多次取最小值 · 单指按住看数值 · 双指捏合缩放
         </text>
       </view>
 
-      <!-- 明细 -->
+      <!-- 围度趋势（单独一张图，部位分段条切换） -->
+      <view class="ft-card chartcard">
+        <view class="chartcard__head">
+          <text class="chartcard__title">围度趋势</text>
+          <text v-if="girthRange" class="chartcard__range ft-num">{{ girthRange }}</text>
+        </view>
+        <view class="seg">
+          <text
+            v-for="p in GIRTH_PARTS"
+            :key="p.key"
+            class="seg__item"
+            :class="{ 'seg__item--on': girthPart === p.key }"
+            @click="girthPart = p.key"
+          >
+            {{ p.label }}
+          </text>
+        </view>
+        <FtTrendChart
+          v-if="girthPoints.length >= 2"
+          :points="girthPoints"
+          :height="180"
+          :zero-based="false"
+        />
+        <text v-else class="chartcard__empty">这个部位再量一次，就能看到趋势线</text>
+        <text v-if="girthPoints.length >= 2" class="chartcard__tip">
+          同一天量多次取最小值 · 单指按住看数值 · 双指捏合缩放
+        </text>
+      </view>
+
+      <!-- 全部记录（体重与围度同一条时间线） -->
       <view class="ft-card mcard">
         <view class="mcard__head">
-          <text class="mcard__title">最近记录明细</text>
-          <text class="mcard__meta ft-num">DATE / KG / DIFF</text>
+          <text class="mcard__title">全部记录</text>
+          <text class="mcard__meta ft-num">TIME / KG / DIFF</text>
         </view>
         <view v-if="records.length === 0" class="mcard__empty">还没有记录</view>
-        <view v-for="(r, i) in records" :key="r.id" class="mrow">
+        <view
+          v-for="(r, i) in records"
+          :key="r.id"
+          class="mrow"
+          :class="{ 'mrow--sel': selectMode && selected.has(r.id) }"
+          @click="onRowClick(r)"
+          @longpress="onRowLongPress(r)"
+        >
+          <view
+            v-if="selectMode"
+            class="mrow__check"
+            :class="{ 'mrow__check--on': selected.has(r.id) }"
+          >
+            <wd-icon v-if="selected.has(r.id)" name="check" size="13px" color="#ffffff" />
+          </view>
           <view class="mrow__dot" :class="{ 'mrow__dot--hollow': i !== 0 }" />
-          <text class="mrow__date ft-num">{{ formatDateLabel(r.date) }}</text>
-          <text class="mrow__note">{{ r.note }}</text>
-          <text class="mrow__kg ft-num">{{ formatThousands(Number(r.weight)) }} kg</text>
-          <text class="mrow__diff ft-num">{{ r.diff == null ? '—' : signed(r.diff) }}</text>
+          <view class="mrow__main">
+            <view class="mrow__line1">
+              <text class="mrow__date ft-num">{{ formatDateTimeLabel(r.date) }}</text>
+              <text v-if="r.note" class="mrow__note">{{ r.note }}</text>
+              <view class="mrow__right">
+                <text v-if="r.weight != null" class="mrow__kg ft-num">
+                  {{ formatThousands(Number(r.weight)) }} kg
+                </text>
+                <text class="mrow__diff ft-num">{{ r.diff == null ? '—' : signed(r.diff) }}</text>
+              </view>
+            </view>
+            <text v-if="girthLine(r)" class="mrow__girth ft-num">{{ girthLine(r) }}</text>
+          </view>
+        </view>
+        <view v-if="loadingMore" class="mcard__more">加载中…</view>
+        <view v-else-if="!hasMore && records.length > 0" class="mcard__more">
+          共 {{ records.length }} 条
         </view>
       </view>
 
       <view class="bodypg__pad" />
     </view>
 
-    <!-- 底部固定：记录今天 -->
-    <view class="bodypg__bottom">
+    <!-- 底部固定：记录今天（多选态下藏起来，避免误触） -->
+    <view v-if="!selectMode" class="bodypg__bottom">
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="openSheet">+ 记录今天的数据</view>
     </view>
 
-    <!-- 录入弹层 -->
-    <view v-if="sheet.show" class="sheet-mask" @click="sheet.show = false" />    <view v-if="sheet.show" class="sheet">
+    <!-- 录入 / 编辑弹层 -->
+    <view v-if="sheet.show" class="sheet-mask" @click="sheet.show = false" />
+    <view v-if="sheet.show" class="sheet">
       <view class="sheet__handle" />
-      <text class="sheet__title">记录身体数据</text>
+      <text class="sheet__title">{{ sheet.editId == null ? '记录身体数据' : '编辑记录' }}</text>
+      <text v-if="lastHint" class="sheet__hint ft-num">{{ lastHint }}</text>
 
       <view class="fld">
         <text class="fld__label">日期</text>
-        <picker mode="date" :value="sheet.measuredAt" @change="onDateChange">
-          <view class="fld__picker ft-num">{{ sheet.measuredAt }} ▾</view>
+        <picker mode="date" :value="sheet.date" @change="onDateChange">
+          <view class="fld__picker ft-num">{{ sheet.date }} ▾</view>
+        </picker>
+      </view>
+
+      <view class="fld">
+        <text class="fld__label">时刻</text>
+        <picker mode="time" :value="sheet.time" @change="onTimeChange">
+          <view class="fld__picker ft-num">{{ sheet.time }} ▾</view>
         </picker>
       </view>
 
@@ -340,6 +603,42 @@ function girthValue(v: number | null | undefined): string {
 
 .bodypg__head-space {
   width: 64rpx;
+}
+
+/* ── 多选态顶栏 ── */
+.bodypg__cancel {
+  font-size: $text-base;
+  color: $app-ink-muted;
+  width: 64rpx;
+}
+
+.bodypg__sel {
+  font-size: $text-base;
+  color: $app-ink;
+}
+
+.bodypg__acts {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  width: 64rpx;
+  justify-content: flex-end;
+}
+
+.bodypg__all {
+  font-size: $text-base;
+  color: $app-ink;
+  white-space: nowrap;
+}
+
+.bodypg__del {
+  font-size: $text-base;
+  color: #c4453c;
+  white-space: nowrap;
+}
+
+.bodypg__del--off {
+  opacity: 0.35;
 }
 
 .bodypg__body {
@@ -509,6 +808,29 @@ function girthValue(v: number | null | undefined): string {
   color: $app-ink-subtle;
 }
 
+/* ── 部位分段条 ── */
+.seg {
+  display: flex;
+  gap: 12rpx;
+  padding-bottom: 20rpx;
+}
+
+.seg__item {
+  flex: 1;
+  text-align: center;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  background: $app-surface-2;
+  border-radius: $radius-sm;
+  padding: 12rpx 0;
+}
+
+.seg__item--on {
+  background: $app-ink;
+  color: #ffffff;
+  font-weight: 600;
+}
+
 /* ── 明细 ── */
 .mcard__head {
   display: flex;
@@ -531,9 +853,35 @@ function girthValue(v: number | null | undefined): string {
 
 .mrow {
   display: flex;
-  align-items: center;
-  padding: 26rpx 4rpx;
+  align-items: flex-start;
+  padding: 22rpx 4rpx;
   border-top: 1rpx solid $app-line-soft;
+}
+
+.mrow--sel {
+  background: $app-canvas;
+  border-radius: $radius-md;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+}
+
+.mrow__check {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid $app-line;
+  background: $app-surface;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+  margin-top: 4rpx;
+}
+
+.mrow__check--on {
+  background: $app-ink;
+  border-color: $app-ink;
 }
 
 .mrow__dot {
@@ -543,11 +891,22 @@ function girthValue(v: number | null | undefined): string {
   background: $app-ink;
   margin-right: 16rpx;
   flex-shrink: 0;
+  margin-top: 14rpx;
 }
 
 .mrow__dot--hollow {
   background: transparent;
   border: 2rpx solid $app-line;
+}
+
+.mrow__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mrow__line1 {
+  display: flex;
+  align-items: baseline;
 }
 
 .mrow__date {
@@ -565,8 +924,15 @@ function girthValue(v: number | null | undefined): string {
   white-space: nowrap;
 }
 
-.mrow__kg {
+.mrow__right {
   margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.mrow__kg {
   font-size: $text-md;
   font-weight: 600;
   color: $app-ink;
@@ -580,10 +946,24 @@ function girthValue(v: number | null | undefined): string {
   flex-shrink: 0;
 }
 
+.mrow__girth {
+  display: block;
+  padding-top: 8rpx;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
 .mcard__empty {
   padding: 40rpx 0;
   text-align: center;
   font-size: $text-sm;
+  color: $app-ink-subtle;
+}
+
+.mcard__more {
+  padding: 24rpx 0 8rpx;
+  text-align: center;
+  font-size: $text-xs;
   color: $app-ink-subtle;
 }
 
@@ -601,7 +981,7 @@ function girthValue(v: number | null | undefined): string {
   padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
 }
 
-/* ── 录入弹层 ── */
+/* ── 录入 / 编辑弹层 ── */
 .sheet-mask {
   position: fixed;
   left: 0;
@@ -636,7 +1016,15 @@ function girthValue(v: number | null | undefined): string {
   font-size: 34rpx;
   font-weight: 600;
   color: $app-ink;
-  padding-bottom: 20rpx;
+  padding-bottom: 6rpx;
+}
+
+/* 预填提示：告诉主人这些数是上回的，不想记就清空（清空即不存） */
+.sheet__hint {
+  display: block;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+  padding-bottom: 16rpx;
 }
 
 .fld {

@@ -73,7 +73,15 @@ function toggleSelect(id: number) {
   selected.value = s
 }
 
+/**
+ * H5 上长按触发后，浏览器还会补发一次 click——若不挡，刚被长按选中的那条
+ * 会被这次 click 又取消掉（选数从 1 变 0，表现为「长按没反应」）。
+ * 长按期间挂一个短窗口，窗口内的 click 一律吞掉。
+ */
+let clickLockUntil = 0
+
 function onRowClick(item: WorkoutListItem) {
+  if (Date.now() < clickLockUntil) return
   if (selectMode.value) toggleSelect(item.id)
   else openDetail(item.id)
 }
@@ -81,6 +89,7 @@ function onRowClick(item: WorkoutListItem) {
 /** 长按任一记录进入多选态并选中它。 */
 function onRowLongPress(item: WorkoutListItem) {
   if (selectMode.value) return
+  clickLockUntil = Date.now() + 400
   selectMode.value = true
   selected.value = new Set([item.id])
 }

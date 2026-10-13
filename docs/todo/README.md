@@ -59,6 +59,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | [2026-10-12-TODO-设计变量真相源路径.md](./2026-10-12-TODO-设计变量真相源路径.md) | 设计变量真相源路径写错（`tokens.css` 并不存在） | 待办 | 中 |
 | [2026-10-12-TODO-食物库预置数据后续.md](./2026-10-12-TODO-食物库预置数据后续.md) | 食物库预置数据后续（分类浏览、预设详情） | 待办 | 低 |
 | [2026-10-13-TODO-会话页退出路径.md](./2026-10-13-TODO-会话页退出路径.md) | 会话页退出路径（返回键拦不住，数据静默丢失） | 待办 | 中 |
+| [2026-10-13-TODO-趋势图横轴按真实日期间距.md](./2026-10-13-TODO-趋势图横轴按真实日期间距.md) | 趋势图横轴按真实日期间距排点（现在是按下标等距） | 待办 | 低 |
 
 ## 已归档
 
@@ -79,7 +80,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | 定位：自用工具、公网部署 | [ADR 0001](../adr/0001-self-use-tool.md) |
 | 客户端形态：Android App＝uni-app＋WebView 壳 | [ADR 0002](../adr/0002-android-app-uni-app-shell.md) |
 | 认证：注册登录（不含改密／找回／风控） | [ADR 0003](../adr/0003-register-login-auth.md) |
-| 训练开始：周安排驱动（计划名自定义，「休息」唯一固定词） | [ADR 0004](../adr/0004-week-schedule-driven-start.md) |
+| 训练开始：**先选计划**（周安排退为决定谁置顶）；计划名自定义，「休息」唯一固定词 | [ADR 0004](../adr/0004-week-schedule-driven-start.md)（数据结构与休息语义）／[ADR 0016](../adr/0016-start-training-with-plan-picker.md)（**收窄 0004**） |
 | 部署：独立子域 `fit.11-2.cn` ＋ 复用 quizzy 的 MySQL 与发布链路 | [ADR 0005](../adr/0005-deploy-with-quizzy-infra.md) |
 | 会话页组次流程：按目标预填、点勾仅完成、动作自由切换＋全组完成自动切下一个未完成动作（计划目标＝组/次/重量） | [ADR 0007](../adr/0007-session-set-flow-and-target-weight.md)、[ADR 0010](../adr/0010-session-free-switch-and-early-finish.md) |
 | 饮食记录：条目级＋全自建食物库（无预置）；拍照记录（图片存库）；目标手动设 | [ADR 0008](../adr/0008-diet-logging-module.md) |
@@ -88,3 +89,4 @@ YYYY-MM-DD-TODO-<主题>.md
 | 餐照：上传时生成缩略图、可删、20 GB 上限（硬拦但给清理出口） | [ADR 0013](../adr/0013-photo-storage-and-quota.md) |
 | 照片浏览：自写全屏浮层（缩放＋左右翻页）＋ 相册页（网格＋日期分组） | [ADR 0014](../adr/0014-photo-viewer-and-album.md) |
 | 饮食趋势：可缩放时间轴（精确日期为横轴、单屏 3~365 天、数据窗口全部历史） | [ADR 0015](../adr/0015-diet-trend-zoomable-timeline.md) |
+| 身体档案：体重与四围同一行不拆表；可增改删；图表按日取最小、列表逐条到分 | [ADR 0017](../adr/0017-body-record-model-and-crud.md) |
