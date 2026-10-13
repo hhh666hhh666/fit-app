@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+// #ifdef H5
+import { onBeforeRouteLeave } from 'vue-router'
+// #endif
 import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
@@ -221,12 +224,30 @@ onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
 
+/** 已确认离开或已提交 → 离页守卫放行（避免自我拦截）。 */
+let leaving = false
+
+/** 离开会话页：返回上一页；没有上一页时回首页兜底。 */
+function leaveSession() {
+  leaving = true
+  uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
+}
+
 async function finish() {
   const doneBlocks = blocks.value
     .map((b) => ({ b, sets: b.sets.filter((s) => s.done) }))
     .filter((x) => x.sets.length > 0)
+  // 一组都没勾：允许结束，但本次不留任何记录（不发请求）
   if (doneBlocks.length === 0) {
-    uni.showToast({ title: '还没有完成的组', icon: 'none' })
+    uni.showModal({
+      title: '结束本次训练？',
+      content: '还没有完成任何一组，本次不会有记录。确定结束吗？',
+      confirmText: '结束',
+      cancelText: '继续',
+      success: ({ confirm }) => {
+        if (confirm) leaveSession()
+      }
+    })
     return
   }
   // 有任意动作的任意组未完成 → 先确认是否提前结束
@@ -259,6 +280,7 @@ async function submit(doneBlocks: { b: Block; sets: SetRow[] }[]) {
       }))
     })
     training.setCurrent(detail)
+    leaving = true
     uni.navigateTo({ url: '/pages/summary/index' })
   } catch {
     // request 层已统一提示；留在本页可重试
@@ -267,6 +289,32 @@ async function submit(doneBlocks: { b: Block; sets: SetRow[] }[]) {
 function comingSoon(tip: string) {
   uni.showToast({ title: tip, icon: 'none' })
 }
+
+// #ifdef H5
+// 拦住「离开会话页」（返回键 / 浏览器后退）：安卓壳的返回键走 WebView 历史回退，
+// 落的也是这条路由离开，故这一层在壳里同样生效（真机验证见 ADR 0011）。
+// 只拦「已经有记录的组」——一组都没勾时本次本来就不会有记录，放行免得误入页面也被弹一次。
+onBeforeRouteLeave((_to, _from, next) => {
+  if (leaving || doneCount.value === 0) {
+    next()
+    return
+  }
+  uni.showModal({
+    title: '离开本次训练？',
+    content: `已记录 ${doneCount.value} 组尚未保存，离开后本次训练不会入库。确定离开吗？`,
+    confirmText: '离开',
+    cancelText: '留下',
+    success: ({ confirm }) => {
+      if (confirm) {
+        leaving = true
+        next()
+      } else {
+        next(false)
+      }
+    }
+  })
+})
+// #endif
 </script>
 
 <template>
