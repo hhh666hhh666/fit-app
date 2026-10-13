@@ -18,11 +18,12 @@ android {
         applicationId "com.fitapp.app"
         minSdk 26
         targetSdk 34
-        // 与线上版本对齐：git tag v0.1.1 → versionName 0.1.1；
+        // 与线上版本对齐：git tag v0.1.2 → versionName 0.1.2；
         // versionCode 是单调递增的整数（同一 keystore 下覆盖安装才认它），
-        // 每次发版都要 +1——这里 2 对应 v0.1.1（1 是 v0.1.0，未上线过）。
-        versionCode 2
-        versionName "0.1.1"
+        // 每次发版都要 +1——这里 3 对应 v0.1.2（2 是 v0.1.1，1 是 v0.1.0）。
+        // v0.1.2 的内容：补 WebChromeClient.onShowFileChooser，修 App 内「拍照记录这一餐」没反应。
+        versionCode 3
+        versionName "0.1.2"
     }
 
     signingConfigs {
@@ -46,4 +47,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    // 仅为了 FileProvider（拍照输出 URI 的授权）——壳自身不引其它 androidx 组件
+    implementation 'androidx.core:core:1.13.1'
 }

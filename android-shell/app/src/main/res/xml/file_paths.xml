@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 可对外授权的路径白名单。
+  只放拍照输出目录（getExternalFilesDir(Environment.DIRECTORY_PICTURES)），
+  即 /sdcard/Android/data/com.fitapp.app/files/Pictures —— 应用私有，无需存储权限。
+-->
+<paths>
+    <external-files-path name="pictures" path="Pictures/" />
+</paths>
