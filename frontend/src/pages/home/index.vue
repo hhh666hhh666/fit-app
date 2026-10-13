@@ -137,9 +137,9 @@ async function refreshCounts() {
   }
 }
 
-// ── 周安排驱动的「开始训练」──
+// ── 「开始训练」→ 先选计划（ADR 0016；周安排只决定谁置顶，不自动执行）──
 const schedule = useScheduleStore()
-const sheet = ref<'rest' | 'empty' | null>(null)
+const picker = ref(false)
 
 onShow(() => {
   if (!ensureLogin()) return
@@ -155,28 +155,39 @@ const bottomHint = computed(() => {
   return '今天没有安排'
 })
 
+/** 选择器里的计划顺序：今天的置顶，其余保持原序。 */
+const plansOrdered = computed(() => {
+  const todayId = schedule.todayPlan?.id
+  const list = [...schedule.plans]
+  if (todayId == null) return list
+  const i = list.findIndex((p) => p.id === todayId)
+  return i <= 0 ? list : [list[i], ...list.slice(0, i), ...list.slice(i + 1)]
+})
+
 function goLibrary() {
   uni.navigateTo({ url: '/pages/library/index' })
 }
 
+/** 点「开始训练」总是先选计划；顺带补一次拉取，免得计划还没到就闪一下空态。 */
 function onStart() {
-  if (schedule.todayPlan) {
-    uni.navigateTo({ url: `/pages/session/index?plan=${schedule.todayPlan.id}` })
-  } else if (schedule.isRest) {
-    sheet.value = 'rest'
-  } else {
-    sheet.value = 'empty'
-  }
+  void schedule.load()
+  picker.value = true
+}
+
+function startPlan(id: number) {
+  picker.value = false
+  uni.navigateTo({ url: `/pages/session/index?plan=${id}` })
 }
 
 function freeTrain() {
-  sheet.value = null
+  picker.value = false
   uni.navigateTo({ url: '/pages/session/index' })
 }
 
-function goWeek() {
-  sheet.value = null
-  uni.navigateTo({ url: '/pages/week/index' })
+/** 没有计划时的出口：去「我的 → 训练计划」新建（改计划只走那里）。 */
+function goPlans() {
+  picker.value = false
+  uni.navigateTo({ url: '/pages/plans/index' })
 }
 </script>
 
@@ -270,17 +281,47 @@ function goWeek() {
       <FtTabBar active="home" />
     </view>
 
-    <!-- 休息日 / 未安排弹层 -->
-    <view v-if="sheet" class="sheet-mask" @click="sheet = null" />
-    <view v-if="sheet" class="sheet">
+    <!-- 训练计划选择器（点「开始训练」弹出） -->
+    <view v-if="picker" class="sheet-mask" @click="picker = false" />
+    <view v-if="picker" class="sheet">
       <view class="sheet__handle" />
-      <text class="sheet__title">{{ sheet === 'rest' ? '今天是休息日' : '今天没有安排' }}</text>
-      <text class="sheet__sub">{{
-        sheet === 'rest' ? '好好恢复，明天见。' : '设置每周安排后，开始训练会自动按计划进行。'
-      }}</text>
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="freeTrain">自由训练</view>
-      <view class="ft-btn ft-btn--ghost ft-btn--block sheet__second" @click="goWeek">
-        调整训练安排
+      <text class="sheet__title">选择训练计划</text>
+      <text class="sheet__sub">{{ bottomHint }}</text>
+
+      <scroll-view v-if="plansOrdered.length" scroll-y class="sheet__list">
+        <view
+          v-for="p in plansOrdered"
+          :key="p.id"
+          class="prow"
+          :class="{ 'prow--today': p.id === schedule.todayPlan?.id }"
+          @click="startPlan(p.id)"
+        >
+          <view class="prow__bar" />
+          <view class="prow__main">
+            <view class="prow__name-row">
+              <text class="prow__name">{{ p.name }}</text>
+              <text v-if="p.id === schedule.todayPlan?.id" class="prow__badge">今天 · 建议</text>
+            </view>
+            <text class="prow__meta ft-num">
+              {{ p.exerciseCount }} 个动作{{
+                p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''
+              }}
+            </text>
+          </view>
+          <text class="prow__go">›</text>
+        </view>
+      </scroll-view>
+
+      <view v-else class="sheet__empty">
+        <text class="sheet__empty-t">还没有训练计划</text>
+        <text class="sheet__empty-s">在「我的 → 训练计划」里建一个，之后就能在这里选。</text>
+      </view>
+
+      <view v-if="!plansOrdered.length" class="ft-btn ft-btn--primary ft-btn--block" @click="goPlans">
+        去新建计划
+      </view>
+      <view class="ft-btn ft-btn--ghost ft-btn--block sheet__second" @click="freeTrain">
+        自由训练
       </view>
     </view>
 
@@ -539,7 +580,7 @@ function goWeek() {
   padding: 10rpx 0 16rpx;
 }
 
-/* ── 休息日 / 未安排弹层 ── */
+/* ── 训练计划选择器弹层 ── */
 .sheet-mask {
   position: fixed;
   left: 0;
@@ -585,5 +626,96 @@ function goWeek() {
 
 .sheet__second {
   margin-top: 16rpx;
+}
+
+/* 计划列表：够长时内部滚动，弹层本身不顶出屏幕 */
+.sheet__list {
+  max-height: 560rpx;
+  margin-bottom: 32rpx;
+}
+
+.prow {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 4rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.prow:first-child {
+  border-top: none;
+}
+
+/* 名字左侧粗竖线标记（与计划列表页一致） */
+.prow__bar {
+  width: 10rpx;
+  height: 36rpx;
+  border-radius: 4rpx;
+  background: $app-ink;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}
+
+.prow__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.prow__name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.prow__name {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.prow__badge {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-sm;
+  padding: 2rpx 10rpx;
+  flex-shrink: 0;
+}
+
+.prow__meta {
+  display: block;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  padding-top: 6rpx;
+}
+
+.prow__go {
+  font-size: $text-lg;
+  color: $app-ink-subtle;
+  padding-left: 12rpx;
+}
+
+.prow--today {
+  background: $app-canvas;
+  border-radius: $radius-md;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+}
+
+.sheet__empty {
+  padding: 24rpx 4rpx 40rpx;
+}
+
+.sheet__empty-t {
+  display: block;
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.sheet__empty-s {
+  display: block;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  padding-top: 10rpx;
 }
 </style>
