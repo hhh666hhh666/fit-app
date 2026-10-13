@@ -216,6 +216,56 @@ export function getTrend(days = 30) {
   return unwrap(request.get<{ days: TrendPoint[] }>('/diet/trend', { days }))
 }
 
+// ── 食物组合（一串食物 ＋ 固定克数；ADR 0012）──
+
+/** 组合里的一条：foodId 为 null 表示那样食物已被删（仍列出名字，但无单位与热量、不计入合计）。 */
+export interface ComboItem {
+  foodId?: number | null
+  foodName: string
+  grams: number
+  unit?: 'g' | 'ml' | null
+  kcal?: number | null
+}
+
+export interface FoodComboVO {
+  id: number
+  name: string
+  /** 整份热量合计（大卡）。 */
+  totalKcal: number
+  items: ComboItem[]
+}
+
+/** 组合的提交体：明细整体覆盖。 */
+export interface ComboPayload {
+  name: string
+  items: { foodId: number; grams: number }[]
+}
+
+export function listCombos() {
+  return unwrap(request.get<FoodComboVO[]>('/combos'))
+}
+
+export function createCombo(payload: ComboPayload) {
+  return unwrap(request.post<FoodComboVO>('/combos', payload))
+}
+
+export function updateCombo(id: number, payload: ComboPayload) {
+  return unwrap(request.put<FoodComboVO>(`/combos/${id}`, payload))
+}
+
+export function deleteCombo(id: number) {
+  return unwrap(request.delete<void>(`/combos/${id}`))
+}
+
+/** 整份加入某一餐：一次事务落多条普通条目（不新开记录类型）。 */
+export function addMealsBatch(payload: {
+  date: string
+  meal: MealKey
+  items: { foodId: number; grams: number }[]
+}) {
+  return unwrap(request.post<MealItem[]>('/diet/meals/batch', payload))
+}
+
 // ── 设置 ──
 
 export function getSettings() {

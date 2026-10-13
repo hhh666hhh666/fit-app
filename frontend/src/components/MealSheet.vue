@@ -2,16 +2,21 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   addMeal,
+  addMealsBatch,
   deleteMeal,
   getDay,
+  listCombos,
   listFoods,
   updateMeal,
+  type ComboItem,
+  type FoodComboVO,
   type FoodItem,
   type MealItem,
   type MealKey
 } from '@/api/nutrition'
 import { fetchPhotoUrl, pickAndUploadPhoto, releasePhotoUrl } from '@/utils/photo'
 import { useDietStore } from '@/stores/diet'
+import ComboEditSheet from '@/components/ComboEditSheet.vue'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -47,6 +52,12 @@ const grams = ref('')
 const editingId = ref<number | null>(null)
 const editGrams = ref('')
 
+// ── 食物组合：横滑条「整份加入」＋ 「把这一餐存为组合」 ──
+const combos = ref<FoodComboVO[]>([])
+/** 刚整份加入的条目 id（供「撤销」用）。 */
+const lastBatch = ref<number[]>([])
+const comboSheet = ref({ show: false, preset: null as ComboItem[] | null })
+
 onMounted(() => {
   void init()
 })
@@ -61,7 +72,7 @@ async function init() {
     const day = await getDay(props.date)
     const group = day.meals.find((m) => m.meal === props.meal)
     items.value = group ? group.items : []
-    await Promise.all([loadPhoto(), searchFoods()])
+    await Promise.all([loadPhoto(), searchFoods(), loadCombos()])
   } catch {
     // request 层已统一提示
   } finally {
@@ -102,6 +113,70 @@ async function shoot() {
     await loadPhoto()
     emit('changed')
   }
+}
+
+// ── 食物组合 ──
+
+async function loadCombos() {
+  try {
+    combos.value = await listCombos()
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+/** 整份加入：一次事务落多条普通条目，可立即撤销。 */
+async function applyCombo(c: FoodComboVO) {
+  const payload = c.items
+    .filter((i) => i.foodId != null)
+    .map((i) => ({ foodId: i.foodId as number, grams: i.grams }))
+  if (payload.length === 0) {
+    uni.showToast({ title: '这个组合里的食物都已被删', icon: 'none' })
+    return
+  }
+  try {
+    const added = await addMealsBatch({ date: props.date, meal: props.meal, items: payload })
+    items.value.push(...added)
+    lastBatch.value = added.map((a) => a.id)
+    uni.showToast({ title: `已加入 ${added.length} 条`, icon: 'success' })
+    emit('changed')
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+/** 撤销上一次整份加入。 */
+async function undoBatch() {
+  const ids = lastBatch.value
+  lastBatch.value = []
+  for (const id of ids) {
+    try {
+      await deleteMeal(id)
+    } catch {
+      // 单条失败不阻断其余
+    }
+  }
+  items.value = items.value.filter((x) => !ids.includes(x.id))
+  emit('changed')
+}
+
+/** 把当前这一餐的条目存成组合（食物已被删的条目跳过）。 */
+function saveAsCombo() {
+  const preset: ComboItem[] = []
+  for (const it of items.value) {
+    if (it.foodId == null) continue
+    preset.push({ foodId: it.foodId, foodName: it.foodName, grams: it.grams })
+  }
+  if (preset.length === 0) {
+    uni.showToast({ title: '这一餐没有可保存的食物', icon: 'none' })
+    return
+  }
+  comboSheet.value = { show: true, preset }
+}
+
+async function onComboSaved() {
+  comboSheet.value = { show: false, preset: null }
+  await loadCombos()
 }
 
 // ── 添加 ──
@@ -226,6 +301,18 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
           <view v-else class="photo__empty" @click="shoot">+ 拍照记录这一餐</view>
         </view>
 
+        <!-- 组合横滑条：点一下整份加入（可撤销） -->
+        <scroll-view v-if="combos.length" scroll-x class="combar">
+          <view class="combar__inner">
+            <view v-for="c in combos" :key="c.id" class="combar__chip" @click="applyCombo(c)">
+              <text class="combar__name">{{ c.name }}</text>
+              <text class="combar__sub ft-num">
+                {{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡
+              </text>
+            </view>
+          </view>
+        </scroll-view>
+
         <!-- 添加区 -->
         <view class="add">
           <view v-if="!selected" class="asearch">
@@ -321,9 +408,27 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
           <text class="sum__num ft-num">{{ mealKcal }} 大卡</text>
         </view>
 
+        <view v-if="items.length > 0" class="savecombo" @click="saveAsCombo">
+          <text class="savecombo__text">＋ 把这一餐存为组合</text>
+        </view>
+
         <view class="ms__pad" />
       </template>
     </scroll-view>
+
+    <!-- 整份加入后的撤销条 -->
+    <view v-if="lastBatch.length" class="undo">
+      <text class="undo__text ft-num">已加入 {{ lastBatch.length }} 条</text>
+      <text class="undo__btn" @click="undoBatch">撤销</text>
+    </view>
+
+    <!-- 「存为组合」与「新建 / 编辑组合」共用同一弹层 -->
+    <ComboEditSheet
+      v-if="comboSheet.show"
+      :preset-items="comboSheet.preset"
+      @close="comboSheet.show = false"
+      @saved="onComboSaved"
+    />
   </view>
 </template>
 
@@ -427,6 +532,39 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   justify-content: center;
   font-size: $text-sm;
   color: $app-ink-muted;
+}
+
+/* ── 组合横滑条 ── */
+.combar {
+  white-space: nowrap;
+  margin-bottom: 22rpx;
+}
+
+.combar__inner {
+  display: inline-flex;
+  gap: 16rpx;
+  padding-bottom: 4rpx;
+}
+
+.combar__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 16rpx 24rpx;
+  background: $app-canvas;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-md;
+}
+
+.combar__name {
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.combar__sub {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
 }
 
 /* ── 添加区 ── */
@@ -701,6 +839,41 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
 .sum__num {
   font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+/* ── 存为组合 / 整份加入的撤销条 ── */
+.savecombo {
+  padding: 10rpx 4rpx 0;
+}
+
+.savecombo__text {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  border-bottom: 1rpx dashed $app-line;
+  padding-bottom: 2rpx;
+}
+
+.undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  padding: 18rpx 24rpx;
+  background: $app-canvas;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-lg;
+  flex-shrink: 0;
+}
+
+.undo__text {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.undo__btn {
+  font-size: $text-sm;
   font-weight: 600;
   color: $app-ink;
 }

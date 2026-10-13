@@ -2,19 +2,26 @@
 import { ref, watch } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import {
+  deleteCombo,
   exportFoods,
   getFoodCount,
   importFoods,
+  listCombos,
   listFoods,
+  type FoodComboVO,
   type FoodItem,
   type ImportResult
 } from '@/api/nutrition'
 import { ensureLogin } from '@/utils/guard'
+import ComboEditSheet from '@/components/ComboEditSheet.vue'
 
 // ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
 
 const PAGE_SIZE = 100
+
+/** 页签：食物库 / 食物组合（ADR 0012）。 */
+const tab = ref<'food' | 'combo'>('food')
 
 const list = ref<FoodItem[]>([])
 const total = ref(0)
@@ -26,6 +33,7 @@ const keyword = ref('')
 onShow(() => {
   if (!ensureLogin()) return
   void reload()
+  void loadCombos()
 })
 
 /** 重新加载第一页（进入页面 / 换关键词时）：并取回总数用于「到底」判断与展示。 */
@@ -66,6 +74,58 @@ async function loadMore() {
 
 onReachBottom(() => void loadMore())
 
+// ── 食物组合（一串食物 ＋ 固定克数）──
+
+const combos = ref<FoodComboVO[]>([])
+const comboSheet = ref({ show: false, editing: null as FoodComboVO | null })
+
+async function loadCombos() {
+  try {
+    combos.value = await listCombos()
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+/** 点组合 → 编辑 / 删除。 */
+function onComboTap(c: FoodComboVO) {
+  uni.showActionSheet({
+    itemList: ['编辑', '删除'],
+    success: ({ tapIndex }) => {
+      if (tapIndex === 0) {
+        comboSheet.value = { show: true, editing: c }
+      } else if (tapIndex === 1) {
+        removeCombo(c)
+      }
+    }
+  })
+}
+
+/** 删除组合：连带明细一起删；已记录的历史是快照，不受影响。 */
+function removeCombo(c: FoodComboVO) {
+  uni.showModal({
+    title: '删除组合？',
+    content: `「${c.name}」将被删除。已记录的历史不受影响。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    success: async ({ confirm }) => {
+      if (!confirm) return
+      try {
+        await deleteCombo(c.id)
+        combos.value = combos.value.filter((x) => x.id !== c.id)
+        uni.showToast({ title: '已删除', icon: 'none' })
+      } catch {
+        // request 层已统一提示
+      }
+    }
+  })
+}
+
+function onComboSaved() {
+  comboSheet.value = { show: false, editing: null }
+  void loadCombos()
+}
+
 // 关键词防抖（服务端搜索）
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(keyword, () => {
@@ -78,6 +138,10 @@ function goBack() {
 }
 
 function goNew() {
+  if (tab.value === 'combo') {
+    comboSheet.value = { show: true, editing: null }
+    return
+  }
   uni.navigateTo({ url: '/pages/food-edit/index' })
 }
 
@@ -143,11 +207,24 @@ function copyExport() {
   <view class="foods">
     <view class="foods__head">
       <text class="foods__back" @click="goBack">‹</text>
-      <text class="foods__title">食物库</text>
-      <text class="foods__new" @click="goNew">+ 新增</text>
+      <text class="foods__title">{{ tab === 'combo' ? '食物组合' : '食物库' }}</text>
+      <text class="foods__new" @click="goNew">{{ tab === 'combo' ? '+ 新建' : '+ 新增' }}</text>
     </view>
 
-    <view class="foods__body">
+    <view class="tabs">
+      <text class="tabs__item" :class="{ 'tabs__item--on': tab === 'food' }" @click="tab = 'food'">
+        食物
+      </text>
+      <text
+        class="tabs__item"
+        :class="{ 'tabs__item--on': tab === 'combo' }"
+        @click="tab = 'combo'"
+      >
+        组合
+      </text>
+    </view>
+
+    <view v-if="tab === 'food'" class="foods__body">
       <view class="search">
         <wd-icon name="search" size="16px" color="#8a8f98" />
         <input
@@ -187,6 +264,27 @@ function copyExport() {
         <view v-else-if="loadingMore" class="flist__more">加载中…</view>
         <view v-else-if="finished && list.length > 0" class="flist__more">
           共 {{ total }} 种食物
+        </view>
+      </view>
+    </view>
+
+    <!-- 组合页签：列表（点条目 → 编辑 / 删除） -->
+    <view v-if="tab === 'combo'" class="foods__body">
+      <text class="ops__note">
+        组合＝一串「食物 ＋ 固定克数」。记录一餐时在记录弹层里点一下即可整份加入；组合的改动不影响已记录的历史
+      </text>
+      <view class="clist">
+        <view v-for="c in combos" :key="c.id" class="crow" @click="onComboTap(c)">
+          <view class="crow__mid">
+            <text class="crow__name">{{ c.name }}</text>
+            <text class="crow__sub ft-num">
+              {{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡
+            </text>
+          </view>
+          <text class="frow__go">›</text>
+        </view>
+        <view v-if="combos.length === 0" class="flist__empty">
+          还没有组合——点右上「+ 新建」，或在记录一餐时用「存为组合」
         </view>
       </view>
     </view>
@@ -237,6 +335,14 @@ function copyExport() {
         再复制一次
       </view>
     </view>
+
+    <!-- 组合编辑弹层（新建 / 编辑共用） -->
+    <ComboEditSheet
+      v-if="comboSheet.show"
+      :combo="comboSheet.editing"
+      @close="comboSheet.show = false"
+      @saved="onComboSaved"
+    />
   </view>
 </template>
 
@@ -270,6 +376,26 @@ function copyExport() {
   color: $app-ink;
   width: 120rpx;
   text-align: right;
+}
+
+/* ── 页签 ── */
+.tabs {
+  display: flex;
+  gap: 44rpx;
+  padding: 6rpx 32rpx 0;
+}
+
+.tabs__item {
+  font-size: $text-base;
+  color: $app-ink-muted;
+  padding: 10rpx 0;
+  border-bottom: 4rpx solid transparent;
+}
+
+.tabs__item--on {
+  color: $app-ink;
+  font-weight: 600;
+  border-bottom-color: $app-ink;
 }
 
 .foods__body {
@@ -409,6 +535,46 @@ function copyExport() {
   font-size: $text-xs;
   color: $app-ink-subtle;
   border-top: 1rpx solid $app-line-soft;
+}
+
+/* ── 组合列表 ── */
+.clist {
+  background: $app-surface;
+  border: 1rpx solid $app-line-soft;
+  border-radius: $radius-lg;
+  overflow: hidden;
+}
+
+.crow {
+  display: flex;
+  align-items: center;
+  padding: 26rpx 28rpx;
+}
+
+.crow + .crow {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.crow__mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.crow__name {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crow__sub {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
 }
 
 /* ── 弹层 ── */
