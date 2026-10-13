@@ -20,15 +20,37 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-/** 选一张照片（相册/相机），返回临时路径（H5 下是 blob URL）；取消返回 null。 */
-export function choosePhoto(): Promise<string | null> {
+/** 选图结果：path＝选到的临时路径；cancelled＝用户主动取消；error＝真失败的原因。 */
+export interface ChoosePhotoResult {
+  path: string | null
+  cancelled: boolean
+  error?: string
+}
+
+/**
+ * 选一张照片（相册/相机）。
+ *
+ * ⚠️ 必须把「用户取消」与「真失败（权限被拒／浏览器拦截／环境不支持）」区分开：
+ * 早先的实现把两者一并 resolve(null)，于是任何异常都表现为「点了没反应」，
+ * 用户看不到任何提示、也无从排查（真机尤其容易踩到）。
+ */
+export function choosePhoto(): Promise<ChoosePhotoResult> {
   return new Promise((resolve) => {
     uni.chooseImage({
       count: 1,
       sizeType: ['original'],
       sourceType: ['album', 'camera'],
-      success: (res) => resolve((res.tempFilePaths && res.tempFilePaths[0]) || null),
-      fail: () => resolve(null)
+      success: (res) => {
+        const path = (res.tempFilePaths && res.tempFilePaths[0]) || null
+        // 空结果也算取消：部分环境用户取消时不给 cancel 事件、只回空数组，
+        // 若按「失败」处理会平白弹一次错误提示。
+        resolve({ path, cancelled: !path })
+      },
+      fail: (err) => {
+        const msg = String((err as { errMsg?: string } | undefined)?.errMsg || '')
+        // uni 约定：用户取消 → "chooseImage:fail cancel"；其余均为真失败
+        resolve({ path: null, cancelled: msg.includes('cancel'), error: msg || 'chooseImage:fail' })
+      }
     })
   })
 }
@@ -73,8 +95,15 @@ export async function pickAndUploadPhoto(
   meal: string,
   quality: PhotoQuality
 ): Promise<boolean> {
-  const path = await choosePhoto()
-  if (!path) return false
+  const picked = await choosePhoto()
+  if (picked.cancelled) return false
+  if (!picked.path) {
+    // 真失败：让用户看见原因，别再静默（否则表现就是「点了没反应」）
+    console.warn('[photo] 打开相机/相册失败：', picked.error)
+    uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+    return false
+  }
+  const path = picked.path
   try {
     const original = await (await fetch(path)).blob()
     const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
