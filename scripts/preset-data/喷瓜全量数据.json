@@ -1,0 +1,36 @@
+{
+  "食物名": "喷瓜",
+  "说明": "主人 2026-10-13 提供的成分表数据。蛋白/脂肪/B族维生素/硒等无可靠测定数据按 0 填写；能量按 Atwater 由碳水反推（1.2 kcal）。胡萝卜素本库无对应字段（仅记录）。",
+  "fields": {
+    "water": 92,
+    "insolubleFiber": 0.3,
+    "va": 30,
+    "vc": 17,
+    "ve": 1.23,
+    "potassium": 203,
+    "calcium": 74,
+    "phosphorus": 35,
+    "magnesium": 22,
+    "sodium": 2.9,
+    "iron": 2.3,
+    "zinc": 0.28,
+    "copper": 0.33,
+    "manganese": 0.12,
+    "protein": 0,
+    "fat": 0,
+    "carb": 0.3,
+    "kcal": 1.2,
+    "vb1": 0,
+    "vb2": 0,
+    "vb6": 0,
+    "vb12": 0,
+    "niacin": 0,
+    "folate": 0,
+    "pantothenic": 0,
+    "biotin": 0,
+    "selenium": 0
+  },
+  "无对应字段": {
+    "胡萝卜素 μg": 180
+  }
+}

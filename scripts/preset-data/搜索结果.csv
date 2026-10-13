@@ -1,0 +1,195 @@
+﻿序号,食物名,能量kcal,蛋白g,脂肪g,碳水g,钠mg,数据来源,备注
+1,葡萄糖,375,0,0,100,0,USDA FoodData Central #580618 (GLUCOSE TABLETS),品牌纯葡萄糖片（Meijer）；USDA 的 SR Legacy 与 Foundation 均无纯葡萄糖/右旋糖条目
+2,绵白糖,387,0,0,99.98,1,USDA FoodData Central #169655 (Sugars,granulated)
+3,蔗糖,387,0,0,99.98,1,USDA FoodData Central #169655 (Sugars,granulated)
+4,果糖,368,0,0,100,12,USDA FoodData Central #169896 (Sweeteners,tabletop
+5,乳糖,,,,,,,无可靠数据：USDA 无纯乳糖条目（试过 lactose、lactose monohydrate、lactose powder；SR Legacy / Foundation / Branded 均无）
+6,麦芽糖,318,6.2,0,71.3,35,USDA FoodData Central #169660 (Syrups,malt)
+7,蜂蜜,304,0.3,0,82.4,4,USDA FoodData Central #169640 (Honey),蜂蜜（纯）
+8,胶质软糖,396,0,0,98.9,44,"USDA FoodData Central #167989 (Candies, gumdrops, starch jelly pieces)","SR Legacy 层级的胶质软糖（淀粉软糖）条目，数值与 FNDDS「Candy, gummy」一致，取层级更高者"
+9,巧克力,535,7.65,29.66,59.4,79,USDA FoodData Central #167587 (Candies,milk chocolate)
+10,MM 巧克力,492,4.33,21.13,71.19,61,"USDA FoodData Central #169583 (Candies, MARS SNACKFOOD US, M&M's Milk Chocolate Candies)",SR Legacy 里的 M&M's 牛奶巧克力豆（与 Branded 同款数值相近），按数据类型优先级取条目层更高者
+11,方糖,387,0,0,99.98,1,"USDA FoodData Central #169655 (Sugars, granulated)",USDA 无方糖专属条目；方糖为砂糖压制成型，营养等同砂糖，故取 granulated
+12,粗麦粉（蒸）,83,3.08,0.24,18.58,5,USDA FoodData Central #170287 (Bulgur,cooked)
+13,面条（强化蛋白质，细煮）,164,8.86,0.21,30.88,5,"USDA FoodData Central #168934 (Spaghetti, protein-fortified, cooked, enriched (n x 6.25))",煮熟蛋白质强化细面
+14,面条（全麦粉，细）,149,5.99,1.71,30.07,4,USDA FoodData Central #168910 (Pasta,whole-wheat
+15,面条（硬质小麦粉，细煮）,158,5.8,0.93,30.86,1,USDA FoodData Central #169737 (Pasta,cooked
+16,线面条（实心，细）,158,5.8,0.93,30.86,1,"USDA FoodData Central #169737 (Pasta, cooked, enriched, without added salt)",熟制；USDA SR Legacy 无普通实心细面条（spaghetti）熟制条目（仅菠菜面与蛋白强化面），以通心粉熟制未加盐条目近似；与 15 同源，中式面条一般不额外加盐
+17,面条（小麦粉，硬，扁粗）,124,4.37,0.98,25.12,74,USDA FoodData Central #168902 (Pasta,homemade
+18,面条（硬质小麦粉，加鸡蛋，粗）,138,4.54,2.07,25.16,5,"USDA FoodData Central #169732 (Noodles, egg, enriched, cooked)",熟品，未加盐；USDA 标准「鸡蛋面」条目，与「加鸡蛋」的描述直接对应
+19,面条（硬质小麦粉，细）,371,13.04,1.51,74.67,6,USDA FoodData Central #169736 (Pasta,dry
+20,面条（挂面，全麦粉）,352,13.87,2.93,73.37,6,USDA FoodData Central #169738 (Pasta,whole-wheat
+21,馒头（全麦粉）,,,,,,,无可靠数据：USDA 无中式馒头/全麦蒸面团条目（试过 steamed bun、mantou、whole wheat steamed bread，只返回面包、汉堡胚或带馅包）
+22,稻麸,316,13.35,20.85,49.69,5,USDA FoodData Central #169713 (Rice bran,crude)
+23,大米饭（籼米，糙米）,123,2.74,0.97,25.58,4,USDA FoodData Central #169704 (Rice,brown
+24,大米饭（粳米，糙米）,112,2.32,0.83,23.51,1,USDA FoodData Central #168875 (Rice,brown
+25,黏米饭 / 含直链淀粉高，煮,,,,,,,无可靠数据：USDA 无按直链淀粉含量区分的米饭条目（试过 amylose rice、high amylose、rice cooked high amylose）
+26,黏米饭 / 含直链淀粉低，煮,,,,,,,无可靠数据：USDA 无按直链淀粉含量区分的米饭条目（试过 amylose rice、low amylose、rice cooked low amylose）
+27,黑米饭,145,2.86,0,33.33,5,USDA FoodData Central #603381 (COOKED BLACK RICE),煮熟黑米（品牌即食商品；SR Legacy 无黑米饭条目）
+28,速冻米饭,,,,,,,无可靠数据：USDA 无标注冷冻的米饭条目（试过 frozen cooked rice、frozen steamed rice、FROZEN COOKED WHITE RICE；候选 #356556 COOKED WHITE RICE 无法确认冷冻状态）
+29,糯米饭,97,2.02,0.19,21.09,5,USDA FoodData Central #169711 (Rice,white
+30,大米糯米粥,39,0.8,0.08,8.4,234,USDA FoodData Central #2708418 (Congee),粥类（Survey FNDDS 烹调制成品口径，含盐调味）
+31,黑米粥,,,,,,,"无可靠数据：USDA 无黑米粥/煮熟黑米条目（Foundation 仅有生黑米 Rice, black, unenriched, raw #2710825；Branded 只有韩式即食黑芝麻米粥，非黑米粥）。已试关键词 black rice porridge、black rice、rice porridge。液体按每 100ml"
+32,大麦粉,345,10.5,1.6,74.52,4,USDA FoodData Central #169739 (Barley flour or meal),干，生（大麦粉/大麦面）
+33,黑麦（整粒，煮）,,,,,,,无可靠数据：USDA 无煮熟整粒黑麦，仅有干黑麦粒 Rye grain #168884（状态不符）。已试关键词 rye grain、rye berries、rye cooked、rye（SR Legacy/Foundation）
+34,玉米面粥,54,0.66,0.49,11.74,8,"USDA FoodData Central #167627 (Mush, blue corn with ash (Navajo))",玉米面糊（mush），每 100g≈100ml
+35,玉米糁粥,65,1.23,0.39,13.86,2,"USDA FoodData Central #171672 (Cereals, corn grits, yellow, regular and quick, enriched, cooked with water, without salt)",玉米糁水煮成粥，未加盐；每 100g≈100ml
+36,玉米饼,219,5.48,5.38,37.14,270,"USDA FoodData Central #168070 (Restaurant, Latino, arepa (unleavened cornmeal bread))",未发酵玉米面饼（arepa），餐馆制成品
+37,玉米片（市售）,384,5.9,0.91,88.01,571,"USDA FoodData Central #174648 (Cereals ready-to-eat, RALSTON Corn Flakes)",市售玉米片早餐谷物（干）
+38,玉米片（高纤维，市售）,,,,,,,无可靠数据：USDA 无高纤维玉米片条目（SR Legacy/FNDDS 只有普通玉米片；HEALTH VALLEY FIBER 7 Flakes #172981 为杂粮片非玉米片；Branded 检索 high fiber corn flakes 无对应商品）
+39,米饼,392,7.1,4.3,81.1,71,"USDA FoodData Central #168107 (Rice cake, cracker (include hain mini rice cakes))",市售膨化米饼（含盐）
+40,荞麦面馒头,,,,,,,无可靠数据：USDA 无馒头类条目（仅有荞麦粒 #170286、荞麦粉 #170687、熟荞麦仁 #170686，非荞麦面馒头）。已试 buckwheat mantou、steamed bun、mantou
+41,燕麦麸,246,17.3,7.03,66.22,4,"USDA FoodData Central #168872 (Oat bran, raw)",燕麦麸（干，生）
+42,莜麦饭（整粒）,,,,,,,无可靠数据：USDA 无莜麦/裸燕麦条目（naked oats、hulless oats 均无对应项；仅有燕麦片粥、燕麦麸等），属中国特有食物
+43,燕麦片粥,71,2.54,1.52,12.0,4,"USDA FoodData Central #173905 (Cereals, oats, regular and quick, unenriched, cooked with water (includes boiling and microwaving), without salt)",燕麦片水煮成粥，未加盐；每 100g≈100ml
+44,即食燕麦粥,68,2.37,1.36,11.67,49,"USDA FoodData Central #171662 (Cereals, oats, instant, fortified, plain, prepared with water (boiling water added or microwaved))",即食燕麦片加热水冲调（熟），每 100g≈100ml
+45,白面包,266,8.85,3.33,49.42,490,"USDA FoodData Central #174924 (Bread, white, commercially prepared (includes soft bread crumbs))",市售白面包
+46,全麦（全麦面包）,252,12.45,3.5,42.71,455,"USDA FoodData Central #172688 (Bread, whole-wheat, commercially prepared)",市售全麦面包
+47,面包（未发酵小麦）,395,10.0,1.4,83.7,0,"USDA FoodData Central #172740 (Crackers, matzo, plain)",未发酵小麦薄饼（matzo，无盐）
+48,印度卷饼,297,11.25,7.45,46.36,409,"USDA FoodData Central #171844 (Bread, chapati or roti, plain, commercially prepared)",chapati/roti，市售制成品
+49,薄煎饼（美式）,227,6.4,9.7,28.3,439,"USDA FoodData Central #175009 (Pancakes, plain, prepared from recipe)",美式 pancake，按标准配方制作（含蛋、奶、油脂）
+50,意大利面（精制面粉）,158,5.8,0.93,30.86,1,"USDA FoodData Central #169737 (Pasta, cooked, enriched, without added salt)",煮熟，精制小麦粉，未加盐
+51,意大利面（全麦）,149,5.99,1.71,30.07,4,"USDA FoodData Central #168910 (Pasta, whole-wheat, cooked (Includes foods for USDA's Food Distribution Program))",煮熟，全麦
+52,乌冬面,124,2.8,0.2,28.0,116,USDA FoodData Central #2430260 (UDON NOODLES),熟湿乌冬面（Branded；USDA 无 SR Legacy/Foundation 乌冬条目）
+53,饼干（小麦片）,455,7.3,16.4,70.73,699,"USDA FoodData Central #174985 (Crackers, wheat, regular)",市售小麦饼干
+54,马铃薯（用微波炉烤）,105,2.44,0.1,24.24,8,"USDA FoodData Central #170094 (Potatoes, microwaved, cooked in skin, flesh and skin, without salt)",微波炉烤，带皮（肉+皮），未加盐
+55,马铃薯（烧烤，无油脂）,93,2.5,0.13,21.15,10,"USDA FoodData Central #170093 (Potatoes, baked, flesh and skin, without salt)",烘烤，带皮（肉+皮），无油脂，未加盐
+56,马铃薯泥,83,1.91,0.57,17.57,302,"USDA FoodData Central #170493 (Potatoes, mashed, home-prepared, whole milk added)",家常土豆泥（加全脂牛奶）
+57,马铃薯片（油炸）,532,6.39,33.98,53.83,527,"USDA FoodData Central #169677 (Snacks, potato chips, plain, salted)",市售油炸薯片（含盐）
+58,炸薯条,312,3.43,14.73,41.44,210,"USDA FoodData Central #170698 (Fast foods, potato, french fried in vegetable oil)",快餐炸薯条（植物油炸）
+59,甘薯（红，煮）,76,1.37,0.14,17.72,27,"USDA FoodData Central #168484 (Sweet potato, cooked, boiled, without skin)",煮熟，去皮；USDA 未区分红心品种
+60,粉丝汤（豌豆）,,,,,,,"无可靠数据：USDA 无豌豆粉丝汤（仅有干制粉丝如 Noodles, chinese, cellophane or long rice (mung beans), dehydrated #174258，为干粉丝非汤品）。已试 pea starch noodle soup、glass noodle、cellophane noodle"
+61,黄豆（罐头）,,,,,,,无可靠数据（USDA FoodData Central 无罐头黄豆条目）；无可靠数据；试过关键词 canned soybeans / soybeans canned / Soybeans mature seeds canned，覆盖 SR Legacy、Foundation、Survey (FNDDS)、Branded 四种 dataType，均无匹配。USDA 只有生黄豆 #174270、干炒黄豆 #172441、水煮黄豆 #174271 与 FNDDS 熟黄豆 #2707388，无罐头制品
+62,黄豆挂面（有面粉）,126,0.04,0.04,31.4,3,"USDA FoodData Central #2707450 (Vermicelli, made from soybeans)",近似替代（存疑）；USDA 无含小麦粉的黄豆挂面条目，采用 FNDDS「黄豆粉丝」。该 FNDDS 值应为熟制/即食口径（126kcal 明显低于干品），与 64 绿豆挂面（干制品 351kcal）口径不同，使用时注意区分
+63,豆腐（冻）,76,8.08,4.78,1.87,7,"USDA FoodData Central #172476 (Tofu, raw, regular, prepared with calcium sulfate)",USDA 无含水冻豆腐条目（仅有脱水冻豆腐 #172450，477kcal，与中式冻豆腐不可比）；以石膏点制普通豆腐近似，未经冷冻工艺；《中国食物成分表》冻豆腐约 81~105 kcal/100g
+64,绿豆挂面,84,0.04,0.01,20.7,5,"USDA FoodData Central #2708355 (Long rice noodles, made from mung beans, cooked)",熟制口径（与 62 黄豆挂面统一为熟制粉丝口径）；干品见 #174258（351kcal）
+65,蚕豆（五香）,110,7.6,0.4,19.65,241,"USDA FoodData Central #173798 (Broadbeans (fava beans), mature seeds, cooked, boiled, with salt)",近似替代（存疑）；USDA 无五香调味蚕豆条目（已试 broad beans spiced、fava beans Branded，均无五香调味型），采用成熟蚕豆水煮（加盐）近似，钠 241mg 来自煮制盐水而非五香调料
+66,扁豆（红，小）,116,9.02,0.38,20.13,2,"USDA FoodData Central #172421 (Lentils, mature seeds, cooked, boiled, without salt)",USDA 无熟制红扁豆，改用通用熟扁豆以与 67 同为熟制口径（生熟差异远大于红绿差异）；生红扁豆见 #174284（358kcal）
+67,扁豆（绿，小）,116,9.02,0.38,20.13,2,"USDA FoodData Central #172421 (Lentils, mature seeds, cooked, boiled, without salt)","近似替代（存疑）；USDA 无绿扁豆专属条目（SR Legacy 扁豆仅区分 pink or red），采用通用扁豆成熟种子水煮不加盐；生品见 Lentils, raw #172420（352kcal）"
+68,扁豆（绿，小，罐头）,166,8.36,6.84,18.7,325,"USDA FoodData Central #2707426 (Lentils, from canned)","近似替代（存疑）；USDA 无绿色小扁豆罐头条目（SR Legacy、Foundation 均无罐头扁豆），采用 FNDDS「Lentils, from canned」。注意该 FNDDS 值为美国膳食调查的即食形态，脂肪 6.84g 含烹调油脂，显著高于清水罐头扁豆"
+69,小扁豆汤（罐头）,43,2.48,0.64,7.22,264,"USDA FoodData Central #2707460 (Soup, lentil, canned)","罐头扁豆汤（即食）；液体按每100g≈100ml。SR Legacy 仅有「Soup, lentil with ham, canned, ready-to-serve」#171549（含火腿，56kcal/钠532mg），语义不符故改用 FNDDS 纯扁豆汤条目"
+70,利马豆（棉豆）,115,7.8,0.38,20.88,2,"USDA FoodData Central #174253 (Lima beans, large, mature seeds, cooked, boiled, without salt)",大粒成熟利马豆（棉豆/黄油豆），水煮不加盐，熟品口径；生干品见 #174252（338kcal）
+71,利马豆（加 5 克蔗糖）,,,,,,,无可靠数据（USDA 无添加蔗糖的利马豆条目）；无可靠数据；已试 lima beans sugar / lima beans canned sugar / sweetened lima beans，SR Legacy 罐头利马豆仅 #169136（regular pack）与 #169317（no salt added），均不含蔗糖。本条需以 70 的基础值另加 5g 蔗糖折算，属推算值非 USDA 实测值，故留空
+72,利马豆（加 10 克蔗糖）,,,,,,,无可靠数据（USDA 无添加蔗糖的利马豆条目）；无可靠数据；同上，USDA 无加糖利马豆条目，需以 70 的基础值另加 10g 蔗糖折算，属推算值非 USDA 实测值，故留空
+73,利马豆（嫩，冷冻）,132,7.59,0.44,25.14,52,"USDA FoodData Central #169955 (Lima beans, immature seeds, frozen, baby, unprepared)",冷冻嫩利马豆（baby 小粒型，未烹调）；同类 fordhook 型见 #169953（106kcal/蛋白6.4/碳水19.8/钠58）
+74,鹰嘴豆（罐头）,139,7.05,2.77,22.53,246,"USDA FoodData Central #173800 (Chickpeas (garbanzo beans, bengal gram), mature seeds, canned, drained solids)",罐头鹰嘴豆，沥干固形物；若按连汤液口径见 #175206（88kcal/蛋白4.92/脂肪1.95/碳水13.5/钠278）
+75,咖喱鹰嘴豆（罐头）,115,5.38,2.69,17.69,269,"USDA FoodData Central #2549646 (CHANA MASALA GARBANZO BEANS, CHANA MASALA)",Branded（Wegmans，15.5 oz 罐头，类目 Canned & Bottled Beans），配料为鹰嘴豆+水+番茄糊+大豆油+盐+garam masala，即罐头咖喱（masala）鹰嘴豆；SR Legacy 无咖喱鹰嘴豆条目，Branded 中其余候选为冷冻米饭套餐或调味料包，均不符
+76,青刀豆（罐头）,21,1.05,0.41,4.19,268,"USDA FoodData Central #169143 (Beans, snap, green, canned, regular pack, drained solids)",罐头青刀豆，常规包装沥干固形物；连汤液口径见 #169142（15kcal/钠192mg）
+77,黑马诺豆,132,8.86,0.54,23.71,1,"USDA FoodData Central #173735 (Beans, black, mature seeds, cooked, boiled, without salt)",名称存疑，对应 black beans（黑菜豆/黑豆），水煮不加盐；USDA 无「黑马诺豆」条目。生干黑豆见 #173734（341kcal），黑龟豆 black turtle 熟品见 #175187（130kcal）
+78,黑豆汤,46,2.42,0.66,7.71,487,"USDA FoodData Central #172903 (Soup, black bean, canned, prepared with equal volume water)",罐头浓缩黑豆汤按等量水复原后；液体按每100g≈100ml。浓缩未复原见 #171141（91kcal/钠970mg），餐厅即食黑豆汤见 #168068（103kcal/钠311mg）
+79,四季豆（高压处理）,35,1.89,0.28,7.88,1,"USDA FoodData Central #169141 (Beans, snap, green, cooked, boiled, drained, without salt)",近似替代（存疑）；USDA 无高压处理四季豆条目（检索 pressure cooked green beans 命中的均为 pressurized 掼奶油/奶油顶饰），改用普通水煮沥干不加盐
+80,四季豆（罐头）,21,1.05,0.41,4.19,268,"USDA FoodData Central #169143 (Beans, snap, green, canned, regular pack, drained solids)",罐头四季豆，常规包装沥干固形物；与 76 青刀豆（罐头）同为 snap/green beans 罐头，USDA 无更细分条目，故两条取同一条目
+81,芸豆,127,8.67,0.5,22.8,1,"USDA FoodData Central #173740 (Beans, kidney, all types, mature seeds, cooked, boiled, without salt)","芸豆 = kidney beans 豆粒本身，水煮不加盐；已避开易错条目「Beans, liquid from stewed kidney beans」#169885（炖芸豆汤汁）。生干芸豆见 #175193（333kcal），罐头见 #173741（84kcal/钠296mg）"
+82,雪魔芋,25,1.0,0.0,6.0,0.0,"USDA FoodData Central #2173955 (SHIRATAKI KONJAC NOODLES, SPAGHETTI)",Branded 魔芋面制品（shirataki konjac noodles 意面型），配料仅为水+魔芋粉；USDA 无「雪魔芋/魔芋块」条目，以魔芋面近似，钠为标签值 0mg
+83,朝鲜笋,27,2.6,0.3,5.2,4,"USDA FoodData Central #169210 (Bamboo shoots, raw)",朝鲜笋按竹笋（bamboo shoots）对应，生品；USDA 无「朝鲜笋」条目。水煮沥干见 #169211（12kcal/钠4mg），罐头沥干见 #169212（19kcal/钠7mg）
+84,桃（罐头，含果汁）,44,0.63,0.03,11.57,4,"USDA FoodData Central #169930 (Peaches, canned, juice pack, solids and liquids)",罐头黄桃，果汁浸（juice pack），固形物+液体；清水浸见 #169929（24kcal）
+85,桃（罐头，含糖浓度低）,54,0.45,0.03,14.55,5,"USDA FoodData Central #169111 (Peaches, canned, light syrup pack, solids and liquids)",罐头黄桃，低糖糖水（light syrup），固形物+液体
+86,桃（罐头，含糖浓度高）,74,0.45,0.1,19.94,6,"USDA FoodData Central #169112 (Peaches, canned, heavy syrup pack, solids and liquids)",罐头黄桃，高糖糖水（heavy syrup），固形物+液体；特浓糖水见 #169113（96kcal/碳水26.1）
+87,杏罐头，含淡味果汁,48,0.63,0.04,12.34,4,"USDA FoodData Central #173937 (Apricots, canned, juice pack, with skin, solids and liquids)",罐头杏，果汁浸（juice pack）带皮，固形物+液体；重糖水见 #171699（83kcal/碳水21.5）
+88,葡萄（淡黄色，小，无核）,69,0.72,0.16,18.1,2,"USDA FoodData Central #174683 (Grapes, red or green (European type, such as Thompson seedless), raw)",鲜葡萄（欧洲种，Thompson seedless 无核白/淡黄葡萄），生品；已避开罐头条目 #174684（水浸，40kcal）与 #174685（重糖水，76kcal）
+89,巴婆果,,1.1519,,,0.3514,"USDA FoodData Central #2727577 (Pawpaw, peeled, seeded, raw)",Pawpaw（Asimina triloba 巴婆果），已避开木瓜 papaya。USDA Foundation 条目仅公布水分 76.25g、蛋白质 1.151875g、膳食纤维 3.3g、钠 0.3514mg，能量/脂肪/碳水均未测，故三项留空；SR Legacy 无巴婆果条目
+90,香蕉（生）,89,1.09,0.33,22.84,1,"USDA FoodData Central #173944 (Bananas, raw)","USDA 不区分成熟度，无「未熟/青香蕉」专属条目；采用 Bananas, raw（生香蕉），已避开香蕉干 #173945（346kcal）与炸香蕉片 #168849（519kcal）"
+91,草莓酱（果冻）,278,0.37,0.07,68.86,32,USDA FoodData Central #169641 (Jams and preserves),USDA 无草莓专属果酱条目；采用通用果酱（Jams and preserves）；不确定：为各风味综合值
+92,牛奶（加糖和巧克力）,83,3.17,3.39,10.34,60,"USDA FoodData Central #170879 (Milk, chocolate, fluid, commercial, whole, with added vitamin A and vitamin D)",巧克力奶（饮品，非牛奶巧克力糖）；每 100ml
+93,牛奶（加人工甜味剂和巧克力）,29,2.19,0.23,4.51,61,"USDA FoodData Central #173650 (Beverages, dairy drink mix, chocolate, reduced calorie, with aspartame, powder, prepared with water and ice)",代糖巧克力乳饮（aspartame）；每 100ml；USDA 唯一带人工甜味剂的巧克力乳制品条目且为冲调后状态；不确定
+94,降糖奶粉,,,,,,,无可靠数据：中国特有降糖配方奶粉，USDA 无对应条目（试过 diabetic formula milk powder / glucose-lowering milk powder / 中文检索）；此前自动程序误选 Sugars powdered（糖粉）已弃用
+95,克糖奶粉,,,,,,,无可靠数据：中国特有克糖配方奶粉，USDA 无对应条目（试过 sugar-free milk powder / diabetic milk powder / 中文检索）；此前自动程序误选 Sugars powdered（糖粉）已弃用
+96,酸乳酪（低脂，加人工甜味剂）,86,4.93,1.25,13.8,66,"USDA FoodData Central #173463 (Yogurt, vanilla flavor, lowfat milk, sweetened with low calorie sweetener)",低脂酸奶加代糖；USDA 无「原味低脂＋代糖」条目，取最接近的香草味低脂代糖酸奶；不确定
+97,冰淇淋,207,3.5,11,23.6,80,"USDA FoodData Central #167575 (Ice creams, vanilla)",普通全脂冰淇淋（香草味）；GI 表两行 GI 不同但营养数据共用此条
+98,大米（即食，煮 1 分钟）,124,2.18,0.5,26.76,4,"USDA FoodData Central #169710 (Rice, white, long-grain, precooked or instant, enriched, prepared)",即食米煮熟（复水后）
+99,大米（即食，煮 6 分钟）,124,2.18,0.5,26.76,4,"USDA FoodData Central #169710 (Rice, white, long-grain, precooked or instant, enriched, prepared)",即食米煮熟；与 98 同条目，USDA 不区分煮制时间
+100,小麦片,375,7.5,2.5,82.5,575,"USDA FoodData Central #2669433 (WHEAT FLAKES CEREAL, WHEAT FLAKES)",即食小麦片早餐谷物；SR Legacy 无 wheat flakes 条目，改用 Branded；不确定
+101,燕麦片（混合）,388,9.5,6.3,73.8,8,"USDA FoodData Central #169076 (Cereals ready-to-eat, FAMILIA)",muesli 混合燕麦片（瑞士式 FAMILIA 什锦麦片）；不确定
+102,荞麦方便面,99,5.06,0.1,21.44,60,"USDA FoodData Central #168907 (Noodles, japanese, soba, cooked)",荞麦面（煮熟）；USDA 无荞麦方便面条目，取最接近的荞麦面（soba）
+103,即食羹,,,,,,,无可靠数据：中国化条目，USDA 无对应（试过 instant soup / instant congee / ready-to-eat pudding / 中文检索）
+104,营养饼,,,,,,,无可靠数据：中国化条目，USDA 无对应（试过 nutrition biscuit / fortified biscuit / nutritional bar）；未用 KFC biscuit 之类硬凑
+105,全麦维（家乐氏）,301,12.5,4.9,78.1,233,USDA FoodData Central #2518853 (Kellogg's All Bran Cereal Original 18.3oz),家乐氏 All-Bran Original 品牌条目
+106,可可米（家乐氏）,387,4.9,2.3,87.9,422,USDA FoodData Central #2720934 (Kellogg's Cocoa Krispies Cereal 1.1oz),家乐氏 Cocoa Krispies 品牌条目
+107,卜卜米（家乐氏）,387,6.6,0.6,89.4,502,USDA FoodData Central #2525728 (Kellogg's Rice Krispies Cereal 24oz),家乐氏 Rice Krispies 品牌条目（详情接口描述为 24oz 包装）
+108,比萨饼（含乳酪）,266,11.39,9.69,33.33,598,"USDA FoodData Central #173292 (Fast Food, Pizza Chain, 14-inch pizza, cheese topping, regular crust)",含乳酪比萨（连锁店常规饼底）
+109,汉堡包,297,16.52,12.01,31.5,331,"USDA FoodData Central #170693 (Fast foods, hamburger; single, regular patty; plain)",单个普通肉饼汉堡（含面包，无配料）
+110,面包（全麦粉）,252,12.45,3.5,42.71,455,"USDA FoodData Central #172688 (Bread, whole-wheat, commercially prepared)",市售全麦面包
+111,面包（粗面粉）,252,12.45,3.5,42.71,455,"USDA FoodData Central #172688 (Bread, whole-wheat, commercially prepared)",wholemeal 即全小麦，USDA 与 110 同一条目
+112,面包（黑麦粉）,259,8.5,3.3,48.3,603,"USDA FoodData Central #172684 (Bread, rye)",黑麦面包（rye flour）
+113,面包（小麦粉，高纤维）,217,13.32,2.92,42.47,332,"USDA FoodData Central #174921 (Bread, reduced-calorie, wheat)",USDA 无「高纤维小麦面包」条目，取最接近的 reduced-calorie wheat bread（同类高纤低热量）；不确定
+114,面包（小麦粉，去面筋）,248,4.31,5.24,45.78,447,"USDA FoodData Central #174100 (Bread, gluten-free, white, made with rice flour, corn starch, and/or tapioca)",无面筋面包（米粉／玉米淀粉／木薯淀粉）
+115,面包（小麦粉，含水果干）,274,7.9,4.4,52.3,347,"USDA FoodData Central #172680 (Bread, raisin, enriched)",含葡萄干面包（USDA 无通用 fruit bread，取 raisin bread）
+116,面包（50% ~ 80% 碎小麦粒）,260,8.7,3.9,49.5,538,"USDA FoodData Central #172672 (Bread, cracked-wheat)",碎小麦粒面包（cracked-wheat）
+117,面包（75% ~ 80% 大麦粒）,274,10.7,4.53,47.5,450,"USDA FoodData Central #2707788 (Bread, barley)",USDA 无法按大麦粒比例细分，117/118/119 三条共用此 FNDDS 条目
+118,面包（50% 大麦粒）,274,10.7,4.53,47.5,450,"USDA FoodData Central #2707788 (Bread, barley)",USDA 无法按大麦粒比例细分，117/118/119 三条共用此 FNDDS 条目
+119,面包（80% ~ 100% 大麦粉）,274,10.7,4.53,47.5,450,"USDA FoodData Central #2707788 (Bread, barley)",USDA 无法按大麦粉比例细分，117/118/119 三条共用此 FNDDS 条目
+120,面包（黑麦粒）,250,8.7,3.1,47.5,596,"USDA FoodData Central #174918 (Bread, pumpernickel)",黑麦粒／粗全黑麦面包（USDA 无 rye kernel bread，pumpernickel 为最接近条目）
+121,面包（45% ~ 50% 燕麦麸）,236,10.4,4.4,39.8,353,"USDA FoodData Central #172676 (Bread, oat bran)",SR Legacy；普通装燕麦麸面包，USDA 无标注燕麦麸比例的条目
+122,面包（80% 燕麦粒）,269,8.4,4.4,48.5,447,"USDA FoodData Central #172678 (Bread, oatmeal)",SR Legacy；USDA 无「80%燕麦粒」规格条目，取最接近的燕麦粒面包（与 121 的燕麦麸面包区分）
+123,面包（混合谷物）,265,13.4,4.23,43.3,360,"USDA FoodData Central #2707777 (Bread, multigrain)",FNDDS；USDA SR Legacy 无混合谷物面包，取次优的 FNDDS 条目；未用 Branded 杂牌面包
+124,新月形面包,406,8.2,21.0,45.8,384,"USDA FoodData Central #174987 (Croissants, butter)",SR Legacy；原味黄油可颂，已避开 apple / cheese / chocolate 等口味款
+125,棍子面包,272,10.75,2.42,51.88,602,"USDA FoodData Central #172675 (Bread, french or vienna (includes sourdough))",SR Legacy；baguette / French bread；USDA SR 无直接命名称为 baguette 的条目
+126,燕麦粗粉饼干,450,6.2,18.1,68.7,520,"USDA FoodData Central #2707945 (Cookie, oatmeal)",FNDDS；原味燕麦饼干，不含葡萄干（SR Legacy 的燕麦饼干均带葡萄干或为减脂/面团型）
+127,油酥脆饼干,514,5.37,26.2,63.8,353,"USDA FoodData Central #2707964 (Cookie, shortbread)",FNDDS；原味 shortbread，非 reduced fat 款
+128,高纤维黑麦薄脆饼干,366,7.9,1.3,82.2,410,"USDA FoodData Central #172739 (Crackers, crispbread, rye)",SR Legacy；USDA 无标注「高纤维」的黑麦薄脆饼干，取通用黑麦薄脆饼干
+129,竹芋粉饼干,446,6.9,13.8,74.1,335,"USDA FoodData Central #168014 (Cookies, animal crackers (includes arrowroot, tea biscuits))",USDA 无成人款竹芋饼干专属条目，采用含竹芋的动物饼干/茶饼条目近似
+130,小麦饼干,455,7.3,16.4,70.73,699,"USDA FoodData Central #174985 (Crackers, wheat, regular)",SR Legacy；普通小麦饼干，已避开 babyfood 类
+131,苏打饼干,418,9.46,8.64,74.05,941,"USDA FoodData Central #172746 (Crackers, saltines (includes oyster, soda, soup))",SR Legacy；USDA 条目显式注明含 soda crackers
+132,格雷厄姆华饼干,430,6.69,10.6,77.66,516,"USDA FoodData Central #174957 (Cookies, graham crackers, plain or honey (includes cinnamon))",SR Legacy；原味 Graham 饼干，非巧克力涂层款
+133,华夫饼干,291,7.9,14.1,32.9,511,"USDA FoodData Central #175039 (Waffles, plain, prepared from recipe)",SR Legacy；原味华夫；USDA 无「华夫饼干」类条目，用 waffle 对应
+134,香草华夫饼干,285,6.47,9.7,42.98,638,"USDA FoodData Central #175038 (Waffles, plain, frozen, ready-to-heat)",SR Legacy；USDA 查无 vanilla waffle 条目，未能区分口味，暂用另一原味华夫（冷冻复热型）替代，备注待人工复核
+135,膨化薄脆饼干,387,8.2,2.8,81.5,166,"USDA FoodData Central #167966 (Snacks, rice cracker brown rice, plain)",SR Legacy；USDA 无「膨化薄脆饼干 / puffed crispbread」条目，取最接近的膨化米制薄脆饼
+136,闲趣饼干（达能）,,,,,,,无可靠数据；已试关键词 DANONE、Dannon biscuit cookie、闲趣 / crispy biscuit；USDA 中达能仅有酸奶与瓶装水，无任何饼干类商品
+137,牛奶香脆饼干（达能）,446,7.6,13.77,71.73,687,"USDA FoodData Central #174980 (Crackers, milk)",SR Legacy；USDA 无达能品牌对应条目，用通用牛奶（香脆）饼干替代——语义近似但品牌不匹配，建议复核
+138,酥皮糕点,558,7.4,38.5,45.7,253,"USDA FoodData Central #2708053 (Pastry, puff)",FNDDS；puff pastry = 酥皮。SR Legacy 中 pastry 条目均为丹麦酥/馅类，语义不符，故取 FNDDS
+139,爆玉米花,387,12.94,4.54,77.78,8,"USDA FoodData Central #167959 (Snacks, popcorn, air-popped)",SR Legacy；空气膨化、未加油脂/黄油与盐
+140,苹果汁,46,0.1,0.13,11.3,4,"USDA FoodData Central #167771 (Apple juice, canned or bottled, unsweetened, with added ascorbic acid)",SR Legacy；每 100ml；普通不加糖苹果汁，非婴儿果汁、非浓缩汁
+141,水蜜桃汁,50,0.21,0.51,11.93,8,"USDA FoodData Central #168185 (Peach nectar, canned, with added ascorbic acid)",SR Legacy；每 100ml；桃汁 / 桃子花蜜（USDA 无纯桃汁 SR 条目），非婴儿果汁
+142,巴梨汁（罐头）,60,0.11,0.01,15.76,4,"USDA FoodData Central #168186 (Pear nectar, canned, with added ascorbic acid)",SR Legacy；每 100ml；罐头装梨汁（梨花蜜）——USDA 无 100% 梨汁条目，此条为最接近的罐头梨制品液体
+143,菠萝汁（不加糖）,53,0.36,0.12,12.87,2,"USDA FoodData Central #168187 (Pineapple juice, canned or bottled, unsweetened, with added ascorbic acid)",SR Legacy；每 100ml；不加糖菠萝汁，已避开 frozen concentrate 浓缩汁
+144,柚子果汁（不加糖）,37,0.55,0.66,7.54,2,"USDA FoodData Central #174678 (Grapefruit juice, white, canned or bottled, unsweetened)",SR Legacy；每 100ml；白柚汁不加糖款，已避开糖水罐头与浓缩汁
+145,橙汁（纯果汁）,45,0.7,0.2,10.4,1,"USDA FoodData Central #169098 (Orange juice, raw (Includes foods for USDA's Food Distribution Program))",SR Legacy；每 100ml；鲜榨纯橙汁（raw），非罐头/浓缩还原
+146,橘子汁,43,0.5,0.2,10.1,1,"USDA FoodData Central #169925 (Tangerine juice, raw)",SR Legacy；每 100ml；橘子（柑橘/橘）汁，与 145 的甜橙汁区分
+147,可乐饮料,42,0,0.25,10.36,3,"USDA FoodData Central #174852 (Beverages, carbonated, cola, regular)",SR Legacy；每 100ml；普通含糖可乐（未指定品牌，故未选 Branded 的 Coca-Cola）
+148,芬达软饮料,45,0,0,12.58,16,"USDA FoodData Central #1595632 (FANTA, SODA, ORANGE, ORANGE)",Branded；每 100ml；橙味芬达，品牌对应，已避开 ZERO 无糖款
+149,啤酒（澳大利亚产）,43,0.46,0,3.55,4,"USDA FoodData Central #168746 (Alcoholic beverage, beer, regular, all)",SR Legacy；每 100ml；未区分产地，取普通啤酒 regular（非 light）
+150,冰淇淋 / 低脂,180,4.78,4.83,29.46,74,"USDA FoodData Central #167572 (Ice creams, vanilla, light)",SR Legacy；light ice cream = 低脂冰淇淋（香草味），非低脂奶油奶酪
+151,馒头 + 芹菜炒鸡蛋,170.8,6.1,1.4,34.1,161.4,按配比折算：馒头（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mantou）+ 鸡蛋炒芹菜（搜狗明医 mingyi.sogou.com https://mingyi.sogou.com/afd/nutrition_only?params=%7B%22query%22%3A%20%22%E9%B8%A1%E8%9B%8B%E7%82%92%E8%8A%B9%E8%8F%9C%E7%9A%84%E7%83%AD%E9%87%8F%22%2C%20%22food%22%3A%20%22%E9%B8%A1%E8%9B%8B%E7%82%92%E8%8A%B9%E8%8F%9C%22%2C%20%22nutrient%22%3A%20%22%E8%83%BD%E9%87%8F%22%2C%20%22forceQuery%22%3A%200%2C%20%22vrId%22%3A%2070239200%2C%20%22foodId%22%3A%20%2218035%22%7D）,按配比折算（非实测）；馒头:鸡蛋炒芹菜 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（馒头 223/7.0/1.1/47.0/钠165.1）；菜值来源域名 mingyi.sogou.com（鸡蛋炒芹菜 49/3.95/2.14/4.02/钠152.65，菜谱站计算值非实测）；每100g可食部；GI 49 见控糖指南 https://www.gluok.com/fd/8.html
+152,馒头 + 酱牛肉,229.9,14.3,4.3,33.9,376.3,按配比折算：馒头（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mantou）+ 酱牛肉（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/jiangniurou）,按配比折算（非实测）；馒头:酱牛肉 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（馒头 223/7.0/1.1/47.0/钠165.1）；菜值来源域名 hpcn21.com.cn（酱牛肉 246/31.4/11.9/3.2/钠869.2，菜谱站计算值非实测）；每100g可食部；GI 49 见控糖指南 https://www.gluok.com/fd/221.html
+153,馒头 + 黄油,289.5,6.4,10.8,42.3,152.6,按配比折算：馒头（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mantou）+ 黄油（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/huangyou）,按配比折算（非实测）；馒头:黄油 = 9:1（0.9×馒头＋0.1×黄油；黄油作涂抹佐料故用量小）；主食值来源域名 hpcn21.com.cn（馒头 223/7.0/1.1/47.0/钠165.1）；配料值来源域名 hpcn21.com.cn（黄油 888/1.4/98.0/碳水0.0/钠40.3，该站碳水列记为0）；每100g可食部；GI 68 见控糖指南 https://www.gluok.com/fd/222.html
+154,饼 + 鸡蛋炒木耳,192.4,8.8,5.2,29.2,399.4,按配比折算：饼（云健康 hpcn21.com.cn「大饼」条目 https://www.hpcn21.com/shiwuku/dabing/）+ 黑木耳炒鸡蛋（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/heimuerchaojidan）,按配比折算（非实测）；饼:黑木耳炒鸡蛋 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（云健康无独立「烙饼」条目，取最接近的通用「大饼」条目 220.07/8.86/3.67/40.01/钠268.03，配方为小麦面粉250g＋水180g＋精盐3g＋花生油10g；站内虽有一别名「烙饼」的「蔬菜卷饼」174.23千卡，属包蔬菜的卷饼非同类，未采用）；菜值来源域名 hpcn21.com.cn（黑木耳炒鸡蛋 127.71/8.59/8.76/3.97/钠705.94）；每100g可食部；GI 48.4 见控糖指南
+155,饺子 / 三鲜,166.6,6.9,4,25.4,,控糖指南（gluok.com）食物库条目「饺子（三鲜）」https://www.gluok.com/fd/235.html,混合膳/水煮三鲜饺；每100g可食部；GI 28±3；该库未列钠
+156,包子 / 芹菜猪肉,269,9.95,11.08,32.77,,控糖指南（gluok.com）食物库条目「包子（芹菜猪肉）」https://www.gluok.com/fd/236.html,混合膳/家常做法；每100g可食部；GI 39±4；该库未列钠
+157,硬质小麦粉肉馅馄饨,225,7.8,6.1,34.4,,控糖指南（gluok.com）食物库条目「肉馅馄饨（硬质小麦粉皮）」https://www.gluok.com/fd/341.html,混合膳；每100g可食部；GI 39；条目名与清单略有差异（硬质小麦粉皮=硬质小麦粉）；该库未列钠
+158,牛肉面,136,6.43,2.75,21.84,,控糖指南（gluok.com）条目「牛肉面」https://www.gluok.com/fd/238.html（页面标注营养数据来源：中国食物成分表第2版）,混合膳/带汤市售牛肉面（含水，故能量偏低）；每100g；GI 89；该来源未列钠
+159,米饭 + 鱼,108.6,6.78,1.93,16.2,,控糖指南（gluok.com）食物库条目「米饭+鱼」https://www.gluok.com/fd/239.html,混合膳/家常做法；每100g可食部；GI 37；该库未列钠
+160,米饭 + 芹菜炒猪肉,103.0,4.4,1.0,19.5,197.4,按配比折算：米饭（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mifan）+ 芹菜炒肉（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/qincaichaorou/）,按配比折算（非实测）；米饭:芹菜炒肉 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（米饭 116/2.6/0.3/25.9/钠2.5）；菜值来源域名 hpcn21.com.cn（芹菜炒肉 72.59/8.49/2.58/4.64/钠652.22）；每100g可食部；GI 57 见控糖指南 https://www.gluok.com/fd/240.html
+161,米饭 + 炒蒜苗,101.1,2.6,1.3,20.1,86.0,按配比折算：米饭（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mifan）+ 清炒蒜苗（本轮推算：蒜苗/青蒜 云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/qingsuan/ ＋ 花生油 https://www.hpcn21.com/shiwuku/huashengyou ＋ 精盐）,按配比折算（非实测）；米饭:炒蒜苗 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（米饭 116/2.6/0.3/25.9/钠2.5）；菜值来源域名 hpcn21.com.cn——站内无「炒蒜苗」单一菜品条目（仅有掺500g胡萝卜的「胡萝卜炒蒜苗」55.78/1.50/1.96/8.91/钠393.13，不代表清炒蒜苗，未采用），故按允许规则用生蒜苗＋少量油盐推算清炒蒜苗：蒜苗（青蒜）300g 34/2.40/0.30/6.20/钠9.30 ＋ 花生油10g 899/0/99.9/0.1/钠3.0 ＋ 精盐2g（钠786mg），炒后成品按290g计（失水约3%），折算得每100g 66.2/2.5/3.8/6.4/钠280.8；此菜值为推算值非实测；每100g可食部；GI 58 见控糖指南 https://www.gluok.com/fd/241.html
+162,米饭 + 蒜苗炒鸡蛋,102.2,3.5,1.1,20.0,15.0,按配比折算：米饭（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mifan）+ 蛋炒蒜苗（搜狗明医 mingyi.sogou.com https://mingyi.sogou.com/afd/nutrition_only?params=%7B%22query%22%3A%20%22%E8%9B%8B%E7%82%92%E8%92%9C%E8%8B%97%E7%9A%84%E7%83%AD%E9%87%8F%22%2C%20%22food%22%3A%20%22%E8%9B%8B%E7%82%92%E8%92%9C%E8%8B%97%22%2C%20%22nutrient%22%3A%20%22%E8%83%BD%E9%87%8F%22%2C%20%22forceQuery%22%3A%200%2C%20%22vrId%22%3A%2070239200%2C%20%22foodId%22%3A%20%2221806%22%7D）,按配比折算（非实测）；米饭:蛋炒蒜苗 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（米饭 116/2.6/0.3/25.9/钠2.5）；菜值来源域名 mingyi.sogou.com（蛋炒蒜苗 70/5.51/2.94/6.26/钠44.33，菜谱站计算值非实测）；每100g可食部；GI 68 见控糖指南 https://www.gluok.com/fd/242.html
+163,米饭 + 红烧猪肉,224.6,4.1,14.3,19.6,188.0,按配比折算：米饭（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/mifan）+ 红烧肉（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/hongshaorou/）,按配比折算（非实测）；米饭:红烧肉 = 7:3（0.7×主食＋0.3×菜 质量比加权）；主食值来源域名 hpcn21.com.cn（米饭 116/2.6/0.3/25.9/钠2.5）；菜值来源域名 hpcn21.com.cn（红烧肉 478.07/7.5/47.07/5.01/钠620.74；该站配方用油与酱油量大，能量与脂肪高于常见水平）；每100g可食部；GI 73 见控糖指南 https://www.gluok.com/fd/243.html
+164,玉米粉加入人造黄油 / 煮,124.8,1.3,8.3,11.8,173.4,按配比折算：煮玉米糊（logifoodcoach.com https://logifoodcoach.com/database/zh-CN/grits-cooked/；弱来源）+ 人造黄油（百度百科·科普中国 引自中国食物成分表 https://baike.baidu.com/item/%E4%BA%BA%E9%80%A0%E9%BB%84%E6%B2%B9/3047190）,按配比折算（非实测）；玉米糊:人造黄油 = 9:1（0.9×玉米糊＋0.1×人造黄油）；主食值来源域名 logifoodcoach.com（煮玉米糊 59/1.4/0.3/13/钠120）——该来源偏弱：该站自述数据由 USDA 成分加 AI 协助生成、且脂肪0.3g未体现人造黄油，中文权威库（云健康、搜狗明医、中国食物成分表）均无含人造黄油的玉米粉（煮）条目，仅此一家故仍按规则采用并在此标注；配料值来源域名 baike.baidu.com（百度百科·科普中国「人造黄油」717/0.2/80.7/0.7/钠654，引自中国食物成分表；该值为加盐型，无盐型钠仅2mg）；每100g可食部；GI 69 见控糖指南 https://www.gluok.com/fd/244.html
+165,猪肉炖粉条,157.75,6.79,11.74,6.69,,控糖指南（gluok.com）条目「猪头肉炖粉条」（即猪肉炖粉条，GI 17）https://www.gluok.com/fd/245.html；同一组数值亦见选食物网「猪肉炖粉条」https://www.xuanshiwu.com/foods/366115.html（158大卡/蛋白6.79/脂肪11.74/碳水6.69）,混合膳/家常炖菜；每100g可食部；GI 16.7~17；两处来源数值一致；钠无数据
+166,西红柿汤,28.57,0.93,1.55,2.97,,控糖指南（gluok.com）食物库条目「西红柿汤（别名番茄汤）」https://www.gluok.com/fd/246.html,流质汤类；按每100g≈每100ml计；GI 38；该库未列钠
+167,二合面窝头 / 玉米面 + 面粉,194.2,5.3,1.6,40.2,1.5,按配比折算：玉米面(黄)（云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/yumimianhuang）+ 小麦面粉（蛋白质取中国食物成分表「小麦粉(标准粉)」11.2g https://nlc.chinanutri.cn/fq/foodinfo/259.html；其余四项取云健康 hpcn21.com.cn https://www.hpcn21.com/shiwuku/xiaomaimianfen/）；含水率参照 馒头(标准粉) 水分40.5%（中国食物成分表 https://nlc.chinanutri.cn/fq/foodinfo/273.html）,按配比折算（非实测）；玉米面(黄):小麦面粉 = 5:5（二合面各半）干粉加权得 353/9.65/2.9/73.05/钠2.7，再折算为蒸成品；假设成品含水 45%（依据：中国食物成分表 馒头(标准粉) 水分 40.5%，见 https://nlc.chinanutri.cn/fq/foodinfo/273.html，蒸制面食含水多在40~45%，窝头取45%）；干粉值来源域名 hpcn21.com.cn（玉米面(黄) 352/8.10/3.30/75.20/钠2.30；小麦面粉 354/2.50/70.90/钠3.10）；小麦面粉的蛋白质采用中国食物成分表「小麦粉(标准粉)」11.2g（中国疾病预防控制中心营养与健康所 https://nlc.chinanutri.cn/fq/foodinfo/259.html），非云健康的 15.7g——云健康 15.7g 与官方成分表及搜狗明医「小麦粉(标准粉)」的 11.2g 冲突，属孤立值，本行不采用，故干粉蛋白为 (8.10+11.2)/2 = 9.65g、×0.55 = 5.3g 成品蛋白；交叉校验：折算结果 194.2 千卡与百度百科「玉米窝头」194千卡/100g（https://baike.baidu.com/item/%E7%8E%89%E7%B1%B3%E7%AA%9D%E5%A4%B4/15626233）接近，云健康「玉米窝窝头」成品条目为240.25千卡（掺牛奶，https://www.hpcn21.com/shiwuku/yumiwowotou）；每100g可食部；GI 65 见控糖指南 https://www.gluok.com/fd/247.html
+168,牛奶蛋糊 / 牛奶 + 淀粉 + 糖,122,4.2,4.5,15.6,55,SnapCalorie 中文站条目「卡仕达馅料（custard filling）」https://www.snapcalorie.com/nutrition/zh/custard_filling_nutrition.html,"菜谱站计算值，非成分表实测值；未找到「牛奶蛋糊（牛奶+淀粉+糖）」混合膳条目，按允许规则改用站内同名单一食品「卡仕达馅料（custard filling）」；该页直接给出每100g：122千卡/蛋白4.2/脂肪4.5/碳水15.6；钠未直接给每100g，按同页标注的 1杯=238.1g 含钠131mg 换算得 55mg/100g；条目含鸡蛋（牛奶+鸡蛋+糖+玉米淀粉），与清单描述""牛奶+淀粉+糖""略有出入；GI 43 见控糖指南 https://www.gluok.com/fd/248.html；每100g可食部"
+169,黑五类粉,469,36,19.9,36.3,,控糖指南（gluok.com）食物库条目「黑五类粉」https://www.gluok.com/fd/249.html,混合粉（冲调粉，干粉态）；每100g；GI 58；该库未列钠
+170,蜂胶液,,,,,,"中国食物成分表第6版 #219037 蜂胶液（能量/脂肪/碳水化合物均标注""未测""）；USDA FoodData Central 无蜂胶液条目",无可靠数据
+171,蜂王浆,144,,4.0,14,,CIQUAL 法国食品成分表（ANSES），经 mealstack.io/foods/royal-jelly 引用；中国食物成分表第6版 #219041 蜂王浆（蛋白质14.6g、水分67.3g）,鲜蜂王浆；日本市售生蜂王浆标签 156kcal/脂肪3.4g/碳水17.1g（kyowa-corporation.com）可作交叉参考
+172,麻子籽,553,31.6,48.8,8.7,5,"USDA FoodData Central #170148 (Seeds, hemp seed, hulled)",去壳大麻籽/火麻仁，干籽；SR Legacy 条目
+173,薤［皎头］,,,,18.6,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #448 薤[皎头](鲜),鲜鳞茎；碳水18.6g 为官方平台差减法推算值（≈100−水分81.4g），非实测；蛋白质/脂肪无可靠数据。同表薤白(鲜)044502 为蛋白质3.4g/脂肪0.4g/碳水27.1g，可作近似参考
+174,艾蒿,46,5.2,0.3,,,日本文部科学省 日本食品標準成分表（よもぎ/葉/生），经 xuanshiwu.com/slimming/139664.html 转载,鲜叶；日本条目物种为ヨモギ(Artemisia princeps/indica)，中国艾蒿为 Artemisia argyi，仅供参考。中国食物成分表第6版艾蒿水分86.4g，能量/蛋白质/脂肪均未测
+175,白花菜,43,4.8,0.8,,,Kenya Food Composition Tables 2018（FAO/肯尼亚政府）Cleome gynandra 鲜叶，见 infonet-biovision.org、b4fn.org,鲜叶；肯尼亚样本水分85g，中国食物成分表第6版白花菜水分93.7g，两地样品差异较大，数值仅供参考
+176,白花桔梗,77.7,,,19.1,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #534 白花桔梗,鲜品；能量由官方平台 325kJ 换算（325÷4.184=77.7kcal）；碳水19.1g 为差减法推算值（≈100−水分80.9g），非实测、可能显著高于实际可利用碳水；蛋白质/脂肪无可靠数据
+177,百里香（鲜）,101,5.56,1.68,24.45,,"USDA FoodData Central #173470 (Thyme, fresh)",鲜品；中国食物成分表第6版百里香(鲜)水分82.8g、钠36.4mg，与 USDA 水分65.1g 差异较大，两套数值不可混用
+178,刺楸（鲜）,187.4,,,46.1,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #542 刺楸(鲜),鲜芽；能量由官方平台 784kJ 换算；碳水46.1g 为差减法推算值（≈100−水分53.9g），非实测；蛋白质/脂肪无可靠数据
+179,豆腐柴（鲜）,72.7,,,17.9,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #549 豆腐柴(鲜),鲜叶；能量由官方平台 304kJ 换算；碳水17.9g 为差减法推算值（≈100−水分82.1g），非实测；蛋白质/脂肪无可靠数据
+180,独行菜（鲜）,,,,14.0,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #550 独行菜(鲜),鲜品；碳水14.0g 为差减法推算值（≈100−水分86.0g），非实测；脂肪无可靠数据。中国食物成分表第6版同条目蛋白质2.0g、钠120.8mg
+181,独行菜（宽，鲜）,,,,,,中国食物成分表（野菜表）独行菜(宽)：仅水分86.4g、膳食纤维1.7g、钠142.5mg,无可靠数据（能量/蛋白质/脂肪/碳水均未测；官方平台无此条目；检索到的碳水1.7g 与膳食纤维值完全相同，疑为录入错误，未采信）
+182,轮叶党参,,,,,,中国食物成分表2002版 #04-8-029 轮叶党参：仅水分85.7g、膳食纤维4.0g,无可靠数据（能量/蛋白质/脂肪/碳水均未测；官方平台、USDA 无对应条目）
+183,牛至,71.5,,,17.6,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #556 牛至,"鲜品（水分82.4g）；能量由官方平台 299kJ 换算；碳水17.6g 为差减法推算值，非实测。USDA 仅有干牛至 Spices,oregano,dried（265kcal/蛋白质9.0g/脂肪4.28g/碳水68.92g），为干品口径，与本条鲜品不符，未采用"
+184,喷瓜,,,,,,中国食物成分表第6版 喷瓜（能量/蛋白质/脂肪/碳水均未测）；USDA 及各官方库无喷瓜 Ecballium elaterium 条目,无可靠数据
+185,婆罗门参（白，鲜）,82,3.3,0.2,18.6,,"USDA FoodData Central（Salsify, raw / Tragopogon porrifolius），数值见 nutrition-and-you.com/salsify.html 与 marylandbiodiversity.com/view/4447（均引 USDA）",鲜根；USDA 水分77g、钠20mg；国内资料 foodwake.cn/food/314、dachuyi.com 数值与 USDA 一致
+186,婆罗门参（黑，鲜）［鸦葱］,73,3.5,,16.0,,"捷克食品成分数据库 NutriDatabaze #0976 (Black salsify, raw / Scorzonera hispanica)；NEVO 2021（荷兰 RIVM/WUR）",鲜根；捷克库列总碳水16.0g（其中可利用碳水11.8g、膳食纤维4.2g）；NEVO 2021 为 73kcal/蛋白质3.3g/碳水17g
+187,食用黄麻,,,,5.8,,"USDA FoodData Central #168419 (Jute, potherb, raw)；中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #1579 黄麻叶(鲜)",鲜叶；USDA 5.8g，中国食物成分表第6版黄麻叶(鲜) 5.7g（蛋白质4.7g、脂肪0.3g、钠8mg），两者一致
+188,酸模（鲜）,,,,3.2,,"USDA FoodData Central（Dock, raw / Rumex spp.），数值见 marylandbiodiversity.com/view/23336（引 USDA）；《东北野生可食植物》(1993，沈阳军区后勤部军需部等) 酸模鲜品",鲜叶；USDA 水分93g；《东北野生可食植物》载酸模鲜品碳水2g（水分92g），与 USDA 接近
+189,香茅,,,,25.3,,"USDA FoodData Central #168573 (Lemon grass (citronella), raw)",鲜品（茎）；USDA 水分70.6g、钠6mg
+190,小旋花（鲜）［狗儿蔓］,,,,,,未检索到任何公开食物成分数据,无可靠数据（蛋白质/钠均未测；官方平台、USDA 无打碗花属 Calystegia 条目）
+191,珍珠花菜,,,,,,中国食物成分表第6版 #048067 珍珠花菜：水分84.9g、能量17kcal/72kJ、蛋白质1.7g、脂肪0.2g，碳水未测,无可靠数据（碳水未测；官方平台无此条目）
+192,紫花桔梗,,,,,,中国食物成分表第6版 #048068 紫花桔梗：水分81.4g、能量22kcal/94kJ、蛋白质0.9g、脂肪0.1g，碳水未测,无可靠数据（碳水未测；官方平台无此条目）
+193,紫萼香茶菜,,,,,,中国食物成分表第6版 #048069 紫萼香茶菜：水分77g、能量17kcal/72kJ、蛋白质1.7g、脂肪0.2g，碳水未测,无可靠数据（碳水未测；官方平台无此条目）
+194,苣荬菜（尖叶）［取荬菜，苦麻子］,,,,11.6,,中国疾控中心营养与健康所食物成分查询平台 nlc.chinanutri.cn #563 苣荬菜(尖叶)[取荬菜，苦麻子],鲜品；碳水11.6g 为差减法推算值（≈100−水分88.4g），非实测；中国食物成分表第6版同条目能量19kcal/75kJ、蛋白质2g、脂肪0g、膳食纤维0.2g

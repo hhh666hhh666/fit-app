@@ -1,0 +1,788 @@
+{
+  "note": "GI 表（glycemic_index_of_foods.json，259 条）→《中国食物成分表》条目的人工核验映射。2026-10-12 由 AI 逐条审核。规则：宁可少挂、不可错挂；挂载目标以 foodCode 精确定位。gi 字段为清洗后（去'* '前缀）的 GI 表名字；target/code 为成分表条目。未在 mappings 中的 GI 条目＝孤儿，进搜索清单。 每条含 index＝GI 表全局编号（匹配键）。",
+  "mappings": [
+    {
+      "gi": "小麦（整粒煮）",
+      "value": 41,
+      "target": "小麦",
+      "code": "011101",
+      "index": 12
+    },
+    {
+      "gi": "面条（白细，煮）",
+      "value": 41,
+      "target": "面条（富强粉，煮）",
+      "code": "011317",
+      "index": 16
+    },
+    {
+      "gi": "通心面（管状，粗）",
+      "value": 45,
+      "target": "通心面［通心粉］",
+      "code": "011312",
+      "index": 19
+    },
+    {
+      "gi": "苗条（挂面，精制小麦粉）",
+      "value": 55,
+      "target": "挂面（代表值）",
+      "code": "011301x",
+      "note": "原表错字'苗条'；取挂面代表值",
+      "index": 24
+    },
+    {
+      "gi": "馒头（精制小麦粉）",
+      "value": 85,
+      "target": "馒头（代表值）",
+      "code": "011404x",
+      "index": 26
+    },
+    {
+      "gi": "馒头（富强粉）",
+      "value": 88,
+      "target": "馒头（富强粉）",
+      "code": "011411",
+      "index": 27
+    },
+    {
+      "gi": "烙饼",
+      "value": 80,
+      "target": "烙饼（标准粉）",
+      "code": "011403",
+      "index": 28
+    },
+    {
+      "gi": "油条",
+      "value": 75,
+      "target": "油条",
+      "code": "011409",
+      "index": 29
+    },
+    {
+      "gi": "米粉",
+      "value": 54,
+      "target": "米粉",
+      "code": "012410",
+      "index": 31
+    },
+    {
+      "gi": "大米粥",
+      "value": 69,
+      "target": "粳米粥",
+      "code": "012404",
+      "note": "'大米粥'泛称，就近取粳米粥",
+      "index": 32
+    },
+    {
+      "gi": "大米饭（籼米，精米）",
+      "value": 82,
+      "target": "籼米饭（蒸）",
+      "code": "012408",
+      "index": 35
+    },
+    {
+      "gi": "大米饭（粳米，精米）",
+      "value": 90,
+      "target": "粳米饭（蒸）",
+      "code": "012402",
+      "index": 36
+    },
+    {
+      "gi": "大麦（整粒，煮）",
+      "value": 25,
+      "target": "大麦［元麦］",
+      "code": "014101",
+      "index": 44
+    },
+    {
+      "gi": "玉米（甜，煮）",
+      "value": 55,
+      "target": "玉米（鲜）",
+      "code": "013101",
+      "index": 47
+    },
+    {
+      "gi": "玉米面（粗粉，煮）",
+      "value": 68,
+      "target": "玉米面（黄）",
+      "code": "013109",
+      "index": 48
+    },
+    {
+      "gi": "小米（煮）",
+      "value": 71,
+      "target": "小米",
+      "code": "015101",
+      "index": 54
+    },
+    {
+      "gi": "小米粥",
+      "value": 60,
+      "target": "小米粥",
+      "code": "015103",
+      "index": 55
+    },
+    {
+      "gi": "荞麦（黄）",
+      "value": 54,
+      "target": "荞麦",
+      "code": "019005",
+      "index": 57
+    },
+    {
+      "gi": "荞麦面条",
+      "value": 59,
+      "target": "荞麦面",
+      "code": "019010",
+      "index": 58
+    },
+    {
+      "gi": "糜子饭（整粒）",
+      "value": 72,
+      "target": "糜子（带皮）",
+      "code": "019002",
+      "index": 62
+    },
+    {
+      "gi": "燕麦饭（整粒）",
+      "value": 42,
+      "target": "燕麦",
+      "code": "019012",
+      "index": 63
+    },
+    {
+      "gi": "马铃薯",
+      "value": 62,
+      "target": "马铃薯［土豆、洋芋］",
+      "code": "021101",
+      "index": 75
+    },
+    {
+      "gi": "马铃薯（蒸）",
+      "value": 66,
+      "target": "马铃薯（蒸）",
+      "code": "021106",
+      "index": 76
+    },
+    {
+      "gi": "马铃薯（烤）",
+      "value": 60,
+      "target": "马铃薯（烤）",
+      "code": "021105",
+      "index": 77
+    },
+    {
+      "gi": "马铃薯粉条",
+      "value": 13.6,
+      "target": "粉条",
+      "code": "022203",
+      "index": 82
+    },
+    {
+      "gi": "甘薯（山芋）",
+      "value": 54,
+      "target": "甘薯（红心）［山芋、红薯］",
+      "code": "021205",
+      "index": 85
+    },
+    {
+      "gi": "藕粉",
+      "value": 33,
+      "target": "藕粉",
+      "code": "022105",
+      "index": 87
+    },
+    {
+      "gi": "苕粉",
+      "value": 35,
+      "target": "甘薯粉［地瓜粉］",
+      "code": "021204",
+      "index": 88
+    },
+    {
+      "gi": "黄豆（浸泡）",
+      "value": 18,
+      "target": "黄豆",
+      "code": "031104",
+      "index": 90
+    },
+    {
+      "gi": "豆腐（炖）",
+      "value": 32,
+      "target": "豆腐（代表值）",
+      "code": "031301x",
+      "index": 93
+    },
+    {
+      "gi": "豆腐干",
+      "value": 24,
+      "target": "豆腐干（代表值）",
+      "code": "031510x",
+      "index": 95
+    },
+    {
+      "gi": "绿豆",
+      "value": 27,
+      "target": "绿豆（干）",
+      "code": "032101",
+      "index": 96
+    },
+    {
+      "gi": "扁豆",
+      "value": 38,
+      "target": "扁豆（干）",
+      "code": "039101",
+      "index": 99
+    },
+    {
+      "gi": "鹰嘴豆",
+      "value": 33,
+      "target": "鹰嘴豆［桃豆］",
+      "code": "039401",
+      "index": 108
+    },
+    {
+      "gi": "青刀豆",
+      "value": 39,
+      "target": "四季豆［菜豆、芸豆］",
+      "code": "042120",
+      "note": "青刀豆（green bean）与四季豆同物异名",
+      "index": 111
+    },
+    {
+      "gi": "豌豆",
+      "value": 42,
+      "target": "豌豆（干）",
+      "code": "039301",
+      "index": 113
+    },
+    {
+      "gi": "四季豆",
+      "value": 27,
+      "target": "四季豆（菜豆）",
+      "code": "042110",
+      "index": 116
+    },
+    {
+      "gi": "甜菜",
+      "value": 64,
+      "target": "甜菜根（鲜）［甜菜头，糖萝卜］",
+      "code": "041401",
+      "index": 120
+    },
+    {
+      "gi": "胡萝卜（金笋）",
+      "value": 71,
+      "target": "胡萝卜（红）［金笋，丁香萝卜］",
+      "code": "041201",
+      "index": 121
+    },
+    {
+      "gi": "南瓜（倭瓜、番瓜）",
+      "value": 75,
+      "target": "南瓜（鲜）［倭瓜，番瓜］",
+      "code": "043213",
+      "index": 122
+    },
+    {
+      "gi": "麝香瓜",
+      "value": 65,
+      "target": "甜瓜［香瓜］",
+      "code": "066108",
+      "note": "muskmelon 就近取香瓜",
+      "index": 123
+    },
+    {
+      "gi": "山药（薯蓣）",
+      "value": 51,
+      "target": "山药（鲜）［薯蓣，大薯］",
+      "code": "047104",
+      "index": 124
+    },
+    {
+      "gi": "芋头（蒸芋艿 / 毛芋）",
+      "value": 48,
+      "target": "芋头［芋艿、毛芋］",
+      "code": "047203",
+      "index": 126
+    },
+    {
+      "gi": "芦笋",
+      "value": 15,
+      "target": "芦笋（绿）［石刁柏、龙须菜］",
+      "code": "045415",
+      "note": "取绿芦笋",
+      "index": 128
+    },
+    {
+      "gi": "绿菜花",
+      "value": 15,
+      "target": "西兰花［绿菜花］",
+      "code": "045217",
+      "index": 129
+    },
+    {
+      "gi": "菜花",
+      "value": 15,
+      "target": "菜花（白色）［花椰菜］",
+      "code": "045216",
+      "index": 130
+    },
+    {
+      "gi": "芹菜",
+      "value": 15,
+      "target": "芹菜茎",
+      "code": "045312",
+      "index": 131
+    },
+    {
+      "gi": "黄瓜",
+      "value": 15,
+      "target": "黄瓜（鲜）［胡瓜］",
+      "code": "043208",
+      "index": 132
+    },
+    {
+      "gi": "茄子",
+      "value": 15,
+      "target": "茄子（代表值）",
+      "code": "043101x",
+      "index": 133
+    },
+    {
+      "gi": "鲜青豆",
+      "value": 15,
+      "target": "毛豆（鲜）［青豆，菜用大豆］",
+      "code": "042109",
+      "index": 134
+    },
+    {
+      "gi": "莴笋（各种类型）",
+      "value": 15,
+      "target": "莴笋（鲜）［莴苣］",
+      "code": "045324",
+      "index": 135
+    },
+    {
+      "gi": "生菜",
+      "value": 15,
+      "target": "生菜［叶用莴苣］",
+      "code": "045333",
+      "index": 136
+    },
+    {
+      "gi": "青椒",
+      "value": 15,
+      "target": "甜椒［灯笼椒、柿子椒］",
+      "code": "043124",
+      "note": "'青椒'就近取甜椒（菜椒）",
+      "index": 137
+    },
+    {
+      "gi": "西红柿",
+      "value": 15,
+      "target": "番茄［西红柿］",
+      "code": "043119",
+      "index": 138
+    },
+    {
+      "gi": "菠菜",
+      "value": 15,
+      "target": "菠菜（鲜）［赤根菜］",
+      "code": "045301",
+      "index": 139
+    },
+    {
+      "gi": "胡萝卜（煮）",
+      "value": 39,
+      "target": "胡萝卜",
+      "code": "041204",
+      "index": 140
+    },
+    {
+      "gi": "苹果",
+      "value": 36,
+      "target": "苹果（代表值）",
+      "code": "061101x",
+      "index": 141
+    },
+    {
+      "gi": "梨",
+      "value": 36,
+      "target": "梨（代表值）",
+      "code": "061201x",
+      "index": 142
+    },
+    {
+      "gi": "桃",
+      "value": 28,
+      "target": "桃（代表值）",
+      "code": "062101x",
+      "index": 143
+    },
+    {
+      "gi": "杏干",
+      "value": 31,
+      "target": "杏干",
+      "code": "062206",
+      "index": 147
+    },
+    {
+      "gi": "李子",
+      "value": 24,
+      "target": "李子",
+      "code": "062201",
+      "index": 149
+    },
+    {
+      "gi": "樱桃",
+      "value": 22,
+      "target": "樱桃",
+      "code": "062902",
+      "index": 150
+    },
+    {
+      "gi": "葡萄",
+      "value": 43,
+      "target": "葡萄（代表值）",
+      "code": "063101x",
+      "index": 151
+    },
+    {
+      "gi": "葡萄干",
+      "value": 64,
+      "target": "葡萄干",
+      "code": "063107",
+      "index": 152
+    },
+    {
+      "gi": "猕猴桃",
+      "value": 52,
+      "target": "中华猕猴桃［毛叶猕猴桃］",
+      "code": "063909",
+      "index": 154
+    },
+    {
+      "gi": "柑（橘子）",
+      "value": 43,
+      "target": "橘柑子［宽皮桂］",
+      "code": "064203",
+      "note": "取宽皮柑橘类",
+      "index": 155
+    },
+    {
+      "gi": "柚",
+      "value": 25,
+      "target": "柚［文旦］",
+      "code": "064301",
+      "index": 156
+    },
+    {
+      "gi": "菠萝",
+      "value": 66,
+      "target": "菠萝［凤梨，地菠萝］",
+      "code": "065002",
+      "index": 158
+    },
+    {
+      "gi": "芒果",
+      "value": 55,
+      "target": "芒果［抹猛果，望果］",
+      "code": "065011",
+      "index": 159
+    },
+    {
+      "gi": "芭蕉（甘蔗板蕉）",
+      "value": 53,
+      "target": "芭蕉［甘蕉，板蕉，牙蕉］",
+      "code": "065001",
+      "index": 160
+    },
+    {
+      "gi": "香蕉",
+      "value": 52,
+      "target": "香蕉［甘蕉］",
+      "code": "065033",
+      "index": 161
+    },
+    {
+      "gi": "西瓜",
+      "value": 72,
+      "target": "西瓜（代表值）",
+      "code": "066201x",
+      "index": 163
+    },
+    {
+      "gi": "哈密瓜",
+      "value": 70,
+      "target": "哈密瓜",
+      "code": "066103",
+      "index": 164
+    },
+    {
+      "gi": "枣",
+      "value": 42,
+      "target": "枣（鲜）",
+      "code": "062301",
+      "index": 165
+    },
+    {
+      "gi": "花生",
+      "value": 14,
+      "target": "花生（鲜）［落花生，长生果］",
+      "code": "072002",
+      "note": "泛称取花生裸名款",
+      "index": 167
+    },
+    {
+      "gi": "腰果",
+      "value": 25,
+      "target": "腰果（熟）",
+      "code": "071036",
+      "index": 168
+    },
+    {
+      "gi": "牛奶",
+      "value": 27.6,
+      "target": "纯牛奶（代表值，全脂）",
+      "code": "101101x",
+      "index": 169
+    },
+    {
+      "gi": "全脂牛奶",
+      "value": 27,
+      "target": "鲜牛奶（代表值，全脂）",
+      "code": "101187x",
+      "note": "与'牛奶'分挂两条全脂代表值",
+      "index": 172
+    },
+    {
+      "gi": "脱脂牛奶",
+      "value": 32,
+      "target": "纯牛奶（代表值，脱脂）",
+      "code": "101161x",
+      "index": 173
+    },
+    {
+      "gi": "低脂奶粉",
+      "value": 11.9,
+      "target": "低脂奶粉（代表值，高钙高铁）",
+      "code": "102150x",
+      "index": 174
+    },
+    {
+      "gi": "老年奶粉",
+      "value": 40,
+      "target": "中老年配方奶粉（代表值）",
+      "code": "102801x",
+      "note": "'老年奶粉'就近取中老年配方奶粉",
+      "index": 176
+    },
+    {
+      "gi": "酸奶（加糖）",
+      "value": 48,
+      "target": "酸奶",
+      "code": "103001",
+      "index": 178
+    },
+    {
+      "gi": "酸乳酪（普通）",
+      "value": 36,
+      "target": "酸奶（代表值，全脂）",
+      "code": "103001x",
+      "index": 179
+    },
+    {
+      "gi": "酸乳酪（低脂）",
+      "value": 33,
+      "target": "酸奶（低脂）",
+      "code": "103004",
+      "index": 180
+    },
+    {
+      "gi": "豆奶",
+      "value": 19,
+      "target": "豆奶［豆乳］",
+      "code": "031402",
+      "index": 182
+    },
+    {
+      "gi": "酸奶（水果）",
+      "value": 41,
+      "target": "酸奶（果料）",
+      "code": "103005",
+      "index": 184
+    }
+  ],
+  "dropped": [
+    {"index": 78, "gi": "马铃薯（蒸）", "value": 65, "reason": "同食物已有另一条（index 76）已挂载，第二组数据价值低且会造成同名重复，放弃"},
+    {"index": 185, "gi": "豆奶", "value": 34, "reason": "同食物已有另一条（index 182）已挂载，放弃"}
+  ],
+  "searchHints": {
+    "葡萄糖": "glucose（纯糖）",
+    "绵白糖": "white sugar（白糖）",
+    "蔗糖": "sucrose / table sugar",
+    "果糖": "fructose",
+    "乳糖": "lactose",
+    "麦芽糖": "maltose",
+    "蜂蜜": "honey",
+    "胶质软糖": "gummy candy",
+    "巧克力": "chocolate",
+    "MM 巧克力": "M&M's 巧克力豆",
+    "方糖": "sugar cube",
+    "粗麦粉（蒸）": "bulgur, cooked",
+    "面条（强化蛋白质，细煮）": "high-protein pasta, cooked",
+    "线面条（实心，细）": "spaghetti, cooked",
+    "面条（硬质小麦粉，细煮）": "durum wheat pasta, cooked",
+    "面条（硬质小麦粉，加鸡蛋，粗）": "egg pasta, cooked",
+    "面条（硬质小麦粉，细）": "durum wheat pasta",
+    "面条（挂面，全麦粉）": "whole wheat noodles, dry",
+    "面条（全麦粉，细）": "whole wheat noodles",
+    "面条（小麦粉，硬，扁粗）": "手擀面（硬面宽条）",
+    "馒头（全麦粉）": "whole wheat steamed bun 全麦馒头",
+    "稻麸": "rice bran 米糠",
+    "大米饭（籼米，糙米）": "cooked brown rice 糙米饭",
+    "大米饭（粳米，糙米）": "cooked brown rice 糙米饭",
+    "速冻米饭": "frozen cooked rice",
+    "糯米饭": "cooked glutinous rice 糯米饭",
+    "大米糯米粥": "glutinous rice porridge",
+    "黑米饭": "cooked black rice 黑米饭",
+    "黑米粥": "black rice porridge",
+    "大麦粉": "barley flour",
+    "玉米面粥": "cornmeal porridge",
+    "玉米糁粥": "corn grits porridge",
+    "玉米饼": "corn cake / 玉米饼",
+    "玉米片（市售）": "corn flakes",
+    "玉米片（高纤维，市售）": "high-fiber corn flakes",
+    "米饼": "rice cake",
+    "莜麦饭（整粒）": "cooked naked oats 莜麦饭",
+    "白面包": "white bread",
+    "全麦（全麦面包）": "whole wheat bread",
+    "面包（未发酵小麦）": "unleavened bread",
+    "印度卷饼": "roti / chapati",
+    "薄煎饼（美式）": "pancake",
+    "意大利面（精制面粉）": "pasta, refined, cooked",
+    "意大利面（全麦）": "whole wheat pasta, cooked",
+    "乌冬面": "udon noodles, cooked",
+    "饼干（小麦片）": "crackers (wheat)",
+    "马铃薯（用微波炉烤）": "potato, microwaved",
+    "马铃薯（烧烤，无油脂）": "potato, roasted no fat",
+    "马铃薯泥": "mashed potato",
+    "马铃薯片（油炸）": "potato chips",
+    "炸薯条": "french fries",
+    "黄豆（罐头）": "canned soybeans",
+    "黄豆挂面（有面粉）": "soybean noodles",
+    "绿豆挂面": "mung bean noodles",
+    "蚕豆（五香）": "五香蚕豆（零食）",
+    "扁豆（红，小）": "red lentils, cooked",
+    "扁豆（绿，小）": "green lentils, cooked",
+    "扁豆（绿，小，罐头）": "canned green lentils",
+    "小扁豆汤（罐头）": "lentil soup, canned",
+    "利马豆（棉豆）": "lima beans",
+    "利马豆（加 5 克蔗糖）": "lima beans + sugar",
+    "利马豆（加 10 克蔗糖）": "lima beans + sugar",
+    "利马豆（嫩，冷冻）": "lima beans, frozen",
+    "鹰嘴豆（罐头）": "canned chickpeas",
+    "咖喱鹰嘴豆（罐头）": "curried chickpeas, canned",
+    "青刀豆（罐头）": "canned green beans",
+    "四季豆（高压处理）": "pressure-cooked green beans",
+    "四季豆（罐头）": "canned green beans",
+    "黑马诺豆": "（名称存疑，中文原名直接检索）",
+    "黑豆汤": "black bean soup",
+    "芸豆": "kidney beans 芸豆",
+    "雪魔芋": "魔芋制品（konjac）",
+    "朝鲜笋": "（中文原名检索）",
+    "桃（罐头，含果汁）": "canned peaches in juice",
+    "桃（罐头，含糖浓度低）": "canned peaches, light syrup",
+    "桃（罐头，含糖浓度高）": "canned peaches, heavy syrup",
+    "杏罐头，含淡味果汁": "canned apricots in juice",
+    "葡萄（淡黄色，小，无核）": "无核白葡萄 / Thompson seedless",
+    "巴婆果": "pawpaw (Asimina triloba)",
+    "香蕉（生）": "unripe banana",
+    "草莓酱（果冻）": "strawberry jam/jelly",
+    "牛奶（加糖和巧克力）": "chocolate milk",
+    "牛奶（加人工甜味剂和巧克力）": "chocolate milk, artificial sweetener",
+    "降糖奶粉": "（特殊配方奶粉，中文原名检索）",
+    "克糖奶粉": "（特殊配方奶粉，中文原名检索）",
+    "酸乳酪（低脂，加人工甜味剂）": "low-fat yogurt, artificial sweetener",
+    "冰淇淋": "ice cream",
+    "冰淇淋 / 低脂": "ice cream, low-fat",
+    "大米（即食，煮 1 分钟）": "instant rice",
+    "大米（即食，煮 6 分钟）": "instant rice",
+    "小麦片": "wheat flakes",
+    "燕麦片（混合）": "muesli",
+    "荞麦方便面": "buckwheat instant noodles",
+    "即食羹": "（中文原名检索）",
+    "营养饼": "（中文原名检索）",
+    "全麦维（家乐氏）": "Kellogg's All-Bran",
+    "可可米（家乐氏）": "Kellogg's Cocoa Krispies",
+    "卜卜米（家乐氏）": "Kellogg's Rice Krispies",
+    "比萨饼（含乳酪）": "pizza with cheese",
+    "汉堡包": "hamburger",
+    "面包（全麦粉）": "whole wheat bread",
+    "面包（粗面粉）": "wholemeal bread",
+    "面包（黑麦粉）": "rye bread",
+    "面包（小麦粉，高纤维）": "high-fiber wheat bread",
+    "面包（小麦粉，去面筋）": "gluten-free bread",
+    "面包（小麦粉，含水果干）": "fruit bread",
+    "面包（50% ~ 80% 碎小麦粒）": "cracked wheat bread",
+    "面包（75% ~ 80% 大麦粒）": "barley bread",
+    "面包（50% 大麦粒）": "barley bread",
+    "面包（80% ~ 100% 大麦粉）": "barley bread",
+    "面包（黑麦粒）": "rye bread",
+    "面包（45% ~ 50% 燕麦麸）": "oat bran bread",
+    "面包（80% 燕麦粒）": "oat bread",
+    "面包（混合谷物）": "multigrain bread",
+    "新月形面包": "croissant",
+    "棍子面包": "baguette",
+    "燕麦粗粉饼干": "oatmeal cookies",
+    "油酥脆饼干": "shortbread biscuits",
+    "高纤维黑麦薄脆饼干": "high-fiber rye crispbread",
+    "竹芋粉饼干": "arrowroot biscuits",
+    "小麦饼干": "wheat biscuits",
+    "苏打饼干": "soda crackers",
+    "格雷厄姆华饼干": "graham crackers",
+    "华夫饼干": "waffle",
+    "香草华夫饼干": "vanilla waffle",
+    "膨化薄脆饼干": "puffed crispbread",
+    "闲趣饼干（达能）": "Danone 闲趣饼干",
+    "牛奶香脆饼干（达能）": "Danone 牛奶香脆",
+    "酥皮糕点": "pastry",
+    "爆玉米花": "popcorn",
+    "苹果汁": "apple juice",
+    "水蜜桃汁": "peach juice",
+    "巴梨汁（罐头）": "canned pear juice",
+    "菠萝汁（不加糖）": "pineapple juice, unsweetened",
+    "柚子果汁（不加糖）": "grapefruit juice, unsweetened",
+    "橙汁（纯果汁）": "orange juice, pure",
+    "橘子汁": "orange juice",
+    "可乐饮料": "cola",
+    "芬达软饮料": "Fanta",
+    "啤酒（澳大利亚产）": "beer",
+    "蜂胶液": "propolis liquid",
+    "蜂王浆": "royal jelly",
+    "麻子籽": "hemp seed 大麻籽",
+    "薤［皎头］": "藠头 / 薤白",
+    "艾蒿": "mugwort 艾草",
+    "白花菜": "（中文原名检索）",
+    "白花桔梗": "桔梗（白花）",
+    "百里香（鲜）": "thyme, fresh",
+    "刺楸（鲜）": "刺楸芽（楤木属）",
+    "豆腐柴（鲜）": "豆腐柴（观音豆腐原料）",
+    "独行菜（鲜）": "独行菜 / garden cress",
+    "独行菜（宽，鲜）": "独行菜（宽叶）",
+    "轮叶党参": "轮叶党参（羊乳）",
+    "牛至": "oregano",
+    "喷瓜": "squirting cucumber",
+    "婆罗门参（白，鲜）": "salsify（白）",
+    "婆罗门参（黑，鲜）［鸦葱］": "black salsify 鸦葱",
+    "食用黄麻": "jute leaves 黄麻叶",
+    "酸模（鲜）": "sorrel 酸模",
+    "香茅": "lemongrass",
+    "小旋花（鲜）［狗儿蔓］": "打碗花（旋花属）",
+    "珍珠花菜": "（中文原名检索）",
+    "紫花桔梗": "桔梗（紫花）",
+    "紫萼香茶菜": "香茶菜",
+    "苣荬菜（尖叶）［取荬菜，苦麻子］": "苣荬菜（曲麻菜）"
+  }
+}
