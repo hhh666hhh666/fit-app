@@ -1,6 +1,7 @@
 package com.example.fitapp.module.nutrition.controller;
 
 import com.example.fitapp.common.Result;
+import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
@@ -26,6 +27,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 /**
  * 饮食记录接口：当日总览 / 条目增改删 / 每餐照片（上传即替换、读取直出图片）/ 饮水 / 趋势。
  */
@@ -44,6 +47,12 @@ public class DietController {
     @PostMapping("/meals")
     public Result<MealItemVO> addMeal(@Valid @RequestBody MealLogDTO body) {
         return Result.success(dietService.addMeal(UserContext.requireUserId(), body));
+    }
+
+    /** 批量加条目（食物组合「整份加入」用）：一次事务落多条，返回新增的条目。 */
+    @PostMapping("/meals/batch")
+    public Result<List<MealItemVO>> addMealsBatch(@Valid @RequestBody MealBatchDTO body) {
+        return Result.success(dietService.addMealsBatch(UserContext.requireUserId(), body));
     }
 
     @PutMapping("/meals/{id}")

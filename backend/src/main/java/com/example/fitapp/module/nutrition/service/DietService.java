@@ -3,6 +3,8 @@ package com.example.fitapp.module.nutrition.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
+import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
@@ -123,14 +125,35 @@ public class DietService {
 
     public MealItemVO addMeal(Long userId, MealLogDTO dto) {
         Food food = requireOwnFood(userId, dto.getFoodId());
+        return insertMeal(userId, parseDate(dto.getDate()), dto.getMeal(), food, dto.getGrams());
+    }
+
+    /**
+     * 批量往某一餐加条目（食物组合「整份加入」用，ADR 0012）：一次事务按传入顺序落库，
+     * 避免"加了一半"留下半份组合。营养快照与单条添加同一口径。
+     */
+    @Transactional
+    public List<MealItemVO> addMealsBatch(Long userId, MealBatchDTO dto) {
+        if (!MEAL_ORDER.contains(dto.getMeal())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
+        }
+        List<MealItemVO> out = new ArrayList<>();
+        for (FoodAmountDTO it : dto.getItems()) {
+            Food food = requireOwnFood(userId, it.getFoodId());
+            out.add(insertMeal(userId, dto.getDate(), dto.getMeal(), food, it.getGrams()));
+        }
+        return out;
+    }
+
+    /** 落一条条目：每 100 数值按 food 现值快照，此后改库/删库不影响本条。 */
+    private MealItemVO insertMeal(Long userId, LocalDate date, String meal, Food food, BigDecimal grams) {
         MealLog log = new MealLog();
         log.setUserId(userId);
-        log.setLogDate(parseDate(dto.getDate()));
-        log.setMeal(dto.getMeal());
+        log.setLogDate(date);
+        log.setMeal(meal);
         log.setFoodId(food.getId());
         log.setFoodName(food.getName());
-        log.setGrams(dto.getGrams());
-        // 每 100 数值快照：此后改库/删库不影响本条
+        log.setGrams(grams);
         log.setKcalPer100(food.getKcal());
         log.setProteinPer100(food.getProtein());
         log.setCarbPer100(food.getCarb());
