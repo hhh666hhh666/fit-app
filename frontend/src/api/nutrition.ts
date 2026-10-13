@@ -212,8 +212,12 @@ export function addWater(date: string, delta: number) {
   return unwrap(request.post<number>('/diet/water', { date, delta }))
 }
 
-export function getTrend(days = 30) {
-  return unwrap(request.get<{ days: TrendPoint[] }>('/diet/trend', { days }))
+/**
+ * 趋势。不传参时由后端从**最早一条记录**起返回全部历史（ADR 0015：前端一次拉全量、
+ * 本地缩放平移）；也可显式给起止日期或天数（兼容旧调用）。
+ */
+export function getTrend(params?: { from?: string; to?: string; days?: number }) {
+  return unwrap(request.get<{ days: TrendPoint[] }>('/diet/trend', params))
 }
 
 // ── 餐照的存储占用（ADR 0013）──

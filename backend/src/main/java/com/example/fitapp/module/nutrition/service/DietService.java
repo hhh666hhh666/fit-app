@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +62,8 @@ public class DietService {
     /** 缩略图长边上限（px）：相册与列表加载它，点开才拉原图。 */
     private static final int THUMB_MAX_EDGE = 320;
     private static final long BYTES_PER_GB = 1024L * 1024 * 1024;
+    /** 趋势单次查询的窗口上限（天）：防呆用，正常远用不到（约 10 年）。 */
+    private static final int MAX_TREND_DAYS = 3660;
 
     private final MealLogMapper mealLogMapper;
     private final MealPhotoMapper mealPhotoMapper;
@@ -352,10 +355,31 @@ public class DietService {
 
     // ── 趋势 ──
 
-    public TrendVO trend(Long userId, Integer days) {
-        int n = (days == null || days < 1) ? 30 : Math.min(days, 90);
-        LocalDate to = LocalDate.now();
-        LocalDate from = to.minusDays(n - 1L);
+    /**
+     * 趋势（ADR 0015）：给了 from/to 按起止日期取；只给 to 时自动从**最早一条记录**起
+     * （前端一次拉全量、在本地缩放平移）；两者都没给则退回「最近 days 天」（默认 30，兼容旧调用）。
+     */
+    public TrendVO trend(Long userId, String fromStr, String toStr, Integer days) {
+        LocalDate to = (toStr == null || toStr.isBlank()) ? LocalDate.now() : parseDate(toStr);
+        LocalDate from;
+        if (fromStr != null && !fromStr.isBlank()) {
+            from = parseDate(fromStr);
+        } else {
+            // 没给起点就从最早一条记录起（数据窗口＝全部历史）；一条都没有时退回最近 days 天
+            LocalDate earliest = mealLogMapper.selectEarliestDate(userId);
+            if (earliest != null) {
+                from = earliest;
+            } else {
+                int n = (days == null || days < 1) ? 30 : Math.min(days, MAX_TREND_DAYS);
+                from = to.minusDays(n - 1L);
+            }
+        }
+        if (from.isAfter(to)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "起始日期晚于结束日期");
+        }
+        if (ChronoUnit.DAYS.between(from, to) >= MAX_TREND_DAYS) {
+            from = to.minusDays(MAX_TREND_DAYS - 1L);
+        }
 
         Map<LocalDate, DailyNutritionRow> byDate = mealLogMapper.selectDailyTotals(userId, from, to)
                 .stream().collect(Collectors.toMap(DailyNutritionRow::getLogDate, r -> r));

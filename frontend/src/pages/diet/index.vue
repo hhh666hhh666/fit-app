@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
   addWater,
@@ -10,6 +10,7 @@ import {
   type TrendPoint
 } from '@/api/nutrition'
 import FtDietRings from '@/components/FtDietRings.vue'
+import FtTrendChart from '@/components/FtTrendChart.vue'
 import MealSheet from '@/components/MealSheet.vue'
 import { useDietStore } from '@/stores/diet'
 import { buildDietRings } from '@/utils/diet'
@@ -17,7 +18,6 @@ import { ensureLogin } from '@/utils/guard'
 
 // ── 全屏「饮食」页：记录（今日 / 按天翻看）＋ 趋势（五指标切换）──
 
-const instance = getCurrentInstance()
 const diet = useDietStore()
 
 type Metric = 'kcal' | 'protein' | 'carb' | 'fat' | 'water'
@@ -57,10 +57,9 @@ onShow(() => {
 
 async function load() {
   try {
-    const [day, tr] = await Promise.all([getDay(dateStr.value), getTrend(30), diet.load(false)])
+    const [day, tr] = await Promise.all([getDay(dateStr.value), getTrend(), diet.load(false)])
     overview.value = day
     trend.value = tr.days
-    scheduleDraw()
   } catch {
     // request 层已统一提示
   }
@@ -82,8 +81,7 @@ function onChanged() {
 
 async function refreshTrend() {
   try {
-    trend.value = (await getTrend(30)).days
-    scheduleDraw()
+    trend.value = (await getTrend()).days
   } catch {
     // request 层已统一提示
   }
@@ -199,120 +197,21 @@ const metricTargetText = computed(() => {
   return `${Math.round(v)} ${unit}`
 })
 
-const trendEmpty = computed(() => {
-  if (trend.value.length < 2) return true
-  const hasData = trend.value.some((p) => Number(p[metric.value] || 0) > 0)
-  const t = metricTarget(metric.value)
-  return !hasData && (t == null || t <= 0)
+/** 当前指标下的逐日序列（喂给图表组件；缩放、准星、标签都在组件里处理）。 */
+const trendPoints = computed(() =>
+  trend.value.map((p) => ({ date: p.date, value: Number(p[metric.value] || 0) }))
+)
+
+/** 全屏看趋势。 */
+const fullTrend = ref(false)
+
+/** 全屏时的画布高度（约屏高 55%，给横轴与准星留出空间）。 */
+const fullHeight = computed(() => {
+  const info = uni.getSystemInfoSync()
+  return Math.max(220, Math.round(info.windowHeight * 0.55))
 })
 
-const xLabels = computed(() => {
-  const pts = trend.value
-  if (pts.length === 0) return []
-  const n = pts.length
-  const idx =
-    n >= 4 ? [0, Math.round((n - 1) / 3), Math.round(((n - 1) * 2) / 3), n - 1] : pts.map((_, i) => i)
-  return [...new Set(idx)].map((i) => {
-    const d = new Date(`${pts[i].date}T00:00:00`)
-    return `${d.getMonth() + 1}.${d.getDate()}`
-  })
-})
-
-function scheduleDraw() {
-  if (tab.value !== 'trend') return
-  nextTick(() => {
-    setTimeout(() => drawTrend(), 120)
-  })
-}
-
-function drawTrend() {
-  const pts = trend.value
-  if (pts.length < 2 || trendEmpty.value) return
-
-  const values = pts.map((p) => Number(p[metric.value] || 0))
-  const target = metricTarget(metric.value)
-  const maxV = Math.max(...values, target ?? 0) * 1.15 || 1
-
-  const W = 622
-  const H = 300
-  const PL = 76
-  const PR = 40
-  const PT = 30
-  const PB = 26
-  const n = pts.length
-  const px = (i: number) => PL + (i * (W - PL - PR)) / Math.max(1, n - 1)
-  const py = (v: number) => PT + (1 - v / maxV) * (H - PT - PB)
-
-  // uni 的 CanvasContext 类型定义与 H5 实现不全一致，绘制区按平台差异处理
-  const ctx: any = uni.createCanvasContext('trendChart', instance?.proxy)
-
-  // 网格（3 条虚线 + 左刻度）
-  ctx.setFontSize(11)
-  ctx.setFillStyle('#9aa0a8')
-  for (const t of [maxV, maxV / 2, 0]) {
-    const y = py(t)
-    ctx.beginPath()
-    ctx.setLineDash([4, 5])
-    ctx.setStrokeStyle('#d8dad6')
-    ctx.moveTo(PL, y)
-    ctx.lineTo(W - PR, y)
-    ctx.stroke()
-    ctx.fillText(String(Math.round(t)), 8, y + 4)
-  }
-
-  // 目标线
-  if (target != null && target > 0 && target <= maxV) {
-    const ty = py(target)
-    ctx.beginPath()
-    ctx.setLineDash([6, 6])
-    ctx.setStrokeStyle('#9aa0a8')
-    ctx.moveTo(PL, ty)
-    ctx.lineTo(W - PR, ty)
-    ctx.stroke()
-  }
-  ctx.setLineDash([])
-
-  // 折线
-  ctx.beginPath()
-  ctx.setStrokeStyle('#17191d')
-  ctx.setLineWidth(2)
-  values.forEach((v, i) => {
-    const x = px(i)
-    const y = py(v)
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.stroke()
-
-  // 起点空心圆 + 终点实心点
-  ctx.beginPath()
-  ctx.arc(px(0), py(values[0]), 5, 0, 2 * Math.PI)
-  ctx.setFillStyle('#ffffff')
-  ctx.fill()
-  ctx.setStrokeStyle('#17191d')
-  ctx.setLineWidth(2)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.arc(px(n - 1), py(values[n - 1]), 6, 0, 2 * Math.PI)
-  ctx.setFillStyle('#17191d')
-  ctx.fill()
-
-  // 末值黑块标注
-  const label = String(Math.round(values[n - 1]))
-  const lx = Math.min(px(n - 1), W - PR) - 34
-  const ly = py(values[n - 1]) + 12
-  ctx.setFillStyle('#17191d')
-  ctx.fillRect(lx, ly, 68, 34)
-  ctx.setFillStyle('#ffffff')
-  ctx.setFontSize(15)
-  ctx.fillText(label, lx + 12, ly + 23)
-
-  ctx.draw()
-}
-
-watch(metric, () => scheduleDraw())
-watch(tab, () => scheduleDraw())
+// 旧的自绘 canvas 已退役——绘制层统一收在 FtTrendChart.vue（ADR 0015）
 
 function goBack() {
   uni.navigateBack()
@@ -422,19 +321,43 @@ function goBack() {
 
       <view class="ft-card chartcard">
         <view class="chartcard__head">
-          <text class="chartcard__title">近 30 天 · {{ metricLabel }}</text>
-          <text v-if="metricTargetText" class="chartcard__target ft-num">目标 {{ metricTargetText }}</text>
-        </view>
-        <template v-if="!trendEmpty">
-          <canvas canvas-id="trendChart" id="trendChart" class="chartcard__canvas" />
-          <view class="chartcard__xlabels">
-            <text v-for="(l, i) in xLabels" :key="i" class="chartcard__xlabel ft-num">{{ l }}</text>
+          <text class="chartcard__title">{{ metricLabel }}</text>
+          <view class="chartcard__right">
+            <text v-if="metricTargetText" class="chartcard__target ft-num">
+              目标 {{ metricTargetText }}
+            </text>
+            <text class="chartcard__full" @click="fullTrend = true">全屏</text>
           </view>
-        </template>
-        <text v-else class="chartcard__empty">这 30 天还没有数据</text>
+        </view>
+        <FtTrendChart :points="trendPoints" :target="metricTarget(metric)" :height="180" />
+        <text class="chartcard__tip">单指按住看数值 · 双指捏合缩放 · 双指拖动平移</text>
       </view>
 
       <view class="dietpg__pad" />
+    </view>
+
+    <!-- 全屏看趋势（指标切换保留在里面） -->
+    <view v-if="fullTrend" class="ftrend">
+      <view class="ftrend__head">
+        <text class="ftrend__title">{{ metricLabel }}</text>
+        <text class="ftrend__close" @click="fullTrend = false">×</text>
+      </view>
+      <view class="ftrend__tabs">
+        <view
+          v-for="m in METRICS"
+          :key="m.key"
+          class="metab"
+          :class="{ 'metab--active': metric === m.key }"
+          @click="metric = m.key"
+        >
+          {{ m.label }}
+        </view>
+      </view>
+      <view class="ftrend__chart">
+        <FtTrendChart :points="trendPoints" :target="metricTarget(metric)" :height="fullHeight" />
+      </view>
+      <text v-if="metricTargetText" class="ftrend__target ft-num">目标 {{ metricTargetText }}</text>
+      <text class="ftrend__tip">单指按住看数值 · 双指捏合缩放 · 双指拖动平移</text>
     </view>
 
     <MealSheet
@@ -742,32 +665,83 @@ function goBack() {
   color: $app-ink;
 }
 
+.chartcard__right {
+  display: flex;
+  align-items: baseline;
+  gap: 20rpx;
+}
+
 .chartcard__target {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.chartcard__canvas {
-  width: 622rpx;
-  height: 300rpx;
+.chartcard__full {
+  font-size: $text-sm;
+  color: $app-ink;
+  border-bottom: 1rpx solid $app-ink;
+  padding-bottom: 2rpx;
 }
 
-.chartcard__xlabels {
-  display: flex;
-  justify-content: space-between;
-  padding: 8rpx 8rpx 4rpx;
-}
-
-.chartcard__xlabel {
+.chartcard__tip {
+  display: block;
+  padding: 10rpx 8rpx 0;
   font-size: 20rpx;
   color: $app-ink-subtle;
 }
 
-.chartcard__empty {
+/* ── 全屏趋势 ── */
+.ftrend {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: $app-canvas;
+  z-index: 150;
+  padding: calc(32rpx + env(safe-area-inset-top)) 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.ftrend__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 20rpx;
+}
+
+.ftrend__title {
+  font-size: $text-lg;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.ftrend__close {
+  font-size: 52rpx;
+  line-height: 1;
+  color: $app-ink-muted;
+  padding: 0 8rpx;
+}
+
+.ftrend__tabs {
+  display: flex;
+  gap: 16rpx;
+  padding-bottom: 24rpx;
+}
+
+.ftrend__chart {
+  flex: 1;
+  min-height: 0;
+}
+
+.ftrend__target,
+.ftrend__tip {
   display: block;
-  padding: 60rpx 0;
   text-align: center;
-  font-size: $text-sm;
+  padding-top: 16rpx;
+  font-size: $text-xs;
   color: $app-ink-subtle;
 }
 </style>

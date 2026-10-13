@@ -28,4 +28,17 @@ public interface MealLogMapper extends BaseMapper<MealLog> {
     List<DailyNutritionRow> selectDailyTotals(@Param("userId") Long userId,
                                               @Param("from") LocalDate from,
                                               @Param("to") LocalDate to);
+
+    /**
+     * 该用户最早有数据的一天（`meal_log` 与 `diet_daily` 取更早者；都没有则 null）。
+     * 用作趋势的默认起点——前端的「数据窗口＝全部历史」（ADR 0015）。
+     */
+    @Select("""
+            SELECT MIN(d) FROM (
+                SELECT MIN(log_date) AS d FROM meal_log WHERE user_id = #{userId}
+                UNION ALL
+                SELECT MIN(log_date) AS d FROM diet_daily WHERE user_id = #{userId}
+            ) t
+            """)
+    LocalDate selectEarliestDate(@Param("userId") Long userId);
 }

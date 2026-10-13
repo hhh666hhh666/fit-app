@@ -240,7 +240,7 @@ class DietServiceTest {
         dd.setWaterMl(1500);
         when(dietDailyMapper.selectRange(eq(7L), any(), any())).thenReturn(List.of(dd));
 
-        TrendVO vo = service().trend(7L, 30);
+        TrendVO vo = service().trend(7L, null, null, 30);
 
         assertEquals(30, vo.getDays().size());
         // 缺日补零（第一天距今 29 天，没有数据）

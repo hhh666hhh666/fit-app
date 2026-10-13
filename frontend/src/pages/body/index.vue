@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
-import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
+import { computed, ref } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createBodyRecord, getBodyOverview, getBodyRecords } from '@/api/body'
 import type { BodyOverview, BodyRecordRow } from '@/api/body'
+import FtTrendChart from '@/components/FtTrendChart.vue'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 身体档案（设计稿：.workbuddy/stitch/screen/body.png）──
-
-const instance = getCurrentInstance()
 
 function goBack() {
   uni.navigateBack()
@@ -24,7 +23,6 @@ async function load() {
     const [ov, rows] = await Promise.all([getBodyOverview(), getBodyRecords(20)])
     overview.value = ov
     records.value = rows
-    drawChart()
   } catch {
     // request 层已统一提示
   } finally {
@@ -51,110 +49,14 @@ onShow(() => {
 
 const series = computed(() => overview.value?.weightSeries ?? [])
 
-// ── 折线（canvas 自绘：虚线网格＋折线＋起止点＋末值标注）──
-const CHART_W = 622
-const CHART_H = 300
-const PAD_L = 76
-const PAD_R = 40
-const PAD_T = 30
-const PAD_B = 26
-
+// ── 折线：交给 FtTrendChart（可缩放时间轴，ADR 0015）──
 const firstWeight = computed(() => series.value[0]?.weight ?? null)
 const lastWeight = computed(() => series.value[series.value.length - 1]?.weight ?? null)
 
-/** X 轴标签：均分取 4 个位置的实际日期（M.d） */
-const xLabels = computed(() => {
-  const pts = series.value
-  if (pts.length === 0) return []
-  const idx = pts.length >= 4
-    ? [0, Math.round((pts.length - 1) / 3), Math.round(((pts.length - 1) * 2) / 3), pts.length - 1]
-    : pts.map((_, i) => i)
-  return [...new Set(idx)].map((i) => {
-    const d = new Date(pts[i].date)
-    return `${d.getMonth() + 1}.${d.getDate()}`
-  })
-})
-
-function scale(weight: number): { min: number; max: number } {
-  const values = series.value.map((p) => p.weight)
-  const rawMin = Math.min(...values, weight)
-  const rawMax = Math.max(...values, weight)
-  return { min: rawMin - 0.4, max: rawMax + 0.4 }
-}
-
-function drawChart() {
-  if (series.value.length === 0) return
-  nextTick(() => {
-    setTimeout(() => {
-      // uni 的 CanvasContext 类型定义与 H5 实现不全一致，绘制区按平台差异处理
-      const ctx: any = uni.createCanvasContext('weightChart', instance?.proxy)
-      const { min, max } = scale(series.value[0].weight)
-      const n = series.value.length
-      const px = (i: number) => PAD_L + (i * (CHART_W - PAD_L - PAD_R)) / Math.max(1, n - 1)
-      const py = (w: number) =>
-        PAD_T + (1 - (w - min) / (max - min)) * (CHART_H - PAD_T - PAD_B)
-
-      // 三条虚线网格＋左侧刻度
-      const ticks = [max, (min + max) / 2, min]
-      ctx.setFontSize(11)
-      ctx.setFillStyle('#9aa0a8')
-      for (const t of ticks) {
-        const y = py(t)
-        ctx.beginPath()
-        ctx.setLineDash([4, 5])
-        ctx.setStrokeStyle('#d8dad6')
-        ctx.moveTo(PAD_L, y)
-        ctx.lineTo(CHART_W - PAD_R, y)
-        ctx.stroke()
-        ctx.fillText(t.toFixed(1), 8, y + 4)
-      }
-      ctx.setLineDash([])
-
-      // 折线
-      ctx.beginPath()
-      ctx.setStrokeStyle('#17191d')
-      ctx.setLineWidth(2)
-      series.value.forEach((p, i) => {
-        const x = px(i)
-        const y = py(p.weight)
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-      ctx.stroke()
-
-      // 起点：空心圆；终点：实心黑点
-      const first = series.value[0]
-      const last = series.value[n - 1]
-      ctx.beginPath()
-      ctx.arc(px(0), py(first.weight), 5, 0, 2 * Math.PI)
-      ctx.setFillStyle('#ffffff')
-      ctx.fill()
-      ctx.setStrokeStyle('#17191d')
-      ctx.setLineWidth(2)
-      ctx.stroke()
-
-      ctx.beginPath()
-      ctx.arc(px(n - 1), py(last.weight), 6, 0, 2 * Math.PI)
-      ctx.setFillStyle('#17191d')
-      ctx.fill()
-
-      // 末值黑块标注
-      const label = String(last.weight)
-      const lx = Math.min(px(n - 1), CHART_W - PAD_R) - 34
-      const ly = py(last.weight) + 12
-      ctx.setFillStyle('#17191d')
-      ctx.fillRect(lx, ly, 68, 34)
-      ctx.setFillStyle('#ffffff')
-      ctx.setFontSize(15)
-      ctx.fillText(label, lx + 12, ly + 23)
-
-      ctx.draw()
-    }, 120)
-  })
-}
-
-watch(() => overview.value?.weightSeries, () => drawChart())
-onReady(() => drawChart())
+/** 喂给图表组件的逐点序列（体重值域窄，组件那边用 zeroBased=false 定 y 轴）。 */
+const weightPoints = computed(() =>
+  series.value.map((p) => ({ date: p.date, value: Number(p.weight) }))
+)
 
 // ── 录入弹层 ──
 const today = () => {
@@ -315,13 +217,16 @@ function girthValue(v: number | null | undefined): string {
             {{ formatThousands(firstWeight) }} → {{ formatThousands(lastWeight) }} kg
           </text>
         </view>
-        <view v-if="series.length >= 2">
-          <canvas canvas-id="weightChart" id="weightChart" class="chartcard__canvas" />
-          <view class="chartcard__xlabels">
-            <text v-for="(l, i) in xLabels" :key="i" class="chartcard__xlabel ft-num">{{ l }}</text>
-          </view>
-        </view>
+        <FtTrendChart
+          v-if="series.length >= 2"
+          :points="weightPoints"
+          :height="180"
+          :zero-based="false"
+        />
         <text v-else class="chartcard__empty">再记一次体重，就能看到趋势线</text>
+        <text v-if="series.length >= 2" class="chartcard__tip">
+          单指按住看数值 · 双指捏合缩放 · 双指拖动平移
+        </text>
       </view>
 
       <!-- 明细 -->
@@ -589,18 +494,9 @@ function girthValue(v: number | null | undefined): string {
   color: $app-ink-muted;
 }
 
-.chartcard__canvas {
-  width: 622rpx;
-  height: 300rpx;
-}
-
-.chartcard__xlabels {
-  display: flex;
-  justify-content: space-between;
-  padding: 8rpx 8rpx 4rpx;
-}
-
-.chartcard__xlabel {
+.chartcard__tip {
+  display: block;
+  padding: 10rpx 8rpx 0;
   font-size: 20rpx;
   color: $app-ink-subtle;
 }

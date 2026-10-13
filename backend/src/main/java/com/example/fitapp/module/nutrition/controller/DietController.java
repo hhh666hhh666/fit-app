@@ -133,8 +133,14 @@ public class DietController {
         return Result.success(dietService.addWater(UserContext.requireUserId(), body));
     }
 
+    /**
+     * 趋势。给了 from/to 就按起止日期取；都没给则自动从**最早一条记录**起（ADR 0015，
+     * 前端一次拉全量、在本地缩放平移）。兼容旧的 days 参数（无历史时按最近 days 天）。
+     */
     @GetMapping("/trend")
-    public Result<TrendVO> trend(@RequestParam(required = false) Integer days) {
-        return Result.success(dietService.trend(UserContext.requireUserId(), days));
+    public Result<TrendVO> trend(@RequestParam(required = false) String from,
+                                 @RequestParam(required = false) String to,
+                                 @RequestParam(required = false) Integer days) {
+        return Result.success(dietService.trend(UserContext.requireUserId(), from, to, days));
     }
 }
