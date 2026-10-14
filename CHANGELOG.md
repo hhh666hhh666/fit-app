@@ -3,7 +3,12 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 版本号以 `git tag` 为唯一真相源，手写点（`frontend/package.json`、`backend/pom.xml`）由 `scripts/check-version.sh` 在推 tag 时校验。
 
-## [Unreleased]
+## [0.6.0] - 2026-10-14
+
+### Added
+
+- **营养成分表照片识别入库**（[ADR 0018](./docs/adr/0018-food-label-photo-recognition.md)）：食物库页新增「拍照识别」——选图（相机/相册）→ 压缩上传 → 云端多模态模型识别为草稿 →「编辑食物」页预填（低置信度字段标「待核对」）→ 保存走既有接口；API Key 走后端 env 不出客户端；撞名给「打开已有的 / 改名新建」二选一；照片不留，只按次记 token 用量（迁移 V19 `food_recognition`）；「我的」页存储占用卡下方新增**识别用量小卡**（累计 token＋请求次数，点进明细分页：输入/输出/缓存命中/模型、耗时、成败，不显示费用）；无 Key 时识别入口友好降级。**AI 从饭菜照片估算营养仍明确不做**（ADR 0008 原结论不变）
+- **识别请求默认关闭思维链**（`fitapp.recognition.thinking-mode=disabled`）：转录是「照抄」活——深思只加延迟、把思考 token 烧成输出计费，还可能诱发 GLM-4.6V 已知的 overthinking（复杂 prompt 下过度推理、重复输出）。智谱的 `thinking.type` 默认 enabled（自动思考），故显式传 disabled；`FITAPP_RECOGNITION_THINKING_MODE=enabled` 可开、`auto` 不传按服务商默认
 
 <!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
 
