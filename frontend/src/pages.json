@@ -81,6 +81,10 @@
     {
       "path": "pages/album/index",
       "style": { "navigationBarTitleText": "照片" }
+    },
+    {
+      "path": "pages/recognition-log/index",
+      "style": { "navigationBarTitleText": "识别明细" }
     }
   ],
   "globalStyle": {

@@ -4,7 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { listWorkouts } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
-import { getFoodCount, getStorage, type StorageInfo } from '@/api/nutrition'
+import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -17,6 +17,7 @@ const totalVolumeT = ref(0)
 const exerciseCount = ref(0)
 const foodCount = ref(-1)
 const storage = ref<StorageInfo | null>(null)
+const recUsage = ref<RecognitionUsage | null>(null)
 
 const schedule = useScheduleStore()
 
@@ -26,6 +27,7 @@ onShow(() => {
   schedule.load()
   loadStats()
   void loadStorage()
+  void loadRecognitionUsage()
 })
 
 async function loadStats() {
@@ -57,6 +59,15 @@ async function loadStorage() {
   }
 }
 
+/** 识别用量（ADR 0018）：外卡只露累计 token ＋ 请求次数；不显示费用。 */
+async function loadRecognitionUsage() {
+  try {
+    recUsage.value = await getRecognitionUsage()
+  } catch {
+    // unwrap 已提示
+  }
+}
+
 /** 字节数转人话（B / KB / MB / GB）。 */
 function fmtBytes(n: number | undefined): string {
   if (n == null) return '—'
@@ -78,6 +89,14 @@ const photoRatio = computed(() => {
   return Math.min(1, s.photoBytes / s.photoQuotaBytes)
 })
 const photoPct = computed(() => `${(photoRatio.value * 100).toFixed(2)}%`)
+
+/** 识别用量外卡两值（ADR 0018）：累计 token ＋ 请求次数。 */
+const recTokensText = computed(() =>
+  recUsage.value ? `${formatThousands(recUsage.value.totalTokens)} token` : '—'
+)
+const recRequestsText = computed(() =>
+  recUsage.value ? `共 ${formatThousands(recUsage.value.totalRequests)} 次` : '—'
+)
 
 const countText = computed(() => (totalCount.value >= 200 ? '200+' : String(totalCount.value)))
 const avatarChar = computed(() => username.value.charAt(0).toUpperCase() || 'L')
@@ -120,6 +139,10 @@ function goSettings() {
 
 function goAlbum() {
   uni.navigateTo({ url: '/pages/album/index' })
+}
+
+function goRecognitionLogs() {
+  uni.navigateTo({ url: '/pages/recognition-log/index' })
 }
 
 function logout() {
@@ -225,6 +248,15 @@ function logout() {
           />
         </view>
         <text class="storage__hint">目前只统计餐照；达到上限后将无法再上传新照片</text>
+      </view>
+
+      <!-- 识别用量（ADR 0018）：存储占用下方；外卡两值，点进明细分页 -->
+      <view class="ft-card storage rec-usage" @click="goRecognitionLogs">
+        <view class="storage__head">
+          <text class="storage__label">识别用量</text>
+          <text class="storage__val ft-num">{{ recTokensText }} · {{ recRequestsText }}</text>
+        </view>
+        <text class="storage__hint">营养成分表识别的 token 累计（不含费用）；点开看每次调用明细</text>
       </view>
 
       <text class="prof__logout" @click="logout">退出登录</text>

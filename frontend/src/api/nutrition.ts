@@ -189,6 +189,70 @@ export function exportFoods() {
   return unwrap(request.get<Record<string, unknown>[]>('/foods/export'))
 }
 
+// ── 营养成分表识别（ADR 0018）：照片 → 草稿（不落库）；保存走既有 createFood ──
+
+/** 识别结果：草稿 ＋ 低置信度字段 ＋ 撞名信息。 */
+export interface FoodDraft {
+  draft: FoodPayload
+  /** 低置信度字段 key（前端在这些字段旁标「待核对」）。 */
+  uncertain: string[]
+  /** 撞名：自有库里已有同名食物（null＝不撞）。 */
+  duplicateFoodId?: number | null
+  duplicateFoodName?: string | null
+}
+
+/**
+ * 识别一张照片（multipart）。走裸 fetch——与餐照同套路：request 封装只处理 JSON，
+ * multipart 与鉴权参照 utils/photo.ts。失败抛 Error（message 即后端给的降级原因）。
+ */
+export async function recognizeFood(blob: Blob): Promise<FoodDraft> {
+  const token = (uni.getStorageSync('fitapp_token') as string) || ''
+  const fd = new FormData()
+  fd.append('file', blob, blob.type === 'image/png' ? 'label.png' : 'label.jpg')
+  const res = await fetch('/api/food-recognition', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd
+  })
+  let body: { code?: number; message?: string; data?: FoodDraft } | null = null
+  try {
+    body = await res.json()
+  } catch {
+    /* 非 JSON（如 nginx 错误页） */
+  }
+  if (res.ok && body && body.code === 0 && body.data) return body.data
+  throw new Error((body && body.message) || '识别失败，请重试')
+}
+
+/** 识别用量汇总（「我的」页外卡两值；不显示费用）。 */
+export interface RecognitionUsage {
+  /** 累计 token（输入＋输出，含失败调用）。 */
+  totalTokens: number
+  /** 请求次数（含失败）。 */
+  totalRequests: number
+}
+
+export function getRecognitionUsage() {
+  return unwrap(request.get<RecognitionUsage>('/food-recognition/usage'))
+}
+
+/** 用量明细的一条。 */
+export interface RecognitionLogItem {
+  id: number
+  model: string
+  tokensIn: number
+  tokensOut: number
+  cachedTokens: number
+  durationMs: number
+  success: boolean
+  createdAt: string
+}
+
+/** 用量明细分页（新的在前）。 */
+export function listRecognitionLogs(offset = 0, limit = 50) {
+  return unwrap(request.get<RecognitionLogItem[]>('/food-recognition/logs', { offset, limit }))
+}
+
 // ── 当日 / 条目 / 饮水 / 趋势 ──
 
 export function getDay(date: string) {

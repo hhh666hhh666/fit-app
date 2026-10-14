@@ -69,8 +69,8 @@ async function loadImage(blob: Blob): Promise<HTMLImageElement> {
   }
 }
 
-/** 长边 ≤1600 等比缩放 + JPEG 重编码。 */
-async function compress(blob: Blob, quality: number): Promise<Blob> {
+/** 长边 ≤1600 等比缩放 + JPEG 重编码（导出供识别链路复用——标签文字小，别压糊）。 */
+export async function compress(blob: Blob, quality: number): Promise<Blob> {
   const img = await loadImage(blob)
   const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.max(1, Math.round(img.naturalWidth * scale))

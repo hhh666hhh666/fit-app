@@ -5,21 +5,30 @@ import {
   createFood,
   getFood,
   updateFood,
-  type FoodItem,
+  type FoodDraft,
   type FoodPayload
 } from '@/api/nutrition'
-import { OPTIONAL_GROUPS } from '@/utils/food-fields'
+import { useRecognitionStore } from '@/stores/recognition'
+import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
+//    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
 
 const editId = ref<number | null>(null)
 /** 「复制为自定义」的来源（预置食物 id）；有值时表单预填但保存走新建。 */
 const copyFromId = ref<number | null>(null)
+/** 识别草稿来源（食物库页「拍照识别」经 store 一次性通道传来）。 */
+const fromRecognition = ref(false)
+/** 低置信度字段 key（识别不确定，保存前请核对）。 */
+const uncertainKeys = ref<string[]>([])
 const isEdit = computed(() => editId.value != null)
 const saving = ref(false)
 const pageTitle = computed(() =>
-  isEdit.value ? '编辑食物' : copyFromId.value != null ? '复制为自定义' : '新增食物'
+  isEdit.value ? '编辑食物'
+    : copyFromId.value != null ? '复制为自定义'
+    : fromRecognition.value ? '确认识别结果'
+    : '新增食物'
 )
 
 /** 表单：数值字段一律字符串（空串 = 未填），提交时转换。 */
@@ -56,6 +65,20 @@ onLoad((query) => {
   if (copy) {
     copyFromId.value = copy
     void loadExisting()
+    return
+  }
+  if (q.recognized) {
+    // 识别草稿：取走即清（刷新不残留）；失效就退回食物库重拍
+    const d = useRecognitionStore().take()
+    if (!d) {
+      uni.showToast({ title: '识别草稿已失效，请重新拍照', icon: 'none' })
+      setTimeout(() => uni.navigateBack(), 800)
+      return
+    }
+    fromRecognition.value = true
+    uncertainKeys.value = d.uncertain ?? []
+    fillForm(d.draft)
+    if (d.duplicateFoodId) showDuplicateChoice(d)
   }
 })
 
@@ -82,7 +105,7 @@ async function loadExisting() {
   }
 }
 
-function fillForm(f: FoodItem) {
+function fillForm(f: FoodPayload) {
   const toStr = (v: unknown) => (v == null ? '' : String(v))
   form.name = f.name
   form.unit = f.unit
@@ -99,6 +122,35 @@ function fillForm(f: FoodItem) {
       form[fd.key] = toStr((f as unknown as Record<string, unknown>)[fd.key])
     }
   }
+}
+
+/** 字段是否低置信度（识别不确定，标「待核对」）。 */
+function isUncertain(key: string): boolean {
+  return uncertainKeys.value.includes(key)
+}
+
+/** 待核对字段的中文名（顶部提示行用）。 */
+const uncertainLabels = computed(() => {
+  const labelOf = new Map<string, string>()
+  labelOf.set('name', '食物名称')
+  for (const f of MAIN_FIELDS) labelOf.set(f.key, f.label)
+  for (const g of OPTIONAL_GROUPS) for (const f of g.fields) labelOf.set(f.key, f.label)
+  return uncertainKeys.value.map((k) => labelOf.get(k) ?? k)
+})
+
+/** 撞名二选一（ADR 0018）：打开已有的 / 仍然新建（保存会被同名校验拦下，需改名）。 */
+function showDuplicateChoice(d: FoodDraft) {
+  uni.showModal({
+    title: '库里有同名食物',
+    content: `「${d.duplicateFoodName || '同名食物'}」已在食物库里。可打开已有的查看编辑；仍新建的话，保存时会被拦下要求改名。`,
+    confirmText: '打开已有的',
+    cancelText: '仍然新建',
+    success: ({ confirm }) => {
+      if (confirm) {
+        uni.redirectTo({ url: `/pages/food-detail/index?id=${d.duplicateFoodId}` })
+      }
+    }
+  })
 }
 
 /** 字符串 → 数字：'' → null（未填）；非法 → undefined。 */
@@ -199,9 +251,18 @@ function goBack() {
         <view class="fe__head-space" />
       </view>
 
+      <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 待核对字段点名 -->
+      <view v-if="fromRecognition" class="ft-card block rec-note">
+        <text class="block__title">来自拍照识别</text>
+        <text v-if="uncertainKeys.length" class="rec-note__text">
+          这些字段识别不确定：{{ uncertainLabels.join('、') }}。保存前请对照包装核对。
+        </text>
+        <text v-else class="rec-note__text">已按包装营养成分表预填，核对无误即可保存。</text>
+      </view>
+
       <!-- 名称 + 单位 -->
       <view class="ft-card block">
-        <text class="block__label">食物名称</text>
+        <text class="block__label">食物名称<text v-if="isUncertain('name')" class="fld__warn"> 待核对</text></text>
         <input
           v-model="form.name"
           class="name-input"
@@ -234,23 +295,23 @@ function goBack() {
       <view class="ft-card block">
         <text class="block__title">主要营养（必填）</text>
         <view class="fld">
-          <text class="fld__label">热量（大卡）</text>
+          <text class="fld__label">热量（大卡）<text v-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.kcal" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">蛋白质（g）</text>
+          <text class="fld__label">蛋白质（g）<text v-if="isUncertain('protein')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.protein" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">脂肪（g）</text>
+          <text class="fld__label">脂肪（g）<text v-if="isUncertain('fat')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.fat" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">碳水化合物（g）</text>
+          <text class="fld__label">碳水化合物（g）<text v-if="isUncertain('carb')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.carb" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">钠（mg）</text>
+          <text class="fld__label">钠（mg）<text v-if="isUncertain('sodium')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.sodium" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
       </view>
@@ -297,7 +358,7 @@ function goBack() {
         </view>
         <template v-if="openGroups[g.title]">
           <view v-for="fd in g.fields" :key="fd.key" class="fld">
-            <text class="fld__label">{{ fd.label }}</text>
+            <text class="fld__label">{{ fd.label }}<text v-if="isUncertain(fd.key)" class="fld__warn"> 待核对</text></text>
             <input
               v-model="form[fd.key]"
               type="digit"
@@ -435,6 +496,26 @@ function goBack() {
   color: $app-ink;
   flex: 1;
   margin-left: 20rpx;
+}
+
+/* 识别低置信度字段的「待核对」角标（ADR 0018） */
+.fld__warn {
+  font-size: 20rpx;
+  line-height: 1;
+  color: #c4453c;
+  border: 1rpx solid #c4453c;
+  border-radius: 6rpx;
+  padding: 3rpx 8rpx;
+  margin-left: 8rpx;
+}
+
+/* 识别草稿提示卡 */
+.rec-note__text {
+  display: block;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  padding-bottom: 12rpx;
+  line-height: 1.5;
 }
 
 .group-head {

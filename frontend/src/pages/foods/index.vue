@@ -8,10 +8,13 @@ import {
   importFoods,
   listCombos,
   listFoods,
+  recognizeFood,
   type FoodComboVO,
   type FoodItem,
   type ImportResult
 } from '@/api/nutrition'
+import { choosePhoto, compress } from '@/utils/photo'
+import { useRecognitionStore } from '@/stores/recognition'
 import { ensureLogin } from '@/utils/guard'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 
@@ -154,6 +157,38 @@ function perText(f: FoodItem): string {
   return `每100${f.unit === 'ml' ? 'ml' : 'g'} · ${Math.round(f.kcal)} 大卡 · 蛋白 ${f.protein}g`
 }
 
+// ── 拍照识别（ADR 0018）：选图 → 压缩（长边 1600，与餐照同口径——标签字小别压糊）→ 识别 → 草稿进编辑页 ──
+
+const recognition = useRecognitionStore()
+const recognizing = ref(false)
+
+async function startRecognize() {
+  if (recognizing.value) return
+  const picked = await choosePhoto()
+  if (picked.cancelled || !picked.path) {
+    // 真失败才提示；用户取消静默（与 photo.ts 的口径一致）
+    if (picked.error) {
+      uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+    }
+    return
+  }
+  recognizing.value = true
+  uni.showLoading({ title: '识别中…', mask: true })
+  try {
+    const original = await (await fetch(picked.path)).blob()
+    const blob = await compress(original, 0.85)
+    const draft = await recognizeFood(blob)
+    recognition.set(draft)
+    uni.navigateTo({ url: '/pages/food-edit/index?recognized=1' })
+  } catch (e) {
+    // 后端降级原因（如未配置 Key）原样透出
+    uni.showToast({ title: (e as Error)?.message || '识别失败', icon: 'none' })
+  } finally {
+    recognizing.value = false
+    uni.hideLoading()
+  }
+}
+
 // ── 导入 ──
 
 const importSheet = ref({ show: false, text: '', result: null as ImportResult | null, busy: false })
@@ -240,6 +275,7 @@ function copyExport() {
       <view class="ops">
         <text class="ops__btn" @click="openImport">导入 JSON</text>
         <text class="ops__btn" @click="doExport">导出 JSON</text>
+        <text class="ops__btn" @click="startRecognize">拍照识别</text>
         <text class="ops__meta ft-num">{{
           keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种`
         }}</text>
