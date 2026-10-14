@@ -71,12 +71,11 @@ public final class LabelDraftParser {
         }
 
         String name = root.path("name").asText("").trim();
-        if (name.isEmpty()) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "没能认出食物名称，请手动录入");
-        }
         if (name.length() > 64) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "食物名过长（超过 64 字），请手动录入");
         }
+        // 名字没认出**不再抛错**：数值照常出草稿，用户回确认页自己补（保存时前端与
+        // POST /api/foods 的 @NotBlank 双重把关）。下面 4+1 齐全才放行。
 
         String unit = "ml".equals(root.path("unit").asText("")) ? "ml" : "g";
         BigDecimal factor = per100Factor(root.path("serving_grams"));
@@ -101,10 +100,19 @@ public final class LabelDraftParser {
         if (dto.getCarb() == null) missing.add("碳水化合物");
         if (dto.getSodium() == null) missing.add("钠");
         if (!missing.isEmpty()) {
+            // 名字也没有 ＋ 4+1 全缺 ＝ 模型对「没有标签的图」回了全 null 骨架——
+            // 给「没找到营养成分表」的准话，而不是罗列五个缺失项。
+            if (name.isEmpty() && missing.size() == 5) {
+                throw new BusinessException(ResultCode.BUSINESS_ERROR, "照片里没能认出营养成分表，请手动录入");
+            }
             throw new BusinessException(ResultCode.BUSINESS_ERROR,
                     "标签上看不到：" + String.join("、", missing) + "——请手动录入");
         }
-        return new Draft(dto, uncertainKeys(root.path("uncertain")));
+        List<String> uncertain = uncertainKeys(root.path("uncertain"));
+        if (name.isEmpty()) {
+            uncertain.add("name"); // 名字缺失也标「待核对」——确认页会提示用户补
+        }
+        return new Draft(dto, uncertain);
     }
 
     /** 每份 → 每100 倍率；按 100 印（或没给）时为 1。非正数视为没给。 */

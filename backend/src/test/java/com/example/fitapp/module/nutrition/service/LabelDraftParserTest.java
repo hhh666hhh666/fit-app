@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -134,12 +135,47 @@ class LabelDraftParserTest {
     }
 
     @Test
-    void blankName_throws() {
+    void blankName_returnsDraftWithValuesAndFlagsName() {
+        // 名字没认出不再整体抛错：数值照常出草稿，名字留空并标「待核对」，用户回确认页补
         String json = """
-                {"name":"  ","unit":"g","kj":100,
-                 "nutrients":{"protein":1,"fat":1,"carb":1,"sodium":1},"nrv":{},"uncertain":[]}
+                {"name":"  ","unit":"g","kj":1050,
+                 "nutrients":{"protein":8.2,"fat":3.1,"carb":45.6,"sodium":210,"fiber":5.4},
+                 "nrv":{},"uncertain":[]}
                 """;
-        assertThrows(BusinessException.class, () -> LabelDraftParser.parse(json));
+
+        LabelDraftParser.Draft d = LabelDraftParser.parse(json);
+
+        assertEquals("", d.dto().getName());
+        assertBd("250.96", d.dto().getKcal());
+        assertBd("8.20", d.dto().getProtein());
+        assertTrue(d.uncertain().contains("name"), "名字缺失应进待核对列表");
+    }
+
+    @Test
+    void allNull_throwsNoLabelMessage() {
+        // 模型对「没有标签的图」回全 null 骨架——给准话，别罗列五个缺失项
+        String json = """
+                {"name":null,"unit":null,"kj":null,"kcal":null,"serving_grams":null,
+                 "nutrients":{},"nrv":{},"uncertain":[]}
+                """;
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> LabelDraftParser.parse(json));
+
+        assertTrue(ex.getMessage().contains("没能认出营养成分表"), ex.getMessage());
+    }
+
+    @Test
+    void partialLabel_throwsListingMissingOnly() {
+        // 有名字但缺四项：仍逐项报缺（与全 null 的「没标签」区分开）
+        String json = """
+                {"name":"只剩热量","unit":"g","kj":100,
+                 "nutrients":{"fat":1,"carb":1,"sodium":1},"nrv":{},"uncertain":[]}
+                """;
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> LabelDraftParser.parse(json));
+
+        assertTrue(ex.getMessage().contains("蛋白质"), ex.getMessage());
+        assertFalse(ex.getMessage().contains("没能认出营养成分表"), "缺项不应误报成没标签");
     }
 
     @Test

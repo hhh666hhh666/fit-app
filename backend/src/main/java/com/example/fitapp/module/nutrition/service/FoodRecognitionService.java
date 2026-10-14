@@ -116,7 +116,11 @@ public class FoodRecognitionService {
             cached = resp.cachedTokens();
 
             LabelDraftParser.Draft draft = LabelDraftParser.parse(resp.content());
-            validate(draft.dto());
+            // 名字没认出时照常出草稿（用户回确认页补）——此时跳过 DTO 校验（@NotBlank 会拦
+            // 空名）；数值口径解析器已保证，保存时前端与 POST /api/foods 还有双重非空闸。
+            if (StringUtils.hasText(draft.dto().getName())) {
+                validate(draft.dto());
+            }
 
             // 撞名预检：只看自有（与导入/新建同口径——允许与预置同名）
             Food dup = findDuplicateOwn(userId, draft.dto().getName());

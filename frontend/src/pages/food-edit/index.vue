@@ -107,7 +107,7 @@ async function loadExisting() {
 
 function fillForm(f: FoodPayload) {
   const toStr = (v: unknown) => (v == null ? '' : String(v))
-  form.name = f.name
+  form.name = f.name ?? ''
   form.unit = f.unit
   form.kcal = toStr(f.kcal)
   form.protein = toStr(f.protein)
@@ -251,13 +251,16 @@ function goBack() {
         <view class="fe__head-space" />
       </view>
 
-      <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 待核对字段点名 -->
+      <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 名字缺失警告 ＋ 待核对字段点名 -->
       <view v-if="fromRecognition" class="ft-card block rec-note">
         <text class="block__title">来自拍照识别</text>
+        <text v-if="!form.name.trim()" class="rec-note__text rec-note__text--warn">
+          没能认出食物名称——其余数值已按标签填好，补个名字就能保存
+        </text>
         <text v-if="uncertainKeys.length" class="rec-note__text">
           这些字段识别不确定：{{ uncertainLabels.join('、') }}。保存前请对照包装核对。
         </text>
-        <text v-else class="rec-note__text">已按包装营养成分表预填，核对无误即可保存。</text>
+        <text v-else-if="form.name.trim()" class="rec-note__text">已按包装营养成分表预填，核对无误即可保存。</text>
       </view>
 
       <!-- 名称 + 单位 -->
@@ -516,6 +519,11 @@ function goBack() {
   color: $app-ink-muted;
   padding-bottom: 12rpx;
   line-height: 1.5;
+}
+
+/* 名字没认出的警告行 */
+.rec-note__text--warn {
+  color: #c4453c;
 }
 
 .group-head {

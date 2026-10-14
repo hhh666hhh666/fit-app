@@ -187,6 +187,26 @@ class FoodRecognitionServiceTest {
     }
 
     @Test
+    void recognize_blankName_returnsDraftForManualNaming() {
+        // 名字没认出：数值照常出草稿（用户回确认页补名），记账照常 success=1
+        String noName = """
+                {"name":"","unit":"g","kj":1050,
+                 "nutrients":{"protein":8.2,"fat":3.1,"carb":45.6,"sodium":210},
+                 "nrv":{},"uncertain":[]}
+                """;
+        FoodRecognitionService s = spyService(noName, 2400, 300, 0);
+
+        FoodDraftVO vo = s.recognize(7L, mock(MultipartFile.class));
+
+        assertEquals("", vo.getDraft().getName());
+        assertTrue(vo.getUncertain().contains("name"));
+        assertNull(vo.getDuplicateFoodId());
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertTrue(captor.getValue().getSuccess(), "出了草稿就算成功");
+    }
+
+    @Test
     void logs_pagedNewestFirst() {
         List<FoodRecognition> rows = service(props()).logs(7L, null, null);
 
