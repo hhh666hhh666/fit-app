@@ -3,6 +3,12 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 版本号以 `git tag` 为唯一真相源，手写点（`frontend/package.json`、`backend/pom.xml`）由 `scripts/check-version.sh` 在推 tag 时校验。
 
+## [Unreleased]
+
+### Changed
+
+- **识别没认出食物名称也出草稿**：数值照常预填进「编辑食物」页，名字留空并标「待核对」＋红色警告行，用户补个名字即可保存（保存时前端提示与后端 `@NotBlank` 双重把关，数据脏不进来）。顺带把「照片里根本没有营养成分表」（模型回全 null 骨架）的提示从罗列缺失项改为准话「照片里没能认出营养成分表，请手动录入」
+
 ## [0.6.0] - 2026-10-14
 
 ### Added
