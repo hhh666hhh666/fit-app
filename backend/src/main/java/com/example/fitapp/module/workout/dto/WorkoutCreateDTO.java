@@ -60,5 +60,9 @@ public class WorkoutCreateDTO {
         @NotNull(message = "次数不能为空")
         @Min(value = 1, message = "次数至少为 1")
         private Integer reps;
+
+        /** 该组净用时（秒，剔除暂停段，ADR 0022）；不传或 null ＝ 无用时（编辑时新增的组即此类）。 */
+        @Min(value = 0, message = "组用时不能为负")
+        private Integer durationSec;
     }
 }

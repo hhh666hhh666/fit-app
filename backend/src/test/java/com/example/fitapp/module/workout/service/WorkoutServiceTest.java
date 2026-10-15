@@ -6,6 +6,7 @@ import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
 import com.example.fitapp.module.workout.dto.WorkoutUpdateDTO;
 import com.example.fitapp.module.workout.entity.Workout;
+import com.example.fitapp.module.workout.entity.WorkoutBlock;
 import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutMapper;
@@ -140,6 +141,49 @@ class WorkoutServiceTest {
         WorkoutDetailVO vo = service().detail(1L, 1L);
         assertEquals("胸 & 三头", vo.getTitle());
         assertEquals(0, vo.getTotalVolume().compareTo(new BigDecimal("1125")));
+    }
+
+    // ── 组次净用时（ADR 0022：V21 加的 duration_sec）──
+
+    @Test
+    void create_setDuration_savedAsGiven_absentStaysNull() {
+        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"60", "8"}, {"60", "7"}});
+        dto.getBlocks().get(0).getSets().get(0).setDurationSec(102); // 第二组不传，应保持 null
+
+        service().create(1L, dto);
+
+        ArgumentCaptor<WorkoutSet> captor = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper, times(2)).insert(captor.capture());
+        assertEquals(Arrays.asList(102, null),
+                captor.getAllValues().stream().map(WorkoutSet::getDurationSec).toList());
+    }
+
+    @Test
+    void detail_mapsSetDuration_nullStaysNull() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 1L));
+        WorkoutBlock b = new WorkoutBlock();
+        b.setId(11L);
+        b.setExerciseId(5L);
+        b.setExerciseName("杠铃卧推");
+        b.setSortOrder(0);
+        when(blockMapper.selectList(any())).thenReturn(List.of(b));
+
+        WorkoutSet withDuration = new WorkoutSet();
+        withDuration.setBlockId(11L);
+        withDuration.setSetIndex(1);
+        withDuration.setWeight(new BigDecimal("60"));
+        withDuration.setReps(8);
+        withDuration.setDurationSec(102);
+        WorkoutSet legacy = new WorkoutSet();
+        legacy.setBlockId(11L);
+        legacy.setSetIndex(2);
+        legacy.setWeight(new BigDecimal("60"));
+        legacy.setReps(7);
+        when(setMapper.selectList(any())).thenReturn(List.of(withDuration, legacy));
+
+        WorkoutDetailVO vo = service().detail(1L, 1L);
+        assertEquals(102, vo.getBlocks().get(0).getSets().get(0).getDurationSec());
+        assertNull(vo.getBlocks().get(0).getSets().get(1).getDurationSec());
     }
 
     @Test

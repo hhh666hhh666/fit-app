@@ -31,5 +31,8 @@ public class WorkoutSet {
     /** 提交时是否刷新该动作历史最佳（weight×reps；仅 exercise_id 非空时判定）。 */
     private Boolean pr;
 
+    /** 该组净用时（秒，剔除暂停段）；无用时为 null（历史数据与编辑时新增的组）。 */
+    private Integer durationSec;
+
     private LocalDateTime createdAt;
 }

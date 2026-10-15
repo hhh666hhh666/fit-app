@@ -116,6 +116,7 @@ public class WorkoutService {
                 item.setWeight(s.getWeight());
                 item.setReps(s.getReps());
                 item.setPr(Boolean.TRUE.equals(s.getPr()));
+                item.setDurationSec(s.getDurationSec());
                 return item;
             }).toList());
             vbs.add(vb);
@@ -217,12 +218,14 @@ public class WorkoutService {
                 ws.setWeight(s.getWeight());
                 ws.setReps(s.getReps());
                 ws.setPr(isPr(b.getExerciseId(), s, runningMax));
+                ws.setDurationSec(s.getDurationSec());
                 setMapper.insert(ws);
 
                 WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
                 item.setWeight(s.getWeight());
                 item.setReps(s.getReps());
                 item.setPr(ws.getPr());
+                item.setDurationSec(s.getDurationSec());
                 sets.add(item);
             }
 

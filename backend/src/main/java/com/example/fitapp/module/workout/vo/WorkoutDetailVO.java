@@ -46,5 +46,8 @@ public class WorkoutDetailVO {
 
         /** 提交时是否刷新该动作历史最佳（自由训练未挂动作库的组恒为 false）。 */
         private Boolean pr;
+
+        /** 该组净用时（秒，剔除暂停段）；null ＝ 无用时（历史数据与编辑时新增的组）。 */
+        private Integer durationSec;
     }
 }

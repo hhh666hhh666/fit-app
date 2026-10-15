@@ -5,6 +5,8 @@ export interface WorkoutSetItem {
   reps: number
   /** 提交时是否刷新该动作历史最佳（未挂动作库的组为 false）。 */
   pr?: boolean
+  /** 该组净用时（秒，剔除暂停段）；缺省＝无用时（历史数据与编辑时新增的组）。 */
+  durationSec?: number | null
 }
 
 export interface WorkoutBlockItem {
@@ -48,7 +50,7 @@ export interface CreateWorkoutPayload {
   blocks: {
     exerciseId?: number | null
     name: string
-    sets: { weight: number; reps: number }[]
+    sets: { weight: number; reps: number; durationSec?: number }[]
   }[]
 }
 
@@ -58,7 +60,7 @@ export interface UpdateWorkoutPayload {
   blocks: {
     exerciseId?: number | null
     name: string
-    sets: { weight: number; reps: number }[]
+    sets: { weight: number; reps: number; durationSec?: number }[]
   }[]
 }
 
