@@ -44,7 +44,9 @@ Status: accepted
 
 ## 最新决策
 
-- [ADR 0019](./0019-body-weight-unit-and-exercise-batch-delete.md)：身体体重斤／千克偏好与动作库自定义动作长按多选下架。
+- [ADR 0020](./0020-session-local-persistence-and-wall-clock-timer.md)：训练会话本机持久化、墙钟净计时与返回＝最小化（取代 [ADR 0011](./0011-session-early-finish-and-leave-guard.md) 的离页确认部分）。
+- [ADR 0021](./0021-session-set-order-and-undo.md)：组内顺序推进、删除组次与取消完成。
+- [ADR 0022](./0022-session-pause-and-set-duration.md)：训练暂停与组次净用时落库。
 
 ## 与其他文档的分工
 
