@@ -3,6 +3,19 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 版本号以 `git tag` 为唯一真相源，手写点（`frontend/package.json`、`backend/pom.xml`）由 `scripts/check-version.sh` 在推 tag 时校验。
 
+## [0.7.0] - 2026-10-15
+
+### Added
+
+- **身体体重支持斤／千克切换**（[ADR 0019](./docs/adr/0019-body-weight-unit-and-exercise-batch-delete.md)）：身体档案页首次默认「斤」并记住设备偏好——斤保留 1 位小数、千克保留 2 位小数；内部与接口始终按 kg 保存（迁移 V20：`body_record.weight` `DECIMAL(5,1)`→`DECIMAL(6,2)`），切换单位不重复换算、不产生累计误差；录入框、当前体重卡、明细列表、趋势区间与差值全部跟随单位；超出当前单位精度的输入直接拒绝。训练负重与计划目标仍固定 kg
+- **动作库长按多选下架**（ADR 0019）：自定义动作复用训练日志同款交互——长按进多选、点行切换勾选、全选/取消、红色 `uni.showModal` 二次确认后批量下架（`POST /api/exercises/batch-delete`，先整体校验归属再同事务更新）；预设动作不可选不可删；删除为归档语义（`archived=1`），历史训练与计划快照照常显示
+
+### Fixed
+
+- **身体档案编辑清空字段不生效**：整体覆盖更新改用显式 `UpdateWrapper` 写 `NULL`——此前全局 `update-strategy=not_null` 会静默跳过 null，清空体重或围度后旧值残留（与 `week_schedule`、食物编辑同类的老坑）
+
+<!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
+
 ## [0.6.1] - 2026-10-14
 
 ### Changed
@@ -15,8 +28,6 @@
 
 - **营养成分表照片识别入库**（[ADR 0018](./docs/adr/0018-food-label-photo-recognition.md)）：食物库页新增「拍照识别」——选图（相机/相册）→ 压缩上传 → 云端多模态模型识别为草稿 →「编辑食物」页预填（低置信度字段标「待核对」）→ 保存走既有接口；API Key 走后端 env 不出客户端；撞名给「打开已有的 / 改名新建」二选一；照片不留，只按次记 token 用量（迁移 V19 `food_recognition`）；「我的」页存储占用卡下方新增**识别用量小卡**（累计 token＋请求次数，点进明细分页：输入/输出/缓存命中/模型、耗时、成败，不显示费用）；无 Key 时识别入口友好降级。**AI 从饭菜照片估算营养仍明确不做**（ADR 0008 原结论不变）
 - **识别请求默认关闭思维链**（`fitapp.recognition.thinking-mode=disabled`）：转录是「照抄」活——深思只加延迟、把思考 token 烧成输出计费，还可能诱发 GLM-4.6V 已知的 overthinking（复杂 prompt 下过度推理、重复输出）。智谱的 `thinking.type` 默认 enabled（自动思考），故显式传 disabled；`FITAPP_RECOGNITION_THINKING_MODE=enabled` 可开、`auto` 不传按服务商默认
-
-<!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
 
 ## [0.5.0] - 2026-10-14
 
