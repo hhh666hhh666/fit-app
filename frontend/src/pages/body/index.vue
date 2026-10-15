@@ -13,12 +13,22 @@ import FtTrendChart from '@/components/FtTrendChart.vue'
 import {
   formatDateLabel,
   formatDateTimeLabel,
-  formatThousands,
   nowTime,
   toIsoMinute,
   todayKey
 } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import {
+  formatWeight,
+  getWeightUnit,
+  kgToDisplay,
+  parseWeightInput,
+  setWeightUnit,
+  weightPrecision,
+  weightUnitLabel,
+  weightUnitShort,
+  type WeightUnit
+} from '@/utils/weight'
 
 // ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
 
@@ -33,6 +43,7 @@ const records = ref<BodyRecordRow[]>([])
 const loading = ref(true)
 const hasMore = ref(false)
 const loadingMore = ref(false)
+const weightUnit = ref<WeightUnit>('jin')
 
 async function load() {
   loading.value = true
@@ -74,6 +85,7 @@ onLoad((query) => {
 
 onShow(() => {
   if (!ensureLogin()) return
+  weightUnit.value = getWeightUnit()
   load()
   if (pendingRecord.value) {
     pendingRecord.value = false
@@ -83,10 +95,16 @@ onShow(() => {
 
 // ── 体重图（序列已由后端按日聚合、取当天最小）──
 const weightPoints = computed(() =>
-  (overview.value?.weightSeries ?? []).map((p) => ({ date: p.date, value: Number(p.weight) }))
+  (overview.value?.weightSeries ?? []).map((p) => ({
+    date: p.date,
+    value: kgToDisplay(Number(p.weight), weightUnit.value)
+  }))
 )
-const firstWeight = computed(() => weightPoints.value[0]?.value ?? null)
-const lastWeight = computed(() => weightPoints.value[weightPoints.value.length - 1]?.value ?? null)
+const firstWeight = computed(() => overview.value?.weightSeries[0]?.weight ?? null)
+const lastWeight = computed(() => {
+  const points = overview.value?.weightSeries ?? []
+  return points.length ? points[points.length - 1].weight : null
+})
 
 // ── 围度图：一张图 + 部位分段条切换（四个部位数值跨度大，共用 y 轴会压扁）──
 type GirthKey = 'chest' | 'waist' | 'hip' | 'arm'
@@ -196,12 +214,31 @@ const sheet = ref({
 })
 
 function numOrBlank(v: number | null | undefined): string {
-  return v == null ? '' : String(v)
+  return v == null ? '' : formatWeight(v, weightUnit.value)
+}
+
+function displayWeight(v: number | null | undefined): string {
+  return formatWeight(v, weightUnit.value)
+}
+
+function unitChange(unit: WeightUnit) {
+  if (unit === weightUnit.value) return
+  const current = sheet.value.weight.trim()
+  if (current) {
+    const kg = parseWeightInput(current, weightUnit.value)
+    sheet.value.weight = Number.isFinite(kg) ? formatWeight(kg, unit) : ''
+  }
+  weightUnit.value = unit
+  setWeightUnit(unit)
+}
+
+function weightInputStep(): string {
+  return weightPrecision(weightUnit.value) === 1 ? '0.1' : '0.01'
 }
 
 /** 新增：日期时间取「现在」，体重与四围预填上次数值（省敲键盘）。 */
 function openSheet() {
-  const last = records.value[0] ?? null
+  const last = records.value.find((r) => r.weight != null) ?? null
   sheet.value = {
     show: true,
     editId: null,
@@ -259,9 +296,14 @@ function onTimeChange(e: { detail: { value: string } }) {
 
 async function save() {
   const f = sheet.value
+  const parsedWeight = parseWeightInput(f.weight, weightUnit.value)
+  if (Number.isNaN(parsedWeight)) {
+    uni.showToast({ title: `${weightUnitLabel(weightUnit.value)}最多保留${weightPrecision(weightUnit.value)}位小数`, icon: 'none' })
+    return
+  }
   const payload = {
     measuredAt: toIsoMinute(f.date, f.time),
-    weight: f.weight ? Number(f.weight) : null,
+    weight: parsedWeight,
     chest: f.chest ? Number(f.chest) : null,
     waist: f.waist ? Number(f.waist) : null,
     hip: f.hip ? Number(f.hip) : null,
@@ -293,10 +335,10 @@ async function save() {
 }
 
 // ── 展示用小工具 ──
-function signed(v: number | null | undefined): string {
+function signed(v: number | null | undefined, unit: WeightUnit = 'kg'): string {
   if (v == null) return ''
-  const n = Number(v)
-  return `${n > 0 ? '+' : ''}${n.toFixed(1)}`
+  const n = kgToDisplay(Number(v), unit)
+  return `${n > 0 ? '+' : ''}${n.toFixed(weightPrecision(unit))}`
 }
 
 function girthValue(v: number | null | undefined): string {
@@ -351,8 +393,8 @@ function girthLine(r: BodyRecordRow): string {
         <view class="wcard__main">
           <view class="wcard__num-row">
             <template v-if="overview?.latest">
-              <text class="wcard__num ft-num">{{ overview.latest.weight }}</text>
-              <text class="wcard__unit">kg</text>
+                <text class="wcard__num ft-num">{{ displayWeight(overview.latest.weight) }}</text>
+              <text class="wcard__unit">{{ weightUnitShort(weightUnit) }}</text>
             </template>
             <text v-else class="wcard__none">还没有体重记录</text>
           </view>
@@ -361,7 +403,7 @@ function girthLine(r: BodyRecordRow): string {
         <view v-if="overview?.latest" class="wcard__foot">
           <text class="wcard__date ft-num">{{ formatDateLabel(overview.latest.date) }} · 最近一次记录</text>
           <text v-if="overview.weekDiff != null" class="wcard__diff ft-num">
-            较上周 {{ signed(overview.weekDiff) }} kg
+            较上周 {{ signed(overview.weekDiff, weightUnit) }} {{ weightUnitShort(weightUnit) }}
           </text>
         </view>
       </view>
@@ -412,7 +454,7 @@ function girthLine(r: BodyRecordRow): string {
         <view class="chartcard__head">
           <text class="chartcard__title">体重趋势</text>
           <text v-if="firstWeight != null && lastWeight != null" class="chartcard__range ft-num">
-            {{ formatThousands(firstWeight) }} → {{ formatThousands(lastWeight) }} kg
+            {{ displayWeight(firstWeight) }} → {{ displayWeight(lastWeight) }} {{ weightUnitShort(weightUnit) }}
           </text>
         </view>
         <FtTrendChart
@@ -460,7 +502,7 @@ function girthLine(r: BodyRecordRow): string {
       <view class="ft-card mcard">
         <view class="mcard__head">
           <text class="mcard__title">全部记录</text>
-          <text class="mcard__meta ft-num">TIME / KG / DIFF</text>
+          <text class="mcard__meta ft-num">TIME / {{ weightUnitShort(weightUnit).toUpperCase() }} / DIFF</text>
         </view>
         <view v-if="records.length === 0" class="mcard__empty">还没有记录</view>
         <view
@@ -485,9 +527,9 @@ function girthLine(r: BodyRecordRow): string {
               <text v-if="r.note" class="mrow__note">{{ r.note }}</text>
               <view class="mrow__right">
                 <text v-if="r.weight != null" class="mrow__kg ft-num">
-                  {{ formatThousands(Number(r.weight)) }} kg
+                  {{ displayWeight(r.weight) }} {{ weightUnitShort(weightUnit) }}
                 </text>
-                <text class="mrow__diff ft-num">{{ r.diff == null ? '—' : signed(r.diff) }}</text>
+                <text class="mrow__diff ft-num">{{ r.diff == null ? '—' : signed(r.diff, weightUnit) }}</text>
               </view>
             </view>
             <text v-if="girthLine(r)" class="mrow__girth ft-num">{{ girthLine(r) }}</text>
@@ -529,12 +571,19 @@ function girthLine(r: BodyRecordRow): string {
       </view>
 
       <view class="fld">
-        <text class="fld__label">体重（kg）</text>
+        <view class="fld__label-row">
+          <text class="fld__label">体重（{{ weightUnitLabel(weightUnit) }}）</text>
+          <view class="unit-switch">
+            <text class="unit-switch__item" :class="{ 'unit-switch__item--on': weightUnit === 'jin' }" @click="unitChange('jin')">斤</text>
+            <text class="unit-switch__item" :class="{ 'unit-switch__item--on': weightUnit === 'kg' }" @click="unitChange('kg')">千克</text>
+          </view>
+        </view>
         <input
           v-model="sheet.weight"
           class="fld__input ft-num"
           type="digit"
-          placeholder="如 72.5"
+          :step="weightInputStep()"
+          :placeholder="weightUnit === 'jin' ? '如 145.0' : '如 72.50'"
           placeholder-class="fld__ph"
         />
       </view>
@@ -1034,6 +1083,32 @@ function girthLine(r: BodyRecordRow): string {
   padding: 18rpx 0;
   border-bottom: 1rpx solid $app-line-soft;
   flex: 1;
+}
+
+.fld__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+}
+
+.unit-switch {
+  display: flex;
+  gap: 8rpx;
+  margin-left: 16rpx;
+}
+
+.unit-switch__item {
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  color: $app-ink-muted;
+  background: $app-surface-2;
+  font-size: $text-xs;
+}
+
+.unit-switch__item--on {
+  color: #ffffff;
+  background: $app-ink;
 }
 
 .fld__label {

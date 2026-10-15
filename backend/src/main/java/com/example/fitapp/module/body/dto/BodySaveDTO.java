@@ -2,6 +2,7 @@ package com.example.fitapp.module.body.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -18,6 +19,7 @@ public class BodySaveDTO {
 
     @DecimalMin(value = "20", message = "体重数值不正确")
     @DecimalMax(value = "400", message = "体重数值不正确")
+    @Digits(integer = 3, fraction = 2, message = "体重最多保留两位小数")
     private BigDecimal weight;
 
     @DecimalMin(value = "10", message = "围度数值不正确")
