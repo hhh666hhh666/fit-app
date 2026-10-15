@@ -59,7 +59,16 @@ public class BodyService {
             r.setMeasuredAt(dto.getMeasuredAt());
         }
         applyValues(r, dto);
-        bodyRecordMapper.updateById(r);
+        bodyRecordMapper.update(null, Wrappers.<BodyRecord>update()
+                .eq("id", id)
+                .eq("user_id", userId)
+                .set("measured_at", r.getMeasuredAt())
+                .set("weight", r.getWeight())
+                .set("chest", r.getChest())
+                .set("waist", r.getWaist())
+                .set("hip", r.getHip())
+                .set("arm", r.getArm())
+                .set("note", r.getNote()));
         return toRow(r, null);
     }
 

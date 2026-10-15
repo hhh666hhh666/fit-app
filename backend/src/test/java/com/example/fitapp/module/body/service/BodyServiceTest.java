@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -273,7 +274,8 @@ class BodyServiceTest {
         assertEquals(0, vo.getWeight().compareTo(new BigDecimal("71.8")));
         assertEquals(0, vo.getChest().compareTo(new BigDecimal("97")));
         assertEquals("", vo.getNote());
-        verify(bodyRecordMapper).updateById(any(BodyRecord.class));
+        // 显式 update(null, wrapper)：not_null 策略下 updateById 跳不过空值，清空要靠它
+        verify(bodyRecordMapper).update(isNull(), any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
 
         // 不存在的 id
         when(bodyRecordMapper.selectById(9L)).thenReturn(null);
