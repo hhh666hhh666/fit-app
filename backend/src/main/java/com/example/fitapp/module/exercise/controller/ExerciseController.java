@@ -2,6 +2,7 @@ package com.example.fitapp.module.exercise.controller;
 
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.exercise.dto.ExerciseUpsertDTO;
+import com.example.fitapp.module.exercise.dto.ExerciseBatchDeleteDTO;
 import com.example.fitapp.module.exercise.service.ExerciseService;
 import com.example.fitapp.module.exercise.vo.ExerciseVO;
 import com.example.fitapp.security.UserContext;
@@ -48,6 +49,12 @@ public class ExerciseController {
     @DeleteMapping("/{id}")
     public Result<Void> archive(@PathVariable Long id) {
         exerciseService.archive(UserContext.requireUserId(), id);
+        return Result.success();
+    }
+
+    @PostMapping("/batch-delete")
+    public Result<Void> batchDelete(@Valid @RequestBody ExerciseBatchDeleteDTO body) {
+        exerciseService.batchArchive(UserContext.requireUserId(), body.getIds());
         return Result.success();
     }
 }

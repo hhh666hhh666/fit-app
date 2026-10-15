@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
+import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -28,6 +28,14 @@ const loading = ref(false)
 const keyword = ref('')
 /** '' = 全部 */
 const activeMuscle = ref('')
+const selectMode = ref(false)
+const selected = ref<Set<number>>(new Set())
+const selectedCount = computed(() => selected.value.size)
+const deletable = computed(() => filtered.value.filter((e) => !e.preset))
+const allSelected = computed(
+  () => deletable.value.length > 0 && deletable.value.every((e) => selected.value.has(e.id))
+)
+let clickLockUntil = 0
 
 onLoad((query) => {
   const q = (query || {}) as Record<string, string | undefined>
@@ -72,13 +80,65 @@ const sectTitle = computed(() => {
   return m ? `${m.section}动作 (${filtered.value.length})` : `全部动作 (${filtered.value.length})`
 })
 
+function toggleSelect(id: number) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+
 function onTapExercise(e: ExerciseItem) {
+  if (Date.now() < clickLockUntil) return
+  if (selectMode.value) {
+    if (!e.preset) toggleSelect(e.id)
+    return
+  }
   if (!picking.value) {
     uni.showToast({ title: '动作详情建设中', icon: 'none' })
     return
   }
   pick.pick({ id: e.id, name: e.name, muscle: e.muscle })
   uni.navigateBack()
+}
+
+function onLongPressExercise(e: ExerciseItem) {
+  if (e.preset || selectMode.value) return
+  clickLockUntil = Date.now() + 400
+  selectMode.value = true
+  selected.value = new Set([e.id])
+}
+
+function exitSelect() {
+  selectMode.value = false
+  selected.value = new Set()
+}
+
+function toggleAll() {
+  selected.value = allSelected.value
+    ? new Set([...selected.value].filter((id) => !deletable.value.some((e) => e.id === id)))
+    : new Set([...selected.value, ...deletable.value.map((e) => e.id)])
+}
+
+function doDelete() {
+  const ids = [...selected.value]
+  if (!ids.length) return
+  uni.showModal({
+    title: '删除自定义动作',
+    content: `删除选中的 ${ids.length} 个动作？动作会从动作库下架，历史训练记录仍会保留。`,
+    confirmText: '删除',
+    confirmColor: '#C4453C',
+    success: async ({ confirm }) => {
+      if (!confirm) return
+      try {
+        await batchDeleteExercises(ids)
+        all.value = all.value.filter((e) => !ids.includes(e.id))
+        exitSelect()
+        uni.showToast({ title: `已删除 ${ids.length} 个`, icon: 'none' })
+      } catch {
+        // request 层已统一提示
+      }
+    }
+  })
 }
 
 // ── 新增自定义动作弹层 ──
@@ -115,13 +175,21 @@ function goBack() {
 <template>
   <view class="lib">
     <!-- 顶部 -->
-    <view class="lib__nav">
+    <view v-if="!selectMode" class="lib__nav">
       <text class="lib__back" @click="goBack">‹</text>
       <text class="lib__meta ft-num">● TRAINING LOGBOOK // V3.2</text>
       <text class="lib__meta ft-num">SEC.04_LIB</text>
     </view>
+    <view v-else class="lib__select-nav">
+      <text class="lib__cancel" @click="exitSelect">取消</text>
+      <text class="lib__selected ft-num">已选 {{ selectedCount }} 项</text>
+      <view class="lib__select-actions">
+        <text @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
+        <text class="lib__delete" :class="{ 'lib__delete--off': selectedCount === 0 }" @click="doDelete">删除</text>
+      </view>
+    </view>
 
-    <view class="lib__title-row">
+    <view v-if="!selectMode" class="lib__title-row">
       <text class="lib__title">动作库</text>
       <view class="lib__new" @click="openCreate">+ 新增</view>
     </view>
@@ -170,7 +238,21 @@ function goBack() {
 
     <!-- 列表 -->
     <view class="elist">
-      <view v-for="e in filtered" :key="e.id" class="erow" @click="onTapExercise(e)">
+      <view
+        v-for="e in filtered"
+        :key="e.id"
+        class="erow"
+        :class="{ 'erow--sel': selectMode && selected.has(e.id) }"
+        @click="onTapExercise(e)"
+        @longpress="onLongPressExercise(e)"
+      >
+        <view
+          v-if="selectMode && !e.preset"
+          class="erow__check"
+          :class="{ 'erow__check--on': selected.has(e.id) }"
+        >
+          <wd-icon v-if="selected.has(e.id)" name="check" size="13px" color="#ffffff" />
+        </view>
         <view class="erow__mid">
           <text class="erow__name">{{ e.name }}</text>
           <text class="erow__sub">{{ muscleLabel(e.muscle) }} · {{ e.preset ? '预设' : '自定义' }}</text>
@@ -249,6 +331,39 @@ function goBack() {
 
 .lib__meta:last-child {
   margin-left: auto;
+}
+
+.lib__select-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64rpx;
+  padding-bottom: 24rpx;
+}
+
+.lib__cancel,
+.lib__selected,
+.lib__select-actions text {
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.lib__selected {
+  color: $app-ink;
+}
+
+.lib__select-actions {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+}
+
+.lib__delete {
+  color: #c4453c !important;
+}
+
+.lib__delete--off {
+  opacity: 0.35;
 }
 
 .lib__title-row {
@@ -379,6 +494,28 @@ function goBack() {
   display: flex;
   align-items: center;
   padding: 26rpx 28rpx;
+}
+
+.erow--sel {
+  background: $app-canvas;
+}
+
+.erow__check {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid $app-line;
+  background: $app-surface;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.erow__check--on {
+  background: $app-ink;
+  border-color: $app-ink;
 }
 
 .erow + .erow {

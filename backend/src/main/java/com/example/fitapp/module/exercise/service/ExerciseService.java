@@ -68,6 +68,18 @@ public class ExerciseService {
         exerciseMapper.updateById(e);
     }
 
+    /** 批量下架：先校验全部归属，再统一更新，避免部分动作被误下架。 */
+    @org.springframework.transaction.annotation.Transactional
+    public void batchArchive(Long userId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        List<Long> distinct = ids.stream().distinct().toList();
+        for (Long id : distinct) requireOwn(userId, id);
+        exerciseMapper.update(null, Wrappers.<Exercise>update()
+                .in("id", distinct)
+                .eq("user_id", userId)
+                .set("archived", true));
+    }
+
     private Exercise requireOwn(Long userId, Long id) {
         Exercise e = exerciseMapper.selectById(id);
         if (e == null || Boolean.TRUE.equals(e.getArchived())) {

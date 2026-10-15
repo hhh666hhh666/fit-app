@@ -18,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -83,6 +85,40 @@ class ExerciseServiceTest {
         ArgumentCaptor<Exercise> captor = ArgumentCaptor.forClass(Exercise.class);
         verify(exerciseMapper).updateById(captor.capture());
         assertTrue(Boolean.TRUE.equals(captor.getValue().getArchived()));
+    }
+
+    private static Exercise own(Long id) {
+        Exercise e = new Exercise();
+        e.setId(id);
+        e.setUserId(7L);
+        e.setArchived(false);
+        return e;
+    }
+
+    /** 批量下架自己的动作：一次 update 统一置 archived（先逐条校验归属）。 */
+    @Test
+    void batchArchive_ownExercises_setsArchivedForAll() {
+        when(exerciseMapper.selectById(1L)).thenReturn(own(1L));
+        when(exerciseMapper.selectById(2L)).thenReturn(own(2L));
+
+        service().batchArchive(7L, List.of(1L, 2L, 1L));
+
+        verify(exerciseMapper).update(isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+    }
+
+    /** 批里混进预设动作：整批不动（不能出现「删了一半」）。 */
+    @Test
+    void batchArchive_presetInBatch_throwsAndUpdatesNothing() {
+        Exercise preset = new Exercise();
+        preset.setId(1L);
+        preset.setUserId(null);
+        preset.setArchived(false);
+        when(exerciseMapper.selectById(1L)).thenReturn(preset);
+
+        assertThrows(BusinessException.class, () -> service().batchArchive(7L, List.of(1L)));
+
+        verify(exerciseMapper, never()).update(any(), any());
     }
 
     @Test

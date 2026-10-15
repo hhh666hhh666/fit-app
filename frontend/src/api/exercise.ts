@@ -15,3 +15,8 @@ export function listExercises(params?: { muscle?: string; keyword?: string }) {
 export function createExercise(payload: { name: string; muscle: string }) {
   return unwrap(request.post<ExerciseItem>('/exercises', payload))
 }
+
+/** 批量下架自定义动作；预设动作由后端拒绝。 */
+export function batchDeleteExercises(ids: number[]) {
+  return unwrap(request.post<void>('/exercises/batch-delete', { ids }))
+}
