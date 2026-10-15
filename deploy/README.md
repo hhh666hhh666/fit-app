@@ -29,6 +29,18 @@ scp deploy/.env.cloud.example  <user>@<host>:/srv/fit-app/.env   # 然后改真�
 scp deploy/nginx/site.conf.example <user>@<host>:/etc/nginx/conf.d/<site>.conf
 ```
 
+## 线上代码只能靠发版换（没有「手工同步」这条捷径）
+
+线上跑的是镜像，不是源码：服务器上**没有仓库、没有 git**，编排里也**没有 `build:`**（小机器跑 Maven 必 OOM，
+构建一律在流水线上做）。所以「把新代码同步到线上」= 换镜像 tag，而镜像由发布流水线构建。
+
+真要绕开版本 tag 也有一条手工路径：本机构建后推一个非版本 tag，再到服务器上 `bash server-deploy.sh <tag>`——
+脚本不挑 tag，能跑。但代价是 `.current-version` / `.version-history` 会记下它，回滚链从此混入一个与 git tag
+对不上的落点；同时绕开版本门禁与迁移重放。**结论：要动线上就发版；只想看效果用本机，别动线上。**
+
+compose 与本目录下的脚本倒是可以不发版就换（`scp` 到 `/srv/fit-app/compose/`），但下次发版会被整体覆盖——
+这是「服务器上的编排 = 这个 tag 的编排」这条设计的一部分，仓库始终是真相源。
+
 ## 回滚
 
 ```bash
