@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { computed, onUnmounted, ref } from 'vue'
+import { onHide, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import FtDietRings from '@/components/FtDietRings.vue'
 import MealSheet from '@/components/MealSheet.vue'
@@ -9,8 +9,9 @@ import { useDietStore } from '@/stores/diet'
 import { addWater, getDay, type DayOverview, type MealKey } from '@/api/nutrition'
 import { getWorkout, listWorkouts } from '@/api/workout'
 import { buildDietRings } from '@/utils/diet'
-import { formatDateLabel, formatThousands } from '@/utils/format'
+import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import { clearSession, loadSession, netElapsedSec, type Session } from '@/utils/session'
 
 const today = (() => {
   const d = new Date()
@@ -137,6 +138,36 @@ async function refreshCounts() {
   }
 }
 
+// ── 进行中的训练会话（ADR 0020：返回＝最小化，首页在「开始训练」上方给回程入口）──
+const activeSession = ref<Session | null>(null)
+const nowMs = ref(Date.now())
+let sessionTimer: ReturnType<typeof setInterval> | undefined
+
+const sessionClock = computed(() =>
+  activeSession.value ? formatClock(netElapsedSec(activeSession.value, nowMs.value)) : ''
+)
+const sessionDoneCount = computed(() =>
+  (activeSession.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
+)
+
+function refreshActiveSession() {
+  activeSession.value = loadSession()
+}
+
+function startSessionClock() {
+  if (sessionTimer || !activeSession.value) return
+  sessionTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+}
+
+function stopSessionClock() {
+  if (sessionTimer) {
+    clearInterval(sessionTimer)
+    sessionTimer = undefined
+  }
+}
+
 // ── 「开始训练」→ 先选计划（ADR 0016；周安排只决定谁置顶，不自动执行）──
 const schedule = useScheduleStore()
 const picker = ref(false)
@@ -147,6 +178,17 @@ onShow(() => {
   refreshLastWorkout()
   refreshCounts()
   void refreshDiet()
+  refreshActiveSession()
+  startSessionClock()
+})
+
+onHide(() => {
+  stopSessionClock()
+  refreshActiveSession()
+})
+
+onUnmounted(() => {
+  stopSessionClock()
 })
 
 const bottomHint = computed(() => {
@@ -168,20 +210,50 @@ function goLibrary() {
   uni.navigateTo({ url: '/pages/library/index' })
 }
 
-/** 点「开始训练」总是先选计划；顺带补一次拉取，免得计划还没到就闪一下空态。 */
+/**
+ * 点「开始训练」：已经有进行中的会话就先问一次（ADR 0020）——
+ * 会话不设过期，冲突只在这一刻（要开新的）才需要决定。
+ */
 function onStart() {
+  const s = activeSession.value
+  if (s) {
+    uni.showModal({
+      title: '上一次训练还没结束',
+      content: `已记 ${sessionDoneCount.value} 组 · 已进行 ${sessionClock.value}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
+      confirmText: '继续上次',
+      cancelText: '开新的',
+      success: ({ confirm }) => {
+        if (confirm) {
+          resumeTraining()
+          return
+        }
+        clearSession()
+        activeSession.value = null
+        stopSessionClock()
+        void schedule.load()
+        picker.value = true
+      }
+    })
+    return
+  }
   void schedule.load()
   picker.value = true
 }
 
+/** 回到进行中的会话页（不带参数＝接续本机存的那条会话）。 */
+function resumeTraining() {
+  uni.navigateTo({ url: '/pages/session/index' })
+}
+
+/** 新会话带 `fresh=1`：会话页据此放弃接续、重新开一场。 */
 function startPlan(id: number) {
   picker.value = false
-  uni.navigateTo({ url: `/pages/session/index?plan=${id}` })
+  uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
 }
 
 function freeTrain() {
   picker.value = false
-  uni.navigateTo({ url: '/pages/session/index' })
+  uni.navigateTo({ url: '/pages/session/index?fresh=1' })
 }
 
 /** 没有计划时的出口：去「我的 → 训练计划」新建（改计划只走那里）。 */
@@ -271,12 +343,23 @@ function goPlans() {
         </view>
       </view>
 
-      <view class="home__pad" />
+      <view class="home__pad" :class="{ 'home__pad--taller': activeSession }" />
     </view>
 
-    <!-- 底部固定区：开始训练 + tab 栏 -->
+    <!-- 底部固定区：进行中的训练横幅 + 开始训练 + tab 栏 -->
     <view class="home__bottom">
       <text class="home__bottom-link">{{ bottomHint }}</text>
+
+      <!-- 训练进行中：返回＝最小化后的回程入口（ADR 0020） -->
+      <view v-if="activeSession" class="resume" @click="resumeTraining">
+        <view class="resume__dot" />
+        <view class="resume__main">
+          <text class="resume__title">训练进行中</text>
+          <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
+        </view>
+        <text class="resume__go">继续 ›</text>
+      </view>
+
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
       <FtTabBar active="home" />
     </view>
@@ -563,6 +646,11 @@ function goPlans() {
   height: 320rpx;
 }
 
+/* 有进行中的训练时，底部固定区多一条横幅 */
+.home__pad--taller {
+  height: 440rpx;
+}
+
 .home__bottom {
   position: fixed;
   left: 0;
@@ -578,6 +666,53 @@ function goPlans() {
   font-size: $text-sm;
   color: $app-ink-muted;
   padding: 10rpx 0 16rpx;
+}
+
+/* ── 训练进行中横幅（在「开始训练」按钮正上方） ── */
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 16rpx;
+  padding: 20rpx 24rpx;
+  background: $app-surface;
+  border: 1rpx solid $app-ink;
+  border-left: 8rpx solid $app-highlight;
+  border-radius: $radius-md;
+}
+
+.resume__dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: $app-ink;
+  flex-shrink: 0;
+}
+
+.resume__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.resume__title {
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.resume__meta {
+  font-size: 22rpx;
+  color: $app-ink-muted;
+}
+
+.resume__go {
+  font-size: $text-sm;
+  font-weight: 500;
+  color: $app-ink;
+  flex-shrink: 0;
 }
 
 /* ── 训练计划选择器弹层 ── */

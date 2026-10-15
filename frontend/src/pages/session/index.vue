@@ -1,48 +1,52 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-// #ifdef H5
-import { onBeforeRouteLeave } from 'vue-router'
-// #endif
 import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
-import { formatThousands, muscleLabel } from '@/utils/format'
+import { formatClock, formatThousands, muscleLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import {
+  clearSession,
+  createSession,
+  isPaused,
+  loadSession,
+  netElapsedSec,
+  pause as pauseSession,
+  resume as resumeSession,
+  saveSession,
+  setDurationSec,
+  type Session,
+  type SessionBlock,
+  type SessionSet
+} from '@/utils/session'
 
-// ── 训练会话（计划多动作：按目标预填 → 点勾完成 → 全组完成自动切下一动作）──
+// ── 训练会话（计划多动作：按目标预填 → 点勾完成 → 全组完成自动切下一个未完成动作）──
+// 会话存本机（ADR 0020）：返回＝最小化、退到后台与杀进程都能接续；计时走墙钟净时长（ADR 0022）。
 const training = useTrainingStore()
 
-const planTitle = ref('自由训练')
-/** 来源计划 id（自由训练为 null）；结束训练时随记录入库。 */
-const planId = ref<number | null>(null)
+const session = ref<Session | null>(null)
+/** 只用于驱动「计时」重绘的当前时刻——计时本身由时间戳现算，不靠定时器累加。 */
+const nowMs = ref(Date.now())
 
-type SetRow = { w: string; r: string; done: boolean }
-
-type Block = {
-  exerciseId: number | null
-  name: string
-  muscle: string
-  /** 「上次数据」文案。 */
-  last: string
-  /** 计划目标提示（如「目标 4 组 × 8 次 · 60 kg」；自由训练为空）。 */
-  goal: string
-  targetSets: number | null
-  targetReps: number | null
-  targetWeight: number | null
-  sets: SetRow[]
-}
-
-const blocks = ref<Block[]>([])
-const current = ref(0)
-const curBlock = computed<Block | undefined>(() => blocks.value[current.value])
+const curBlock = computed<SessionBlock | undefined>(() => {
+  const s = session.value
+  return s ? s.blocks[s.current] : undefined
+})
+/** 模板里用的两个非空代理：块列表与当前下标。 */
+const blocks = computed<SessionBlock[]>(() => session.value?.blocks ?? [])
+const curIdx = computed(() => session.value?.current ?? 0)
+const paused = computed(() => !!session.value && isPaused(session.value))
+const clock = computed(() => formatClock(session.value ? netElapsedSec(session.value, nowMs.value) : 0))
 
 /** 按目标铺初始组行：设了目标组数就铺 N 行并预填重量/次数；未设 = 1 行空值。 */
-function buildSets(t: Pick<Block, 'targetSets' | 'targetReps' | 'targetWeight'>): SetRow[] {
+function buildSets(
+  t: Pick<SessionBlock, 'targetSets' | 'targetReps' | 'targetWeight'>
+): SessionSet[] {
   const n = t.targetSets && t.targetSets > 0 ? t.targetSets : 1
   const w = t.targetWeight != null ? String(t.targetWeight) : ''
   const r = t.targetReps != null ? String(t.targetReps) : ''
-  return Array.from({ length: n }, () => ({ w, r, done: false }))
+  return Array.from({ length: n }, () => ({ w, r, done: false, doneAt: null, dur: null }))
 }
 
 function goalText(e: {
@@ -60,7 +64,7 @@ function goalText(e: {
 
 /** 「上次数据」：有 exerciseId 时从真接口取（自动/手动切动作时都要重拉）。 */
 async function loadLastForBlock(i: number) {
-  const b = blocks.value[i]
+  const b = session.value?.blocks[i]
   if (!b || !b.exerciseId) return
   try {
     const rec = await getLastRecord(b.exerciseId)
@@ -72,7 +76,8 @@ async function loadLastForBlock(i: number) {
 
 /** 自由训练：单块占位（动作选择落地前沿用设计稿演示数据），1 行空值起步。 */
 function initFreeBlock() {
-  blocks.value = [
+  const s = createSession(null, '自由训练')
+  s.blocks = [
     {
       exerciseId: 1,
       name: '杠铃卧推',
@@ -85,18 +90,20 @@ function initFreeBlock() {
       sets: buildSets({ targetSets: null, targetReps: null, targetWeight: null })
     }
   ]
-  current.value = 0
-  loadLastForBlock(0)
+  session.value = s
+  void loadLastForBlock(0)
 }
 
-// 从「开始训练」带计划进来：拉计划详情，全部动作进场（各自按目标预填组行）
+/** 从「开始训练」带计划进来：拉计划详情，全部动作进场（各自按目标预填组行）。 */
 async function loadPlan(pid: number) {
   try {
     const plan = await getPlan(pid)
-    if (plan.exercises.length === 0) return
-    planId.value = plan.id
-    planTitle.value = plan.name
-    blocks.value = plan.exercises.map((e) => {
+    if (plan.exercises.length === 0) {
+      initFreeBlock()
+      return
+    }
+    const s = createSession(plan.id, plan.name)
+    s.blocks = plan.exercises.map((e) => {
       const targetSets = e.targetSets ?? null
       const targetReps = e.targetReps ?? null
       const targetWeight = e.targetWeight ?? null
@@ -112,51 +119,94 @@ async function loadPlan(pid: number) {
         sets: buildSets({ targetSets, targetReps, targetWeight })
       }
     })
-    current.value = 0
-    loadLastForBlock(0)
+    session.value = s
+    void loadLastForBlock(0)
   } catch {
     // request 层已统一提示；退化为自由训练块，不白屏
     initFreeBlock()
   }
 }
 
+/**
+ * 进场分两路（ADR 0020）：
+ * - 带 `fresh=1`（首页点「开始训练」选了计划/自由训练）＝一定是新会话；
+ * - 否则（首页横幅点「继续」、或直接进本页）＝有本机会话就接续，没有才新建。
+ */
+async function bootstrap(q: Record<string, string | undefined>) {
+  const existing = q.fresh === '1' ? null : loadSession()
+  if (existing && existing.blocks.length > 0) {
+    session.value = existing
+    await loadLastForBlock(existing.current)
+    return
+  }
+  clearSession()
+  const pid = Number(q.plan)
+  if (pid) await loadPlan(pid)
+  else initFreeBlock()
+}
+
 onLoad((query) => {
   if (!ensureLogin()) return
-  const q = (query || {}) as Record<string, string | undefined>
-  const pid = Number(q.plan)
-  if (pid) {
-    loadPlan(pid)
-  } else {
-    initFreeBlock()
-  }
+  void bootstrap((query || {}) as Record<string, string | undefined>)
 })
 
-/** 活动行 = 第一个未完成的组；全部完成时无活动行。 */
+/** 任何变更都落本机一次：返回首页、退到后台、进程被杀都不丢。 */
+watch(
+  session,
+  (s) => {
+    if (s) saveSession(s)
+  },
+  { deep: true }
+)
+
+// 计时靠时间戳现算，这个定时器只负责让页面上的数字往前走（500ms 一跳，秒数看起来更准）
+let timer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  timer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 500)
+})
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+  if (session.value) saveSession(session.value)
+})
+
+/** 暂停 / 恢复：暂停时计时冻结、录入区锁住（ADR 0022）。 */
+function togglePause() {
+  const s = session.value
+  if (!s) return
+  if (isPaused(s)) resumeSession(s)
+  else pauseSession(s)
+}
+
+/** 活动行 = 本动作第一个未完成的组；全部完成时无活动行。 */
 function isActive(i: number) {
   return (curBlock.value?.sets.findIndex((s) => !s.done) ?? -1) === i
 }
 
 /** 本动作是否全部完成。 */
 function isBlockDone(i: number): boolean {
-  const b = blocks.value[i]
+  const b = session.value?.blocks[i]
   return !!b && b.sets.length > 0 && b.sets.every((s) => s.done)
 }
 
 /** 本动作已完成组数（切换条上的 x/y）。 */
 function doneInBlock(i: number): number {
-  return blocks.value[i]?.sets.filter((s) => s.done).length ?? 0
+  return session.value?.blocks[i]?.sets.filter((s) => s.done).length ?? 0
 }
 
-/** 自由切换：点切换条任意动作即跳过去（不丢已勾的组）。 */
+/** 自由切换：点切换条任意动作即跳过去（不丢已勾的组；暂停中也能看别的动作）。 */
 function switchTo(i: number) {
-  if (i === current.value || !blocks.value[i]) return
-  current.value = i
-  loadLastForBlock(i)
+  const s = session.value
+  if (!s || i === s.current || !s.blocks[i]) return
+  s.current = i
+  void loadLastForBlock(i)
 }
 
 /** 从 from 起环形找下一个「还有未完成组」的动作；都完成返回 -1。 */
 function nextUnfinished(from: number): number {
-  const n = blocks.value.length
+  const list = session.value?.blocks ?? []
+  const n = list.length
   for (let k = 1; k < n; k++) {
     const idx = (from + k) % n
     if (!isBlockDone(idx)) return idx
@@ -164,23 +214,36 @@ function nextUnfinished(from: number): number {
   return -1
 }
 
-/** 点勾 = 仅标记完成（不再自动补行）；本动作全部完成 → 自动切到下一个未完成动作。 */
+/** 长按后浏览器／WebView 还会补发一次 click（日志页踩过这个坑），给个抑制窗口。 */
+let clickGuardUntil = 0
+
+/**
+ * 点勾 = 标记完成 ＋ 记下这一组的净用时（ADR 0022）；
+ * 组内顺序推进（ADR 0021）：前面还有没完成的组就**静默无反应**，不弹提示。
+ * 本动作全部完成 → 自动切到下一个未完成动作。
+ */
 function completeSet(i: number) {
+  const s = session.value
   const b = curBlock.value
-  if (!b) return
+  if (!s || !b || paused.value) return
+  if (Date.now() < clickGuardUntil) return
   const row = b.sets[i]
   if (!row || row.done) return
+  if (b.sets.findIndex((x) => !x.done) !== i) return
   if (!row.w || !row.r) {
     uni.showToast({ title: '请填写重量和次数', icon: 'none' })
     return
   }
+  const now = Date.now()
   row.done = true
-  if (isBlockDone(current.value)) {
-    const next = nextUnfinished(current.value)
+  row.doneAt = now
+  row.dur = setDurationSec(s, now)
+  if (isBlockDone(s.current)) {
+    const next = nextUnfinished(s.current)
     if (next >= 0) {
-      current.value = next
-      loadLastForBlock(next)
-      uni.showToast({ title: `进入下一动作：${blocks.value[next]?.name ?? ''}`, icon: 'none' })
+      s.current = next
+      void loadLastForBlock(next)
+      uni.showToast({ title: `进入下一动作：${s.blocks[next]?.name ?? ''}`, icon: 'none' })
     } else {
       uni.showToast({ title: '全部动作已完成，可点「结束训练」', icon: 'none' })
     }
@@ -190,16 +253,73 @@ function completeSet(i: number) {
 /** 加一组（独立按钮）：沿用上一行的值预填。 */
 function addSet() {
   const b = curBlock.value
-  if (!b) return
+  if (!b || paused.value) return
   const last = b.sets[b.sets.length - 1]
-  b.sets.push({ w: last?.w ?? '', r: last?.r ?? '', done: false })
+  b.sets.push({ w: last?.w ?? '', r: last?.r ?? '', done: false, doneAt: null, dur: null })
+}
+
+/** 长按组行弹操作菜单（ADR 0021）：已勾的行多一项「取消完成」。 */
+function onLongPress(i: number) {
+  const b = curBlock.value
+  const row = b?.sets[i]
+  if (!b || !row || paused.value) return
+  clickGuardUntil = Date.now() + 600
+  const items = row.done ? ['取消完成', '删除这一组'] : ['删除这一组']
+  uni.showActionSheet({
+    itemList: items,
+    success: ({ tapIndex }) => {
+      if (items[tapIndex] === '取消完成') askUndoSet(i)
+      else removeSet(i)
+    }
+  })
+}
+
+/** 删一组：每个动作至少留一组（全删空等于顺手把动作也删了）。 */
+function removeSet(i: number) {
+  const b = curBlock.value
+  if (!b) return
+  if (b.sets.length <= 1) {
+    uni.showToast({ title: '每个动作至少留一组', icon: 'none' })
+    return
+  }
+  b.sets.splice(i, 1)
+}
+
+/**
+ * 取消某一组的完成：二次确认，并**级联取消该动作内后面已勾的组**（ADR 0021）——
+ * 保住「已勾的组永远是连续的一段」，免得出现「第 2 组空着、第 3 组却打着勾」的矛盾态。
+ */
+function askUndoSet(i: number) {
+  const b = curBlock.value
+  const row = b?.sets[i]
+  if (!b || !row || !row.done) return
+  const cascaded = b.sets.slice(i).filter((x) => x.done).length
+  uni.showModal({
+    title: '取消这一组的完成？',
+    content:
+      cascaded > 1
+        ? `第 ${i + 1} 组，以及它后面 ${cascaded - 1} 个已完成的组，都会回到未完成。`
+        : `第 ${i + 1} 组会回到未完成，可以重新改重量和次数。`,
+    confirmText: '取消完成',
+    cancelText: '保留',
+    success: ({ confirm }) => {
+      if (!confirm) return
+      for (let k = i; k < b.sets.length; k++) {
+        if (b.sets[k].done) {
+          b.sets[k].done = false
+          b.sets[k].doneAt = null
+          b.sets[k].dur = null
+        }
+      }
+    }
+  })
 }
 
 const doneCount = computed(() =>
-  blocks.value.reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
+  (session.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
 )
 const totalVolume = computed(() =>
-  blocks.value.reduce(
+  (session.value?.blocks ?? []).reduce(
     (sum, b) =>
       sum + b.sets.filter((s) => s.done).reduce((v, s) => v + Number(s.w || 0) * Number(s.r || 0), 0),
     0
@@ -207,37 +327,19 @@ const totalVolume = computed(() =>
 )
 const volumeText = computed(() => formatThousands(totalVolume.value))
 
-// 训练计时（进页面开始走秒；真实接数据后从训练开始时间起算）
-const seconds = ref(0)
-let timer: ReturnType<typeof setInterval> | undefined
-const clock = computed(() => {
-  const m = String(Math.floor(seconds.value / 60)).padStart(2, '0')
-  const s = String(seconds.value % 60).padStart(2, '0')
-  return `${m}:${s}`
-})
-onMounted(() => {
-  timer = setInterval(() => {
-    seconds.value++
-  }, 1000)
-})
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
-
-/** 已确认离开或已提交 → 离页守卫放行（避免自我拦截）。 */
-let leaving = false
-
-/** 离开会话页：返回上一页；没有上一页时回首页兜底。 */
+/** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。 */
 function leaveSession() {
-  leaving = true
+  if (session.value) saveSession(session.value)
   uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
 }
 
 async function finish() {
-  const doneBlocks = blocks.value
-    .map((b) => ({ b, sets: b.sets.filter((s) => s.done) }))
+  const s = session.value
+  if (!s) return
+  const doneBlocks = s.blocks
+    .map((b) => ({ b, sets: b.sets.filter((x) => x.done) }))
     .filter((x) => x.sets.length > 0)
-  // 一组都没勾：允许结束，但本次不留任何记录（不发请求）
+  // 一组都没勾：确认后直接丢弃这条会话（不发请求、不留记录）
   if (doneBlocks.length === 0) {
     uni.showModal({
       title: '结束本次训练？',
@@ -245,13 +347,16 @@ async function finish() {
       confirmText: '结束',
       cancelText: '继续',
       success: ({ confirm }) => {
-        if (confirm) leaveSession()
+        if (confirm) {
+          clearSession()
+          leaveSession()
+        }
       }
     })
     return
   }
   // 有任意动作的任意组未完成 → 先确认是否提前结束
-  const pending = blocks.value.reduce((sum, b) => sum + b.sets.filter((s) => !s.done).length, 0)
+  const pending = s.blocks.reduce((sum, b) => sum + b.sets.filter((x) => !x.done).length, 0)
   if (pending > 0) {
     uni.showModal({
       title: '提前结束训练？',
@@ -267,66 +372,55 @@ async function finish() {
   void submit(doneBlocks)
 }
 
-async function submit(doneBlocks: { b: Block; sets: SetRow[] }[]) {
+/** 提交：时长与组用时都取净时间（ADR 0022），提交成功后清掉本机会话。 */
+async function submit(doneBlocks: { b: SessionBlock; sets: SessionSet[] }[]) {
+  const s = session.value
+  if (!s) return
   try {
     const detail = await createWorkout({
-      planId: planId.value,
-      title: planTitle.value,
-      durationSec: seconds.value,
+      planId: s.planId,
+      title: s.title,
+      durationSec: netElapsedSec(s, Date.now()),
       blocks: doneBlocks.map((x) => ({
         exerciseId: x.b.exerciseId,
         name: x.b.name,
-        sets: x.sets.map((s) => ({ weight: Number(s.w), reps: Number(s.r) }))
+        sets: x.sets.map((y) => ({
+          weight: Number(y.w),
+          reps: Number(y.r),
+          durationSec: y.dur ?? undefined
+        }))
       }))
     })
+    clearSession()
     training.setCurrent(detail)
-    leaving = true
     uni.navigateTo({ url: '/pages/summary/index' })
   } catch {
-    // request 层已统一提示；留在本页可重试
+    // request 层已统一提示；留在本页可重试（会话还在，数据不丢）
   }
 }
+
 function comingSoon(tip: string) {
   uni.showToast({ title: tip, icon: 'none' })
 }
-
-// #ifdef H5
-// 拦住「离开会话页」（返回键 / 浏览器后退）：安卓壳的返回键走 WebView 历史回退，
-// 落的也是这条路由离开，故这一层在壳里同样生效（真机验证见 ADR 0011）。
-// 只拦「已经有记录的组」——一组都没勾时本次本来就不会有记录，放行免得误入页面也被弹一次。
-onBeforeRouteLeave((_to, _from, next) => {
-  if (leaving || doneCount.value === 0) {
-    next()
-    return
-  }
-  uni.showModal({
-    title: '离开本次训练？',
-    content: `已记录 ${doneCount.value} 组尚未保存，离开后本次训练不会入库。确定离开吗？`,
-    confirmText: '离开',
-    cancelText: '留下',
-    success: ({ confirm }) => {
-      if (confirm) {
-        leaving = true
-        next()
-      } else {
-        next(false)
-      }
-    }
-  })
-})
-// #endif
 </script>
 
 <template>
   <view class="session">
-    <view class="session__body">
-      <!-- 1. 顶部状态行 -->
+    <view class="session__body" :class="{ 'session__body--paused': paused }">
+      <!-- 1. 顶部状态行：整块状态区可点＝暂停 / 恢复 -->
       <view class="session__head">
-        <view class="session__status">
-          <view class="session__dot" />
-          <text class="session__status-text">训练中</text>
+        <view class="session__status" @click="togglePause">
+          <view class="session__dot" :class="{ 'session__dot--paused': paused }" />
+          <text class="session__status-text">{{ paused ? '已暂停' : '训练中' }}</text>
           <text class="session__status-mid">·</text>
           <text class="session__clock ft-num">{{ clock }}</text>
+          <view class="session__pause">
+            <view v-if="paused" class="session__play" />
+            <template v-else>
+              <view class="session__pause-bar" />
+              <view class="session__pause-bar" />
+            </template>
+          </view>
         </view>
         <text class="session__end" @click="finish">结束训练</text>
       </view>
@@ -340,22 +434,22 @@ onBeforeRouteLeave((_to, _from, next) => {
               :key="i"
               class="switcher__chip"
               :class="{
-                'switcher__chip--active': i === current,
-                'switcher__chip--done': i !== current && isBlockDone(i)
+                'switcher__chip--active': i === curIdx,
+                'switcher__chip--done': i !== curIdx && isBlockDone(i)
               }"
               @click="switchTo(i)"
             >
               <text class="switcher__name">{{ b.name }}</text>
               <view class="switcher__meta">
-                <text v-if="i !== current && isBlockDone(i)" class="switcher__tick">✓</text>
+                <text v-if="i !== curIdx && isBlockDone(i)" class="switcher__tick">✓</text>
                 <text class="switcher__prog ft-num">{{ doneInBlock(i) }}/{{ b.sets.length }}</text>
               </view>
             </view>
           </view>
         </scroll-view>
 
-        <!-- 2. 录入卡 -->
-        <view class="card">
+        <!-- 2. 录入卡（暂停时整块锁住并压暗） -->
+        <view class="card" :class="{ 'card--locked': paused }">
           <view class="card__head">
             <view class="card__title-row">
               <text class="card__title">{{ curBlock.name }}</text>
@@ -381,6 +475,7 @@ onBeforeRouteLeave((_to, _from, next) => {
             :key="i"
             class="setrow"
             :class="{ 'setrow--active': isActive(i) }"
+            @longpress="onLongPress(i)"
           >
             <view v-if="isActive(i)" class="setrow__bar" />
 
@@ -389,9 +484,10 @@ onBeforeRouteLeave((_to, _from, next) => {
             </text>
 
             <view class="setrow__right">
-              <!-- 完成态：只读值 + 实心勾 -->
+              <!-- 完成态：只读值 ＋ 这一组的净用时 ＋ 实心勾 -->
               <template v-if="s.done">
                 <text class="setrow__value ft-num">{{ s.w }} kg × {{ s.r }}</text>
+                <text v-if="s.dur != null" class="setrow__dur ft-num">{{ formatClock(s.dur) }}</text>
                 <view class="setrow__checkbox">
                   <wd-icon name="check" size="14px" />
                 </view>
@@ -401,12 +497,22 @@ onBeforeRouteLeave((_to, _from, next) => {
               <template v-else>
                 <view class="setrow__inputs">
                   <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
-                    <input v-model="s.w" type="digit" class="setrow__input-field ft-num" />
+                    <input
+                      v-model="s.w"
+                      type="digit"
+                      class="setrow__input-field ft-num"
+                      :disabled="paused"
+                    />
                     <text class="setrow__unit">kg</text>
                   </view>
                   <text class="setrow__x">×</text>
                   <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
-                    <input v-model="s.r" type="number" class="setrow__input-field ft-num" />
+                    <input
+                      v-model="s.r"
+                      type="number"
+                      class="setrow__input-field ft-num"
+                      :disabled="paused"
+                    />
                     <text class="setrow__unit">次</text>
                   </view>
                 </view>
@@ -423,7 +529,7 @@ onBeforeRouteLeave((_to, _from, next) => {
         </view>
 
         <!-- 3. 加一组 -->
-        <view class="add-set" @click="addSet">
+        <view class="add-set" :class="{ 'add-set--locked': paused }" @click="addSet">
           <text class="add-set__plus">+</text>
           <text>加一组</text>
         </view>
@@ -433,6 +539,8 @@ onBeforeRouteLeave((_to, _from, next) => {
           <text class="add-set__plus">+</text>
           <text>添加动作</text>
         </view>
+
+        <text class="session__tip">长按组次可删除这一组，或取消完成</text>
       </template>
 
       <view class="session__pad" />
@@ -480,6 +588,11 @@ onBeforeRouteLeave((_to, _from, next) => {
   background: $app-ink;
 }
 
+.session__dot--paused {
+  background: $app-surface;
+  border: 2rpx solid $app-ink-subtle;
+}
+
 .session__status-text {
   font-size: $text-lg;
   font-weight: 600;
@@ -496,10 +609,43 @@ onBeforeRouteLeave((_to, _from, next) => {
   color: $app-ink;
 }
 
+/* 暂停 / 恢复按钮：运行中显示两条竖线，暂停中显示三角 */
+.session__pause {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  width: 44rpx;
+  height: 44rpx;
+  border: 2rpx solid $app-ink;
+  border-radius: 8rpx;
+}
+
+.session__pause-bar {
+  width: 4rpx;
+  height: 20rpx;
+  background: $app-ink;
+}
+
+.session__play {
+  width: 0;
+  height: 0;
+  border-top: 10rpx solid transparent;
+  border-bottom: 10rpx solid transparent;
+  border-left: 16rpx solid $app-ink;
+  margin-left: 4rpx;
+}
+
 .session__end {
   font-size: $text-sm;
   font-weight: 500;
   color: $app-ink-muted;
+}
+
+/* 暂停中：录入区整体压暗（点击另有代码层拦截，这里只是让「已暂停」看得见） */
+.session__body--paused .card,
+.session__body--paused .add-set {
+  opacity: 0.45;
 }
 
 /* ── 动作切换条 ── */
@@ -575,6 +721,10 @@ onBeforeRouteLeave((_to, _from, next) => {
   border-radius: $radius-lg;
   overflow: hidden;
   margin-bottom: 24rpx;
+}
+
+.card--locked {
+  pointer-events: none;
 }
 
 .card__head {
@@ -692,13 +842,19 @@ onBeforeRouteLeave((_to, _from, next) => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 32rpx;
+  gap: 20rpx;
 }
 
 .setrow__value {
   font-size: $text-md;
   font-weight: 500;
   color: $app-ink;
+}
+
+/* 这一组的净用时（与上一组完成的间隔，不含暂停） */
+.setrow__dur {
+  font-size: 22rpx;
+  color: $app-ink-muted;
 }
 
 .setrow__checkbox {
@@ -765,7 +921,7 @@ onBeforeRouteLeave((_to, _from, next) => {
   flex-shrink: 0;
 }
 
-/* 非活动行（预填待做）的勾：线框空心，点击即完成 */
+/* 非活动行（预填待做）的勾：线框空心 */
 .setrow__check--pending {
   background: $app-surface;
   border: 2rpx solid $app-ink;
@@ -783,6 +939,10 @@ onBeforeRouteLeave((_to, _from, next) => {
   color: $app-ink-muted;
 }
 
+.add-set--locked {
+  pointer-events: none;
+}
+
 .add-set__plus {
   font-size: $text-md;
 }
@@ -798,6 +958,14 @@ onBeforeRouteLeave((_to, _from, next) => {
   font-size: $text-sm;
   font-weight: 500;
   color: $app-ink-muted;
+}
+
+/* 长按入口不可见，得说一句 */
+.session__tip {
+  display: block;
+  padding: 20rpx 8rpx 0;
+  font-size: 22rpx;
+  color: $app-ink-subtle;
 }
 
 /* ── 底部固定区 ── */

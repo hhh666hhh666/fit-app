@@ -15,7 +15,8 @@ const notFound = ref(false)
 // ── 编辑态：草稿与只读详情分离，改坏了不脏原数据；点 ✓ 才提交 ──
 const editing = ref(false)
 const saving = ref(false)
-type DraftSet = { weight: string; reps: string }
+/** dur 是「分:秒」文本（如 01:42）；留空＝这条没有用时（ADR 0022）。 */
+type DraftSet = { weight: string; reps: string; dur: string }
 type DraftBlock = { exerciseId: number | null; name: string; sets: DraftSet[] }
 const draft = ref<{ title: string; note: string; blocks: DraftBlock[] }>({
   title: '',
@@ -85,17 +86,33 @@ function startEdit() {
     blocks: d.blocks.map((b) => ({
       exerciseId: b.exerciseId ?? null,
       name: b.name,
-      sets: b.sets.map((s) => ({ weight: String(s.weight), reps: String(s.reps) }))
+      sets: b.sets.map((s) => ({
+        weight: String(s.weight),
+        reps: String(s.reps),
+        dur: s.durationSec != null ? formatClock(s.durationSec) : ''
+      }))
     }))
   }
   editing.value = true
 }
 
-/** 加一组：沿用上一行的值预填。 */
+/**
+ * 「分:秒」文本 → 秒。留空＝这条没有用时（合法）；写法不合法则拦下。
+ * 与页面上显示的写法（`formatClock`）是同一套，不做换算。
+ */
+function parseDuration(text: string): { ok: true; value: number | null } | { ok: false } {
+  const t = text.trim()
+  if (!t) return { ok: true, value: null }
+  const m = /^(\d{1,3}):([0-5]?\d)$/.exec(t)
+  if (!m) return { ok: false }
+  return { ok: true, value: Number(m[1]) * 60 + Number(m[2]) }
+}
+
+/** 加一组：沿用上一行的值预填（用时留空）。 */
 function addSet(bi: number) {
   const b = draft.value.blocks[bi]
   const last = b.sets[b.sets.length - 1]
-  b.sets.push({ weight: last?.weight ?? '', reps: last?.reps ?? '' })
+  b.sets.push({ weight: last?.weight ?? '', reps: last?.reps ?? '', dur: '' })
 }
 
 /** 删一组：每个动作至少留一组。 */
@@ -116,7 +133,7 @@ async function save() {
     uni.showToast({ title: '标题不能为空', icon: 'none' })
     return
   }
-  // 组次校验与「结束训练」提交同一口径：重量必填且 ≥0、次数必填且 ≥1
+  // 组次校验与「结束训练」提交同一口径：重量必填且 ≥0、次数必填且 ≥1；组用时留空或「分:秒」
   for (const b of draft.value.blocks) {
     for (const s of b.sets) {
       const w = Number(s.weight)
@@ -129,6 +146,10 @@ async function save() {
         uni.showToast({ title: `「${b.name}」有组次未填次数`, icon: 'none' })
         return
       }
+      if (!parseDuration(s.dur).ok) {
+        uni.showToast({ title: `「${b.name}」的组用时请按 01:42 的写法填`, icon: 'none' })
+        return
+      }
     }
   }
   saving.value = true
@@ -139,7 +160,14 @@ async function save() {
       blocks: draft.value.blocks.map((b) => ({
         exerciseId: b.exerciseId,
         name: b.name,
-        sets: b.sets.map((s) => ({ weight: Number(s.weight), reps: Number(s.reps) }))
+        sets: b.sets.map((s) => {
+          const d = parseDuration(s.dur)
+          return {
+            weight: Number(s.weight),
+            reps: Number(s.reps),
+            ...(d.ok && d.value != null ? { durationSec: d.value } : {})
+          }
+        })
       }))
     })
     editing.value = false
@@ -252,13 +280,18 @@ function back() {
                   第 {{ j + 1 }} 组
                   <text v-if="s.pr" class="set__pr ft-marker">PR</text>
                 </text>
-                <text class="set__value ft-num">{{ s.weight }} kg × {{ s.reps }}</text>
+                <view class="set__vals">
+                  <text class="set__value ft-num">{{ s.weight }} kg × {{ s.reps }}</text>
+                  <text v-if="s.durationSec != null" class="set__dur ft-num">
+                    {{ formatClock(s.durationSec) }}
+                  </text>
+                </view>
               </view>
             </view>
           </view>
         </template>
 
-        <!-- 编辑态：逐组改重量/次数，可增删组（动作名不可改） -->
+        <!-- 编辑态：逐组改重量/次数/用时，可增删组（动作名不可改） -->
         <template v-else>
           <view v-for="(b, i) in draft.blocks" :key="i" class="ft-card block">
             <view class="block__head">
@@ -269,19 +302,35 @@ function back() {
               <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
             </view>
             <view class="block__sets">
-              <view v-for="(s, j) in b.sets" :key="j" class="set">
-                <text class="set__label">第 {{ j + 1 }} 组</text>
-                <view class="set__edit">
-                  <view class="set__inp">
-                    <input v-model="s.weight" type="digit" class="set__field ft-num" />
-                    <text class="set__unit">kg</text>
+              <view v-for="(s, j) in b.sets" :key="j" class="set set--edit">
+                <view class="set__line">
+                  <text class="set__label">第 {{ j + 1 }} 组</text>
+                  <view class="set__edit">
+                    <view class="set__inp">
+                      <input v-model="s.weight" type="digit" class="set__field ft-num" />
+                      <text class="set__unit">kg</text>
+                    </view>
+                    <text class="set__x">×</text>
+                    <view class="set__inp">
+                      <input v-model="s.reps" type="number" class="set__field ft-num" />
+                      <text class="set__unit">次</text>
+                    </view>
+                    <text class="set__del" @click="removeSet(i, j)">×</text>
                   </view>
-                  <text class="set__x">×</text>
-                  <view class="set__inp">
-                    <input v-model="s.reps" type="number" class="set__field ft-num" />
-                    <text class="set__unit">次</text>
+                </view>
+                <!-- 组用时：留空＝这条没有用时（编辑是整体覆盖，见 ADR 0022） -->
+                <view class="set__line set__line--dur">
+                  <text class="set__dur-label">用时</text>
+                  <view class="set__inp set__inp--dur">
+                    <input
+                      v-model="s.dur"
+                      type="text"
+                      placeholder="01:42"
+                      placeholder-class="set__dur-ph"
+                      class="set__field set__field--dur ft-num"
+                    />
+                    <text class="set__unit">分:秒</text>
                   </view>
-                  <text class="set__del" @click="removeSet(i, j)">×</text>
                 </view>
               </view>
               <view class="set__add" @click="addSet(i)">+ 加一组</view>
@@ -523,7 +572,55 @@ function back() {
   color: $app-ink;
 }
 
+/* 值 ＋ 这一组的净用时 */
+.set__vals {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.set__dur {
+  font-size: 22rpx;
+  color: $app-ink-muted;
+}
+
 /* ── 编辑态组行 ── */
+/* 每组两行：上行＝组号 ＋ 重量×次数 ＋ 删；下行＝用时 */
+.set--edit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.set__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.set__line--dur {
+  justify-content: flex-start;
+  gap: 12rpx;
+}
+
+.set__dur-label {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.set__inp--dur {
+  padding: 4rpx 12rpx;
+}
+
+.set__field--dur {
+  width: 120rpx;
+}
+
+.set__dur-ph {
+  font-size: $text-md;
+  color: $app-ink-subtle;
+}
+
 .set__edit {
   display: flex;
   align-items: center;
