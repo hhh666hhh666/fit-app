@@ -26,6 +26,13 @@ import {
 const training = useTrainingStore()
 
 const session = ref<Session | null>(null)
+/**
+ * 本会话是否已结束（提交成功、或 0 组丢弃）。
+ * ⚠️ 必须是「单向闩锁」：`clearSession()` 只是删本机那份，`session.value` 仍在内存里，
+ * 页面的兜底保存（变更落盘 / 离页落盘 / `onUnmounted`）会把它原样写回去——
+ * 首页 `onShow` 一读就成了「训练进行中」。凡清会话处必须先立这个闩，见下方保存点。
+ */
+let ended = false
 /** 只用于驱动「计时」重绘的当前时刻——计时本身由时间戳现算，不靠定时器累加。 */
 const nowMs = ref(Date.now())
 
@@ -150,11 +157,11 @@ onLoad((query) => {
   void bootstrap((query || {}) as Record<string, string | undefined>)
 })
 
-/** 任何变更都落本机一次：返回首页、退到后台、进程被杀都不丢。 */
+/** 任何变更都落本机一次：返回首页、退到后台、进程被杀都不丢（会话已结束就不再落）。 */
 watch(
   session,
   (s) => {
-    if (s) saveSession(s)
+    if (s && !ended) saveSession(s)
   },
   { deep: true }
 )
@@ -168,7 +175,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
-  if (session.value) saveSession(session.value)
+  if (session.value && !ended) saveSession(session.value)
 })
 
 /** 暂停 / 恢复：暂停时计时冻结、录入区锁住（ADR 0022）。 */
@@ -327,9 +334,10 @@ const totalVolume = computed(() =>
 )
 const volumeText = computed(() => formatThousands(totalVolume.value))
 
-/** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。 */
+/** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。
+ *  已结束的会话不落——否则刚 `clearSession()` 的会在这一步被原样写回。 */
 function leaveSession() {
-  if (session.value) saveSession(session.value)
+  if (session.value && !ended) saveSession(session.value)
   uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
 }
 
@@ -348,6 +356,7 @@ async function finish() {
       cancelText: '继续',
       success: ({ confirm }) => {
         if (confirm) {
+          ended = true
           clearSession()
           leaveSession()
         }
@@ -391,9 +400,14 @@ async function submit(doneBlocks: { b: SessionBlock; sets: SessionSet[] }[]) {
         }))
       }))
     })
+    ended = true
     clearSession()
     training.setCurrent(detail)
-    uni.navigateTo({ url: '/pages/summary/index' })
+    // 用 redirectTo 顶掉本页：会话已结束，安卓物理返回不该再回到它（否则会重复提交一份）
+    uni.redirectTo({
+      url: '/pages/summary/index',
+      fail: () => uni.reLaunch({ url: '/pages/summary/index' })
+    })
   } catch {
     // request 层已统一提示；留在本页可重试（会话还在，数据不丢）
   }
