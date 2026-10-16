@@ -13,7 +13,7 @@
 
 ### Fixed
 
-- **上传餐照偶发「系统繁忙，请稍后再试」**：根因不在上传功能本身——与 quizzy 共用的 `quizzy-mysql` 容器内存上限只有 384MB，写大图时被撑满，**内核 OOM-killer 直接杀掉了 mysqld**（`dmesg` 的 `oom_memcg` 正是该容器的 cgroup）；容器重启的约十秒里连接池持有的连接集体失效，`INSERT INTO meal_photo` 抛 `CommunicationsException`，被全局异常兜底成那句含糊的「系统繁忙」。现在「查旧行 → 容量闸 → 落库」整块遇这类**瞬时**故障会退避重试两次——幂等靠 `meal_photo` 的唯一键 `uk_mp_user_date_meal`（重试会查到自己刚写的那一行、转走 update，不会多出一条）；重试用尽仍失败时改提示「服务正在重启，请稍后重试」（业务码 503），用户重按一次即可。⚠️ 数据库容器本身的内存参数调整属 quizzy 侧编排，见 [共享 MySQL 容器内存待办](./docs/todo/2026-10-16-TODO-共享MySQL容器内存.md)
+- **上传餐照偶发「系统繁忙，请稍后再试」**：根因不在上传功能本身——与 quizzy 共用的 `quizzy-mysql` 容器内存上限只有 384MB，写大图时被撑满，**内核 OOM-killer 直接杀掉了 mysqld**（`dmesg` 的 `oom_memcg` 正是该容器的 cgroup）；容器重启的约十秒里连接池持有的连接集体失效，`INSERT INTO meal_photo` 抛 `CommunicationsException`，被全局异常兜底成那句含糊的「系统繁忙」。现在「查旧行 → 容量闸 → 落库」整块遇这类**瞬时**故障会退避重试两次——幂等靠 `meal_photo` 的唯一键 `uk_mp_user_date_meal`（重试会查到自己刚写的那一行、转走 update，不会多出一条）；重试用尽仍失败时改提示「服务正在重启，请稍后重试」（业务码 503），用户重按一次即可。⚠️ 数据库容器本身的内存参数调整属 quizzy 侧编排，见 [共享 MySQL 容器内存待办](./docs/todo/archive/2026-10-16-TODO-共享MySQL容器内存.md)
 
 <!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
 
