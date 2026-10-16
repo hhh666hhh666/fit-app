@@ -224,13 +224,26 @@ jobs:
           ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" 'mkdir -p /srv/fit-app/compose/scripts'
           scp docker-compose.prod.yml \
             "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/srv/fit-app/compose/docker-compose.prod.yml"
+          # 备份与恢复脚本随发版一起送（ADR 0026）：server-deploy.sh 在 up -d 之前会检查
+          # ./backup-mysql.sh 是否**可执行**，所以下面必须补 chmod——scp 不保留执行位。
           scp scripts/server-deploy.sh scripts/server-rollback.sh scripts/server-compose.sh \
+            scripts/backup-mysql.sh scripts/backup-uploads.sh scripts/backup-to-oss.sh \
+            scripts/restore-verify.sh scripts/server-install-cron.sh \
             "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/srv/fit-app/compose/scripts/"
+          ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" \
+            'chmod +x /srv/fit-app/compose/scripts/*.sh'
 
       - name: 执行部署
         run: |
           ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" \
             "bash /srv/fit-app/compose/scripts/server-deploy.sh '${{ needs.version.outputs.image_tag }}'"
+
+      # 部署脚本在 up -d 之前已经强制备份过一次；这里顺手把那份**验一遍**——
+      # 「dump 导出成功」不等于「能恢复」，只有真灌进临时库跑通才算数（ADR 0026）。
+      - name: 验证备份可恢复
+        run: |
+          ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" \
+            "bash /srv/fit-app/compose/scripts/restore-verify.sh"
 
       - name: 清理私钥
         if: always()
