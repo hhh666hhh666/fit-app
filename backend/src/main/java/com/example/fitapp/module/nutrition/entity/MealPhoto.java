@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 
 /**
  * 每餐一张的照片（重拍即替换；每用户 + 日期 + 餐次至多一行）。
+ *
+ * <p>图片实体**存在文件系统**（见 {@link com.example.fitapp.module.nutrition.storage.PhotoStorage}，
+ * ADR 0026），本行只留元数据与相对路径。
  */
 @Data
 @TableName("meal_photo")
@@ -28,10 +31,20 @@ public class MealPhoto {
 
     private Integer sizeBytes;
 
-    /** 图片数据（前端已压缩）。 */
+    /** 图片相对路径（不含扩展名与根目录）：{userId}/{logDate}/{meal}。见 ADR 0026。 */
+    private String path;
+
+    /** 缩略图字节数（缩略图文件在文件系统里）；老数据无缩略图时为 NULL。 */
+    private Integer thumbBytes;
+
+    /**
+     * 图片数据。⚠️ **仅供历史遗留搬运使用**：由
+     * {@link com.example.fitapp.module.nutrition.storage.MealPhotoFileMigrator} 落盘后置 NULL。
+     * 新数据一律走文件系统（{@code path}），读取端不再碰它。
+     */
     private byte[] image;
 
-    /** 缩略图（长边 ≤320 的 JPEG，上传时后端生成）；老数据为 NULL，读取时回退用原图。 */
+    /** 缩略图数据。⚠️ 同 {@code image}：搬运完成后为 NULL，读取端回退用原图。 */
     private byte[] thumb;
 
     private LocalDateTime createdAt;

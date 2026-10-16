@@ -17,6 +17,7 @@ import com.example.fitapp.module.nutrition.mapper.DietDailyMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
+import com.example.fitapp.module.nutrition.storage.PhotoStorage;
 import com.example.fitapp.module.nutrition.vo.DailyNutritionRow;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
@@ -73,6 +74,9 @@ public class DietService {
     private final DietDailyMapper dietDailyMapper;
     private final FoodMapper foodMapper;
     private final SettingService settingService;
+
+    /** 餐照的文件存储（ADR 0026）：图片实体在磁盘上，库里只留路径。 */
+    private final PhotoStorage photoStorage;
 
     /** 餐照总占用上限（字节，原图＋缩略图）；达上限即拒绝上传（ADR 0013，值在 application.yml）。 */
     @Value("${fitapp.storage.photo-quota-bytes:21474836480}")
@@ -243,6 +247,16 @@ public class DietService {
                         "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
             }
 
+            // 落盘放在写库之前：文件写不成就别动数据库。反过来（先写库、文件失败）会留下
+            // 「记录指向不存在的图」；而写库失败时重试会往同一路径再写一遍——同路径覆盖，
+            // 天然幂等，也不会堆积孤儿（键与唯一键 uk_mp_user_date_meal 同构）。
+            String relKey = PhotoStorage.relKey(userId, date, meal);
+            try {
+                photoStorage.write(relKey, mime, bytes, thumb);
+            } catch (IOException e) {
+                throw new BusinessException(ResultCode.SYSTEM_ERROR, "照片保存失败，请稍后重试");
+            }
+
             if (existing == null) {
                 MealPhoto p = new MealPhoto();
                 p.setUserId(userId);
@@ -250,14 +264,14 @@ public class DietService {
                 p.setMeal(meal);
                 p.setMime(mime);
                 p.setSizeBytes(bytes.length);
-                p.setImage(bytes);
-                p.setThumb(thumb);
+                p.setPath(relKey);
+                p.setThumbBytes(thumb == null ? null : thumb.length);
                 mealPhotoMapper.insert(p);
             } else {
                 existing.setMime(mime);
                 existing.setSizeBytes(bytes.length);
-                existing.setImage(bytes);
-                existing.setThumb(thumb);
+                existing.setPath(relKey);
+                existing.setThumbBytes(thumb == null ? null : thumb.length);
                 mealPhotoMapper.updateById(existing);
             }
         });
@@ -265,13 +279,15 @@ public class DietService {
 
     /** 删除某餐照片（不可恢复；ADR 0013）。不存在 → 404。 */
     public void deletePhoto(Long userId, String dateStr, String meal) {
-        LocalDate date = parseDate(dateStr);
-        int n = mealPhotoMapper.delete(Wrappers.<MealPhoto>lambdaQuery()
-                .eq(MealPhoto::getUserId, userId)
-                .eq(MealPhoto::getLogDate, date)
-                .eq(MealPhoto::getMeal, meal));
-        if (n == 0) {
+        MealPhoto p = getPhoto(userId, dateStr, meal);
+        if (p == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "照片不存在");
+        }
+        mealPhotoMapper.deleteById(p.getId());
+        // 顺序要紧：行删成功之后才删文件。反过来的话，一旦删行失败就会留下
+        // 「记录指向不存在的图」——那比留个孤儿文件麻烦得多。
+        if (p.getPath() != null) {
+            photoStorage.delete(p.getPath());
         }
     }
 
@@ -331,13 +347,48 @@ public class DietService {
                 .toPlainString() + " GB";
     }
 
-    /** 读照片；不存在返回 null（由 Controller 转 404）。 */
+    /** 读照片元数据；不存在返回 null（由 Controller 转 404）。 */
     public MealPhoto getPhoto(Long userId, String dateStr, String meal) {
         LocalDate date = parseDate(dateStr);
         return mealPhotoMapper.selectOne(Wrappers.<MealPhoto>lambdaQuery()
                 .eq(MealPhoto::getUserId, userId)
                 .eq(MealPhoto::getLogDate, date)
                 .eq(MealPhoto::getMeal, meal));
+    }
+
+    /**
+     * 读取餐照二进制。{@code wantThumb=true} 时优先缩略图、没有就回退原图（老数据无缩略图）。
+     * 返回 null 表示这张图确实取不到（文件丢了、或记录不在）——由 Controller 转 404。
+     */
+    public PhotoData readPhoto(Long userId, String dateStr, String meal, boolean wantThumb) {
+        MealPhoto p = getPhoto(userId, dateStr, meal);
+        if (p == null) {
+            return null;
+        }
+        if (p.getPath() != null) {
+            if (wantThumb) {
+                byte[] t = photoStorage.readThumb(p.getPath());
+                if (t != null) {
+                    return new PhotoData(t, "image/jpeg");
+                }
+            }
+            byte[] img = photoStorage.readImage(p.getPath(), p.getMime());
+            return img == null ? null : new PhotoData(img, p.getMime());
+        }
+        // 过渡期回退：搬迁尚未完成（例如容器还没挂好卷）时图片仍在库里——
+        // 别让读取功能干等着搬迁，能读就先读出来。
+        if (wantThumb && hasBytes(p.getThumb())) {
+            return new PhotoData(p.getThumb(), "image/jpeg");
+        }
+        return hasBytes(p.getImage()) ? new PhotoData(p.getImage(), p.getMime()) : null;
+    }
+
+    private static boolean hasBytes(byte[] b) {
+        return b != null && b.length > 0;
+    }
+
+    /** 餐照二进制 ＋ 它的 MIME 类型。 */
+    public record PhotoData(byte[] data, String mime) {
     }
 
     // ── 饮水 ──

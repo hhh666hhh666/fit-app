@@ -80,6 +80,14 @@ fitapp:
     # 餐照总占用上限（字节，原图＋缩略图）。达到即拒绝上传（ADR 0013），改这里就能调。
     # 默认 20 GB：按默认压缩档一天满拍 4 张约够 45 年；若长期用「无损」档约三年半触顶。
     photo-quota-bytes: ${FITAPP_PHOTO_QUOTA_BYTES:21474836480}
+    # 餐照文件目录（ADR 0026）：图片实体落在磁盘上，库里只留相对路径。
+    # ⚠️ 容器里这个路径必须是**挂载的宿主机目录**（compose 绑 /srv/fit-app/uploads）——
+    #    否则容器重建时图片随可写层一起消失，而库里已经没有底片可恢复。
+    #    MealPhotoFileMigrator 启动时会自检是否为挂载点，没挂就中止搬迁（见其类注释）。
+    photo-dir: ${FITAPP_PHOTO_DIR:/data/uploads}
+    # 启动时自动把库里遗留的餐照 BLOB 搬到 photo-dir（幂等，搬完即清空库中底片）。
+    # 只有在想手工控制搬迁时机时才设 false。
+    migrate-on-start: ${FITAPP_PHOTO_MIGRATE_ON_START:true}
   recognition:
     # 营养成分表照片识别（ADR 0018）：DashScope（百炼）OpenAI 兼容端点，服务器在阿里云、同云直连。
     # api-key 为空 = 未配置：识别接口返回友好降级提示（不记账、不影响其他功能）。

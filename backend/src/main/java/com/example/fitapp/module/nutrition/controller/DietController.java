@@ -79,16 +79,16 @@ public class DietController {
     /** 直出图片二进制（不走 Result 信封）；前端带 token fetch → blob 展示。 */
     @GetMapping("/photos/{date}/{meal}")
     public ResponseEntity<byte[]> photo(@PathVariable String date, @PathVariable String meal) {
-        MealPhoto p = dietService.getPhoto(UserContext.requireUserId(), date, meal);
-        if (p == null) {
+        DietService.PhotoData d = dietService.readPhoto(UserContext.requireUserId(), date, meal, false);
+        if (d == null) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(p.getMime()))
-                .contentLength(p.getImage().length)
+                .contentType(MediaType.parseMediaType(d.mime()))
+                .contentLength(d.data().length)
                 // 照片会被替换——客户端不存缓存，每次取新图
                 .cacheControl(CacheControl.noStore())
-                .body(p.getImage());
+                .body(d.data());
     }
 
     /** 相册列表（按日期倒序、同日早→晚；只出元数据，图片数据由前端逐个取）。 */
@@ -101,17 +101,15 @@ public class DietController {
     /** 缩略图（相册与列表用；无缩略图的老数据回退原图）。 */
     @GetMapping("/photos/{date}/{meal}/thumb")
     public ResponseEntity<byte[]> photoThumb(@PathVariable String date, @PathVariable String meal) {
-        MealPhoto p = dietService.getPhoto(UserContext.requireUserId(), date, meal);
-        if (p == null) {
+        DietService.PhotoData d = dietService.readPhoto(UserContext.requireUserId(), date, meal, true);
+        if (d == null) {
             return ResponseEntity.notFound().build();
         }
-        boolean hasThumb = p.getThumb() != null && p.getThumb().length > 0;
-        byte[] data = hasThumb ? p.getThumb() : p.getImage();
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(hasThumb ? "image/jpeg" : p.getMime()))
-                .contentLength(data.length)
+                .contentType(MediaType.parseMediaType(d.mime()))
+                .contentLength(d.data().length)
                 .cacheControl(CacheControl.noStore())
-                .body(data);
+                .body(d.data());
     }
 
     /** 删除某餐照片（不可恢复）。 */

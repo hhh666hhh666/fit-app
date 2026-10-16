@@ -52,6 +52,12 @@ services:
     restart: unless-stopped
     # 内核级内存硬顶：JVM 的**理论上限 ≈ -Xmx + 242MB**，这里留约 1.3 倍余量。
     mem_limit: 640m
+    # 餐照实体落在宿主机目录（ADR 0026）：库里只留相对路径，图片文件在这儿。
+    # ⚠️ 必须是**绑定挂载**（宿主机绝对路径），不能用匿名卷——绑定目录不随容器重建消失；
+    #    而且 MealPhotoFileMigrator 启动时会自检「这个路径是不是挂载点」，没挂就中止搬迁
+    #    （宁可图片留在库里，也不搬进一个容器重建即消失的可写层）。
+    volumes:
+      - /srv/fit-app/uploads:/data/uploads
     networks:
       default:
         # ⚠️ `server` 是**兼容层别名**：web 镜像内的 nginx 用它找后端（frontend/nginx.conf 的

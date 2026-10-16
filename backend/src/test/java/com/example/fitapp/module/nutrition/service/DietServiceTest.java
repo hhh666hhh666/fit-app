@@ -11,6 +11,7 @@ import com.example.fitapp.module.nutrition.mapper.DietDailyMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
+import com.example.fitapp.module.nutrition.storage.PhotoStorage;
 import com.example.fitapp.module.nutrition.vo.DailyNutritionRow;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
@@ -30,6 +31,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -60,9 +62,13 @@ class DietServiceTest {
     @Mock
     private SettingService settingService;
 
+    @Mock
+    private PhotoStorage photoStorage;
+
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
-        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper, settingService);
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
+                settingService, photoStorage);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
     }
@@ -169,6 +175,40 @@ class DietServiceTest {
         assertEquals("image/png", captor.getValue().getMime());
     }
 
+    /**
+     * ADR 0026 的核心契约：图片**落盘**、库里**只留路径**。
+     * 这条用例守的是「别再往库里塞 BLOB」——那正是备份做不下去的根因。
+     */
+    @Test
+    void savePhoto_writesFileAndKeepsOnlyPathInDb() throws Exception {
+        when(mealPhotoMapper.selectOne(any())).thenReturn(null);
+        MockMultipartFile file = new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        service().savePhoto(7L, "2026-10-12", "lunch", file);
+
+        ArgumentCaptor<MealPhoto> captor = ArgumentCaptor.forClass(MealPhoto.class);
+        verify(mealPhotoMapper).insert(captor.capture());
+        // 路径键与唯一键 uk_mp_user_date_meal 同构：重拍即同路径覆盖，不堆孤儿
+        assertEquals("7/2026-10-12/lunch", captor.getValue().getPath());
+        assertNull(captor.getValue().getImage());
+        verify(photoStorage).write(eq("7/2026-10-12/lunch"), eq("image/jpeg"), any(), any());
+    }
+
+    /** 删除要先删行、后删文件——反过来的失败态是「记录指向不存在的图」，更难收拾。 */
+    @Test
+    void deletePhoto_removesRowThenFile() {
+        MealPhoto p = new MealPhoto();
+        p.setId(3L);
+        p.setUserId(7L);
+        p.setPath("7/2026-10-12/lunch");
+        when(mealPhotoMapper.selectOne(any())).thenReturn(p);
+
+        service().deletePhoto(7L, "2026-10-12", "lunch");
+
+        verify(mealPhotoMapper).deleteById(3L);
+        verify(photoStorage).delete("7/2026-10-12/lunch");
+    }
+
     @Test
     void savePhoto_badMime_throws() {
         MockMultipartFile file = new MockMultipartFile("file", "a.gif", "image/gif", new byte[]{1});
@@ -178,7 +218,8 @@ class DietServiceTest {
 
     @Test
     void savePhoto_overQuota_throws() {
-        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper, settingService);
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
+                settingService, photoStorage);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);
@@ -221,7 +262,8 @@ class DietServiceTest {
 
     @Test
     void deletePhoto_absent_throws() {
-        when(mealPhotoMapper.delete(any())).thenReturn(0);
+        // 实现改成「先查出该行（拿 path）再删」，所以这里要桩 selectOne 而不是 delete
+        when(mealPhotoMapper.selectOne(any())).thenReturn(null);
         assertThrows(BusinessException.class, () -> service().deletePhoto(7L, "2026-10-12", "lunch"));
     }
 
