@@ -37,6 +37,21 @@ if [ -z "$DUMP" ] || [ ! -f "$DUMP" ]; then
   exit 1
 fi
 
+# ── 体积闸：过大的 dump 不往这个实例里灌 ──
+# 这个 MySQL 与 quizzy 共用，容器内存上限只有 384MB。2026-10-16 实测踩过：
+#   一份含 12.77MB 餐照的 15MB dump，灌入时把 mysqld 撑爆——内核 OOM-killer 直接杀了它
+#   （`dmesg` 里 oom_memcg 指向 quizzy-mysql 的 cgroup），容器随之重启。
+# 图片移出数据库之后 dump 只有 120K，演练是秒级的事；这道闸只为「万一又出现大 dump」
+# 时不重演那次事故。要强行演练，把 VERIFY_MAX_MB 设大一点。
+MAX_BYTES=$(( ${VERIFY_MAX_MB:-8} * 1024 * 1024 ))
+DUMP_BYTES=$(stat -c %s "$DUMP")
+if [ "$DUMP_BYTES" -gt "$MAX_BYTES" ]; then
+  echo "⚠️ 跳过恢复演练：这份备份 $((DUMP_BYTES / 1024 / 1024))MB，超过上限 $((MAX_BYTES / 1024 / 1024))MB" >&2
+  echo "   原因：该实例与 quizzy 共用、内存上限 384MB，灌大 dump 会把 mysqld 撑爆（2026-10-16 实测过一次）。" >&2
+  echo "   要强行演练：VERIFY_MAX_MB=999 bash restore-verify.sh '$DUMP'" >&2
+  exit 3
+fi
+
 MY() { docker exec -i -e MYSQL_PWD="$ROOT_PW" "$MYSQL_CONTAINER" mysql -uroot --default-character-set=utf8mb4 "$@"; }
 
 # 临时库用完即删——异常路径也要清掉，别在共享实例上留垃圾

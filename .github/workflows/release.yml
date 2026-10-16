@@ -240,7 +240,12 @@ jobs:
 
       # 部署脚本在 up -d 之前已经强制备份过一次；这里顺手把那份**验一遍**——
       # 「dump 导出成功」不等于「能恢复」，只有真灌进临时库跑通才算数（ADR 0026）。
+      #
+      # ⚠️ continue-on-error：这一步是**体检**，不是发布的成败判据——走到这里部署已经完成了，
+      #    把它算作发布失败会误导（2026-10-16 第一次上线就踩到：演练把共用实例的 mysqld 灌 OOM，
+      #    于是整个 run 标红，而部署其实完全成功）。脚本里另有体积闸，过大的 dump 会跳过演练。
       - name: 验证备份可恢复
+        continue-on-error: true
         run: |
           ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" \
             "bash /srv/fit-app/compose/scripts/restore-verify.sh"
