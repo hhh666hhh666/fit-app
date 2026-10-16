@@ -242,9 +242,12 @@ function completeSet(i: number) {
     return
   }
   const now = Date.now()
+  // ⚠️ 先算用时、再落完成态：setDurationSec 找的是「上一组完成时刻」，本组一旦先写上
+  // doneAt 就会被当成起点，净用时恒为 0（所以同时把 row 传进去排除本组）。
+  const dur = setDurationSec(s, now, row)
   row.done = true
   row.doneAt = now
-  row.dur = setDurationSec(s, now)
+  row.dur = dur
   if (isBlockDone(s.current)) {
     const next = nextUnfinished(s.current)
     if (next >= 0) {

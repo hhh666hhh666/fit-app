@@ -103,11 +103,15 @@ export function resume(s: Session, now = Date.now()): void {
 /**
  * 全局「上一组完成」的时刻（跨动作按实际勾选先后），没有则为 null。
  * 撤回某一组的完成状态后，这里自然回退到剩下最后一个已完成的那组，不需要额外字段。
+ *
+ * `exclude` 跳过某一组：算某组用时时，**本组必须排除**——否则会把本组刚写上的 doneAt
+ * 当成「上一组完成」，净用时恒为 0（见 `setDurationSec`）。
  */
-export function lastDoneAt(s: Session): number | null {
+export function lastDoneAt(s: Session, exclude?: SessionSet | null): number | null {
   let max: number | null = null
   for (const b of s.blocks) {
     for (const x of b.sets) {
+      if (x === exclude) continue
       if (x.done && x.doneAt != null && (max === null || x.doneAt > max)) max = x.doneAt
     }
   }
@@ -115,11 +119,14 @@ export function lastDoneAt(s: Session): number | null {
 }
 
 /**
- * 勾选完成一组时的净用时（秒）：与上一组完成的间隔，剔除其中的暂停段；
+ * 某组的净用时（秒）：与上一组完成的间隔，剔除其中的暂停段；
  * 本动作第一组（或全局第一组）从开始训练算起。
+ *
+ * ⚠️ `self` 是要计算的那一组，**必须传**。调用方常常先把本组标成完成（写 done/doneAt）、
+ * 再回头算用时，此时若不过滤本组，`lastDoneAt` 会返回本组的时刻，结果恒为 0。
  */
-export function setDurationSec(s: Session, now = Date.now()): number {
-  const from = lastDoneAt(s) ?? s.startedAt
+export function setDurationSec(s: Session, now = Date.now(), self?: SessionSet | null): number {
+  const from = lastDoneAt(s, self) ?? s.startedAt
   const ms = Math.max(0, now - from - pausedMsBetween(s, from, now))
   return Math.round(ms / 1000)
 }
