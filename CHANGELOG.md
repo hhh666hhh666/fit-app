@@ -3,13 +3,19 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 版本号以 `git tag` 为唯一真相源，手写点（`frontend/package.json`、`backend/pom.xml`）由 `scripts/check-version.sh` 在推 tag 时校验。
 
+## [Unreleased]
+
+### Fixed
+
+- **上传餐照偶发「系统繁忙，请稍后再试」**：根因不在上传功能本身——与 quizzy 共用的 `quizzy-mysql` 容器内存上限只有 384MB，写大图时被撑满，**内核 OOM-killer 直接杀掉了 mysqld**（`dmesg` 的 `oom_memcg` 正是该容器的 cgroup）；容器重启的约十秒里连接池持有的连接集体失效，`INSERT INTO meal_photo` 抛 `CommunicationsException`，被全局异常兜底成那句含糊的「系统繁忙」。现在「查旧行 → 容量闸 → 落库」整块遇这类**瞬时**故障会退避重试两次——幂等靠 `meal_photo` 的唯一键 `uk_mp_user_date_meal`（重试会查到自己刚写的那一行、转走 update，不会多出一条）；重试用尽仍失败时改提示「服务正在重启，请稍后重试」（业务码 503），用户重按一次即可。⚠️ 数据库容器本身的内存参数调整属 quizzy 侧编排，见 [共享 MySQL 容器内存待办](./docs/todo/2026-10-16-TODO-共享MySQL容器内存.md)
+
+<!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
+
 ## [0.8.1] - 2026-10-16
 
 ### Fixed
 
 - **结束训练后首页仍显示「训练进行中」**：会话页的兜底落盘（变更即存 / 离页补存 / 页面卸载补存）在 `clearSession()` 之后又把内存里那份原样写了回去，首页 `onShow` 一读就成了「还在练」——提交成功与「0 组确认结束」两条路径都中招，后者甚至点完就写回。现在会话页加「已结束」闩锁：凡结束路径先立闩再清会话，之后三处兜底一律不再落盘；提交成功后的跳转由 `navigateTo` 改为 `redirectTo`，会话页就此退场，安卓物理返回不会回到已结束的会话页再提交一份
-
-<!-- 改了什么就往这里加；打 tag 时把这一节固化成一个版本段。 -->
 
 ## [0.8.0] - 2026-10-15
 
