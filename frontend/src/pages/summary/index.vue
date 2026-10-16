@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { updateWorkoutNote } from '@/api/workout'
 import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureLogin } from '@/utils/guard'
 
@@ -17,14 +18,37 @@ const totalSets = computed(() =>
   summary.value ? summary.value.blocks.reduce((sum, b) => sum + b.sets.length, 0) : 0
 )
 
-const volumeText = computed(() =>
-  summary.value ? formatThousands(summary.value.totalVolume) : '0'
-)
+/** 有氧动作不参与容量（ADR 0023）：整场都没有力量动作时，容量位显示「—」。 */
+const hasLift = computed(() => (summary.value?.blocks ?? []).some((b) => !b.cardio))
 
-function blockVolume(block: { sets: { weight: number; reps: number }[] }): string {
-  return formatThousands(
-    block.sets.reduce((sum, s) => sum + Number(s.weight || 0) * Number(s.reps || 0), 0)
-  )
+/** 层数口径（爬楼）的合计——有氧块不做容量，它的成绩是层数（ADR 0025）。 */
+const totalFloors = computed(() =>
+  (summary.value?.blocks ?? [])
+    .filter((b) => b.metric === 'floors')
+    .reduce((sum, b) => sum + b.sets.reduce((v, s) => v + (Number(s.floors) || 0), 0), 0)
+)
+const metricKind = computed(() => metricKindOf(hasLift.value, totalFloors.value))
+const volumeLabel = computed(() => metricLabel(metricKind.value))
+const volumeValue = computed(() =>
+  summary.value
+    ? metricValue(metricKind.value, Number(summary.value.totalVolume), totalFloors.value)
+    : '0'
+)
+const volumeUnit = computed(() => metricUnit(metricKind.value))
+
+/** 单块指标文案：层数口径给层数、其他有氧给「—」、力量给容量。 */
+function blockMetricText(block: {
+  cardio?: boolean
+  metric?: string | null
+  sets: { weight: number; reps: number; floors?: number | null }[]
+}): string {
+  if (block.metric === 'floors') {
+    const floors = block.sets.reduce((v, s) => v + (Number(s.floors) || 0), 0)
+    return `${formatThousands(floors)} 层`
+  }
+  if (block.cardio) return '—'
+  const sum = block.sets.reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0)
+  return `${formatThousands(sum)} kg`
 }
 
 async function close() {
@@ -67,8 +91,8 @@ async function close() {
             <text class="metrics__value ft-num">{{ totalSets }}<text class="metrics__unit"> 组</text></text>
           </view>
           <view class="metrics__cell">
-            <text class="metrics__label">总容量</text>
-            <text class="metrics__value ft-num">{{ volumeText }}<text class="metrics__unit"> kg</text></text>
+            <text class="metrics__label">{{ volumeLabel }}</text>
+            <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit"> {{ volumeUnit }}</text></text>
           </view>
         </view>
 
@@ -81,7 +105,7 @@ async function close() {
           <view v-for="(b, i) in summary.blocks" :key="i" class="detail__block">
             <view class="detail__block-head">
               <text class="detail__name">{{ b.name }}</text>
-              <text class="detail__block-meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
+              <text class="detail__block-meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
             <view class="detail__sets">
               <template v-for="(s, j) in b.sets" :key="j">
@@ -203,6 +227,8 @@ async function close() {
   font-size: $text-sm;
   font-weight: 400;
   color: $app-ink-muted;
+  /* ⚠️ 不靠文本里的空格留间距：模板里的前导空白会被折叠，数字与单位会贴在一起 */
+  margin-left: 6rpx;
 }
 
 /* ── 明细卡 ── */

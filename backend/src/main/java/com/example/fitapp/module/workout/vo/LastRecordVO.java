@@ -15,5 +15,8 @@ public class LastRecordVO {
 
     private Integer reps;
 
+    /** 层数（`metric=floors` 的动作有值，其余为 null）——「上次数据」提示要用它。 */
+    private Integer floors;
+
     private LocalDateTime performedAt;
 }

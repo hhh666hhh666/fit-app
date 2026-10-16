@@ -21,5 +21,11 @@ public class WorkoutListItemVO {
 
     private BigDecimal totalVolume;
 
+    /**
+     * 该次训练是否含**力量动作**（有氧不计入容量，ADR 0023）。
+     * 纯有氧场次的容量位要显示「—」而不是 `0 kg`——后者看着像故障。
+     */
+    private Boolean hasStrength;
+
     private LocalDateTime createdAt;
 }

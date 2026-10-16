@@ -28,4 +28,10 @@ public class PlanListItemVO {
 
     /** 上次练该计划的总容量 kg；从未练过为 null。 */
     private BigDecimal lastVolume;
+
+    /**
+     * 上次练该计划时有没有力量动作（有氧不计入容量，ADR 0023）。
+     * 上次只有有氧就把容量位显示成「—」，别显示 `0 kg`。从未练过为 null。
+     */
+    private Boolean lastHasStrength;
 }

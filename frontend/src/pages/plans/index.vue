@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
+import type { PlanListItem } from '@/api/plan'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
@@ -19,6 +20,12 @@ const cycleDays = computed(() => schedule.week.filter((s) => typeof s === 'numbe
 function summaryOf(names: string[], count: number): string {
   const head = names.join(' · ')
   return count > names.length ? `${head} +${count - names.length}` : head
+}
+
+/** 上次容量文案：上次只有有氧就显示「—」（有氧不计入容量，ADR 0023）。 */
+function lastVolumeText(p: PlanListItem): string {
+  if (p.lastHasStrength !== true) return '总容量：—'
+  return `总容量：${formatThousands(Math.round(p.lastVolume ?? 0))} kg`
 }
 
 function goBack() {
@@ -86,7 +93,7 @@ function toTrain(id: number) {
           {{ p.lastTrainedAt ? `上次：${formatDateLabel(p.lastTrainedAt)}` : '还没练过' }}
         </text>
         <text v-if="p.lastVolume != null" class="pcard__vol ft-num">
-          总容量：{{ formatThousands(Math.round(p.lastVolume)) }} kg
+          {{ lastVolumeText(p) }}
         </text>
       </view>
     </view>

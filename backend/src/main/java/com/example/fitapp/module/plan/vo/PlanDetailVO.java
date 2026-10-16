@@ -27,6 +27,9 @@ public class PlanDetailVO {
         /** 肌群码（快照）。 */
         private String muscle;
 
+        /** 记录口径（取动作库实时值）：`floors`＝按层数录（爬楼）。见 ADR 0025。 */
+        private String metric;
+
         private Integer targetSets;
 
         private Integer targetReps;

@@ -4,7 +4,8 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
-import { formatClock, formatThousands, muscleLabel } from '@/utils/format'
+import { formatClock, muscleLabel } from '@/utils/format'
+import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 import {
   clearSession,
@@ -53,7 +54,7 @@ function buildSets(
   const n = t.targetSets && t.targetSets > 0 ? t.targetSets : 1
   const w = t.targetWeight != null ? String(t.targetWeight) : ''
   const r = t.targetReps != null ? String(t.targetReps) : ''
-  return Array.from({ length: n }, () => ({ w, r, done: false, doneAt: null, dur: null }))
+  return Array.from({ length: n }, () => ({ w, r, f: '', done: false, doneAt: null, dur: null }))
 }
 
 function goalText(e: {
@@ -75,7 +76,12 @@ async function loadLastForBlock(i: number) {
   if (!b || !b.exerciseId) return
   try {
     const rec = await getLastRecord(b.exerciseId)
-    b.last = rec ? `${rec.weight} kg × ${rec.reps}` : '暂无记录'
+    if (!rec) {
+      b.last = '暂无记录'
+    } else {
+      // 层数口径（爬楼）的「上次」是层数，不是重量×次数
+      b.last = rec.floors != null ? `${rec.floors} 层` : `${rec.weight} kg × ${rec.reps}`
+    }
   } catch {
     // 拉取失败保留本地兜底文案
   }
@@ -89,6 +95,7 @@ function initFreeBlock() {
       exerciseId: 1,
       name: '杠铃卧推',
       muscle: '胸',
+      metric: '',
       last: '暂无记录',
       goal: '',
       targetSets: null,
@@ -118,6 +125,7 @@ async function loadPlan(pid: number) {
         exerciseId: e.exerciseId,
         name: e.name,
         muscle: muscleLabel(e.muscle),
+        metric: e.metric ?? '',
         last: '暂无记录',
         goal: goalText({ targetSets, targetReps, targetWeight }),
         targetSets,
@@ -237,8 +245,8 @@ function completeSet(i: number) {
   const row = b.sets[i]
   if (!row || row.done) return
   if (b.sets.findIndex((x) => !x.done) !== i) return
-  if (!row.w || !row.r) {
-    uni.showToast({ title: '请填写重量和次数', icon: 'none' })
+  if (isFloors.value ? !row.f : !row.w || !row.r) {
+    uni.showToast({ title: isFloors.value ? '请填写层数' : '请填写重量和次数', icon: 'none' })
     return
   }
   const now = Date.now()
@@ -265,7 +273,14 @@ function addSet() {
   const b = curBlock.value
   if (!b || paused.value) return
   const last = b.sets[b.sets.length - 1]
-  b.sets.push({ w: last?.w ?? '', r: last?.r ?? '', done: false, doneAt: null, dur: null })
+  b.sets.push({
+    w: last?.w ?? '',
+    r: last?.r ?? '',
+    f: last?.f ?? '',
+    done: false,
+    doneAt: null,
+    dur: null
+  })
 }
 
 /** 长按组行弹操作菜单（ADR 0021）：已勾的行多一项「取消完成」。 */
@@ -328,14 +343,49 @@ function askUndoSet(i: number) {
 const doneCount = computed(() =>
   (session.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
 )
-const totalVolume = computed(() =>
-  (session.value?.blocks ?? []).reduce(
-    (sum, b) =>
-      sum + b.sets.filter((s) => s.done).reduce((v, s) => v + Number(s.w || 0) * Number(s.r || 0), 0),
-    0
-  )
+/** 有氧动作不参与容量（ADR 0023）；会话块里存的肌群是中文名（`muscleLabel` 的产物），按名比对。 */
+const CARDIO_LABEL = muscleLabel('cardio')
+
+const hasLift = computed(() =>
+  (session.value?.blocks ?? []).some((b) => b.muscle !== CARDIO_LABEL)
 )
-const volumeText = computed(() => formatThousands(totalVolume.value))
+const totalVolume = computed(() =>
+  (session.value?.blocks ?? [])
+    .filter((b) => b.muscle !== CARDIO_LABEL)
+    .reduce(
+      (sum, b) =>
+        sum + b.sets.filter((s) => s.done).reduce((v, s) => v + Number(s.w || 0) * Number(s.r || 0), 0),
+      0
+    )
+)
+/** 层数口径（爬楼）的已完成组合计——有氧块不做容量，它的成绩是层数（ADR 0025）。 */
+const totalFloors = computed(() =>
+  (session.value?.blocks ?? [])
+    .filter((b) => b.metric === 'floors')
+    .reduce(
+      (sum, b) => sum + b.sets.filter((s) => s.done).reduce((v, s) => v + (Number(s.f) || 0), 0),
+      0
+    )
+)
+/** 当前动作是不是「按层数录」——组行与图例据此换形态。 */
+const isFloors = computed(() => curBlock.value?.metric === 'floors')
+const metricKind = computed(() => metricKindOf(hasLift.value, totalFloors.value))
+/**
+ * 底部标签：这一场只有层数口径的动作（爬楼）时叫「总层数」，其余仍说「总重」（会话页的轻说法）。
+ * ⚠️ 判据是**有没有层数口径的动作**，不是已完成的层数之和——一组都没勾时也该叫「总层数」。
+ */
+const volumeLabel = computed(() =>
+  !hasLift.value && blocks.value.some((b) => b.metric === 'floors') ? '总层数' : '总重'
+)
+/** 整场既没力量也没层数时显示「—」，不显示 0 kg。 */
+const volumeText = computed(() =>
+  metricText(metricKind.value, totalVolume.value, totalFloors.value)
+)
+
+/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」。 */
+function setValueText(x: SessionSet): string {
+  return isFloors.value ? `${x.f} 层` : `${x.w} kg × ${x.r}`
+}
 
 /** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。
  *  已结束的会话不落——否则刚 `clearSession()` 的会在这一步被原样写回。 */
@@ -396,11 +446,16 @@ async function submit(doneBlocks: { b: SessionBlock; sets: SessionSet[] }[]) {
       blocks: doneBlocks.map((x) => ({
         exerciseId: x.b.exerciseId,
         name: x.b.name,
-        sets: x.sets.map((y) => ({
-          weight: Number(y.w),
-          reps: Number(y.r),
-          durationSec: y.dur ?? undefined
-        }))
+        sets: x.sets.map((y) => {
+          const floors = x.b.metric === 'floors'
+          return {
+            // floors 口径（爬楼）：重量／次数只是占位，服务端也只信 floors（ADR 0025）
+            weight: floors ? 0 : Number(y.w),
+            reps: floors ? 1 : Number(y.r),
+            ...(floors ? { floors: Number(y.f) || 0 } : {}),
+            durationSec: y.dur ?? undefined
+          }
+        })
       }))
     })
     ended = true
@@ -482,7 +537,7 @@ function comingSoon(tip: string) {
           <view class="card__legend">
             <text class="legend__c1">组次</text>
             <view class="legend__right">
-              <text class="ft-num">负荷 / 次数</text>
+              <text class="ft-num">{{ isFloors ? '层数' : '负荷 / 次数' }}</text>
               <text class="legend__state">状态</text>
             </view>
           </view>
@@ -503,7 +558,7 @@ function comingSoon(tip: string) {
             <view class="setrow__right">
               <!-- 完成态：只读值 ＋ 这一组的净用时 ＋ 实心勾 -->
               <template v-if="s.done">
-                <text class="setrow__value ft-num">{{ s.w }} kg × {{ s.r }}</text>
+                <text class="setrow__value ft-num">{{ setValueText(s) }}</text>
                 <text v-if="s.dur != null" class="setrow__dur ft-num">{{ formatClock(s.dur) }}</text>
                 <view class="setrow__checkbox">
                   <wd-icon name="check" size="14px" />
@@ -515,23 +570,33 @@ function comingSoon(tip: string) {
                 <view class="setrow__inputs">
                   <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
                     <input
+                      v-if="isFloors"
+                      v-model="s.f"
+                      type="number"
+                      class="setrow__input-field ft-num"
+                      :disabled="paused"
+                    />
+                    <input
+                      v-else
                       v-model="s.w"
                       type="digit"
                       class="setrow__input-field ft-num"
                       :disabled="paused"
                     />
-                    <text class="setrow__unit">kg</text>
+                    <text class="setrow__unit">{{ isFloors ? '层' : 'kg' }}</text>
                   </view>
-                  <text class="setrow__x">×</text>
-                  <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
-                    <input
-                      v-model="s.r"
-                      type="number"
-                      class="setrow__input-field ft-num"
-                      :disabled="paused"
-                    />
-                    <text class="setrow__unit">次</text>
-                  </view>
+                  <template v-if="!isFloors">
+                    <text class="setrow__x">×</text>
+                    <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
+                      <input
+                        v-model="s.r"
+                        type="number"
+                        class="setrow__input-field ft-num"
+                        :disabled="paused"
+                      />
+                      <text class="setrow__unit">次</text>
+                    </view>
+                  </template>
                 </view>
                 <view
                   class="setrow__check"
@@ -568,8 +633,8 @@ function comingSoon(tip: string) {
       <view class="session__summary">
         <text>本次 </text>
         <text class="ft-num session__summary-num">{{ doneCount }}</text>
-        <text> 组 · 总重 </text>
-        <text class="ft-num session__summary-num">{{ volumeText }} kg</text>
+        <text> 组 · {{ volumeLabel }} </text>
+        <text class="ft-num session__summary-num">{{ volumeText }}</text>
       </view>
       <view class="ft-btn ft-btn--primary ft-btn--block session__finish" @click="finish">
         结束训练

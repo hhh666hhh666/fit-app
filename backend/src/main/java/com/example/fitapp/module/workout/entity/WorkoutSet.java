@@ -25,8 +25,11 @@ public class WorkoutSet {
     /** 重量 kg */
     private BigDecimal weight;
 
-    /** 次数 */
+    /** 次数（`metric=floors` 的动作存占位值 1，见 ADR 0025） */
     private Integer reps;
+
+    /** 层数：`metric=floors` 的动作专用；其他动作与历史数据为 null。 */
+    private Integer floors;
 
     /** 提交时是否刷新该动作历史最佳（weight×reps；仅 exercise_id 非空时判定）。 */
     private Boolean pr;

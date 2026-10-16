@@ -24,6 +24,9 @@ public class Exercise {
 
     private String muscle;
 
+    /** 记录口径：`weight_reps`＝重量×次数（默认）／`floors`＝层数（爬楼）。见 ADR 0025。 */
+    private String metric;
+
     private Boolean archived;
 
     private Integer sortOrder;

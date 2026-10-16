@@ -11,6 +11,8 @@ export interface PlanListItem {
   lastTrainedAt?: string | null
   /** 上次练该计划的总容量 kg（从未练过缺省）。 */
   lastVolume?: number | null
+  /** 上次练时有没有力量动作——只有有氧则容量位显示「—」（ADR 0023）。 */
+  lastHasStrength?: boolean | null
 }
 
 export interface PlanExerciseItem {
@@ -18,6 +20,8 @@ export interface PlanExerciseItem {
   name: string
   /** 肌群码（chest/back/...，见 CONTEXT.md）。 */
   muscle: string
+  /** 记录口径：`floors`＝按层数录（爬楼）；其余按重量×次数（ADR 0025）。 */
+  metric?: string | null
   targetSets?: number | null
   targetReps?: number | null
   /** 目标重量 kg；未设缺省（会话页预填负荷默认值用）。 */

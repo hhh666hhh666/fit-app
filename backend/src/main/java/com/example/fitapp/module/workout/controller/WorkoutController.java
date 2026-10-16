@@ -7,8 +7,10 @@ import com.example.fitapp.module.workout.dto.WorkoutNoteDTO;
 import com.example.fitapp.module.workout.dto.WorkoutUpdateDTO;
 import com.example.fitapp.module.workout.service.WorkoutService;
 import com.example.fitapp.module.workout.vo.LastRecordVO;
+import com.example.fitapp.module.workout.vo.MonthSummaryVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import com.example.fitapp.module.workout.vo.WorkoutListItemVO;
+import com.example.fitapp.module.workout.vo.WorkoutTotalsVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -46,15 +48,37 @@ public class WorkoutController {
         return Result.success();
     }
 
+    /**
+     * 日志列表：`month=YYYY-MM` 按月过滤（不传＝不过滤，首页「上次训练」用它取最近一条）；
+     * `offset` 供触底分页。月份格式不对返回 400。
+     */
     @GetMapping
-    public Result<List<WorkoutListItemVO>> list(@RequestParam(defaultValue = "50") int limit) {
-        return Result.success(workoutService.list(UserContext.requireUserId(), Math.min(limit, 200)));
+    public Result<List<WorkoutListItemVO>> list(@RequestParam(defaultValue = "50") int limit,
+                                                @RequestParam(defaultValue = "0") int offset,
+                                                @RequestParam(required = false) String month) {
+        return Result.success(workoutService.list(UserContext.requireUserId(),
+                Math.min(limit, 200), Math.max(offset, 0), month));
+    }
+
+    /** 日志页按月概览：当月次数与总容量 ＋ 上月同口径（环比基准）。不传 month＝当月。 */
+    @GetMapping("/month-summary")
+    public Result<MonthSummaryVO> monthSummary(@RequestParam(required = false) String month) {
+        return Result.success(workoutService.monthSummary(UserContext.requireUserId(), month));
     }
 
     /** 精确路径在 Spring MVC 里优先于 /{id} 模板，不会冲突。 */
     @GetMapping("/last-record")
     public Result<LastRecordVO> lastRecord(@RequestParam Long exerciseId) {
         return Result.success(workoutService.lastRecord(UserContext.requireUserId(), exerciseId));
+    }
+
+    /**
+     * 「我的」页累计口径：全量训练次数与总容量。
+     * 刻意不做在列表接口上——列表有 limit 封顶，拿它求和会把「累计」算成「最近 N 次」（ADR 0023）。
+     */
+    @GetMapping("/totals")
+    public Result<WorkoutTotalsVO> totals() {
+        return Result.success(workoutService.totals(UserContext.requireUserId()));
     }
 
     @GetMapping("/{id}")

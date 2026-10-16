@@ -61,6 +61,14 @@ public class WorkoutCreateDTO {
         @Min(value = 1, message = "次数至少为 1")
         private Integer reps;
 
+        /**
+         * 层数：`metric = floors` 的动作（爬楼）专用，见 ADR 0025。
+         * ⚠️ 这类动作的 `weight`／`reps` 请传占位值（0 与 1），**别把层数塞进次数栏**——
+         * 服务端对 floors 口径的组会强制归一成 0／1，只信 `floors`。
+         */
+        @Min(value = 0, message = "层数不能为负")
+        private Integer floors;
+
         /** 该组净用时（秒，剔除暂停段，ADR 0022）；不传或 null ＝ 无用时（编辑时新增的组即此类）。 */
         @Min(value = 0, message = "组用时不能为负")
         private Integer durationSec;

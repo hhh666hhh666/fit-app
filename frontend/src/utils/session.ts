@@ -14,6 +14,8 @@ const STORAGE_KEY = 'fitapp_session'
 export interface SessionSet {
   w: string
   r: string
+  /** 层数：`metric = floors` 的动作（爬楼）专用，其余动作为空串。 */
+  f: string
   done: boolean
   /** 本组完成的时刻（毫秒时间戳）；未完成、或撤回后为 null。 */
   doneAt: number | null
@@ -26,6 +28,8 @@ export interface SessionBlock {
   exerciseId: number | null
   name: string
   muscle: string
+  /** 记录口径：`floors`＝按层数录（爬楼）；其余按重量×次数。见 [ADR 0025]／后端 `exercise.metric`。 */
+  metric: string
   /** 「上次数据」文案（展示用，不参与计算）。 */
   last: string
   /** 计划目标提示文案。 */
@@ -139,6 +143,13 @@ export function loadSession(): Session | null {
     const parsed = typeof raw === 'string' ? (JSON.parse(raw) as Session) : (raw as Session)
     if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.blocks)) return null
     if (!Array.isArray(parsed.pauses)) parsed.pauses = []
+    // 老会话（V24 之前存的）没有 metric 与 f：就地补默认值，别让旧数据把页面弄崩
+    for (const b of parsed.blocks) {
+      if (typeof b.metric !== 'string') b.metric = ''
+      for (const x of b.sets ?? []) {
+        if (typeof x.f !== 'string') x.f = ''
+      }
+    }
     return parsed
   } catch {
     return null

@@ -22,7 +22,13 @@ public interface PlanMapper extends BaseMapper<Plan> {
                      ORDER BY w.created_at DESC, w.id DESC LIMIT 1) AS lastTrainedAt,
                    (SELECT w.total_volume FROM workout w
                      WHERE w.user_id = p.user_id AND w.plan_id = p.id
-                     ORDER BY w.created_at DESC, w.id DESC LIMIT 1) AS lastVolume
+                     ORDER BY w.created_at DESC, w.id DESC LIMIT 1) AS lastVolume,
+                   (SELECT COUNT(*) FROM workout_block wb2
+                            LEFT JOIN exercise e2 ON e2.id = wb2.exercise_id
+                     WHERE wb2.workout_id = (SELECT w.id FROM workout w
+                                              WHERE w.user_id = p.user_id AND w.plan_id = p.id
+                                              ORDER BY w.created_at DESC, w.id DESC LIMIT 1)
+                       AND (e2.muscle IS NULL OR e2.muscle &lt;&gt; 'cardio')) AS lastHasStrength
             FROM plan p
             WHERE p.user_id = #{userId}
             ORDER BY p.id

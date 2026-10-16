@@ -3,6 +3,8 @@ package com.example.fitapp.module.workout.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.module.exercise.entity.Exercise;
+import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.plan.entity.Plan;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
@@ -13,19 +15,29 @@ import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutSetMapper;
+import com.example.fitapp.module.workout.vo.CountVolumeVO;
 import com.example.fitapp.module.workout.vo.ExerciseMaxVO;
 import com.example.fitapp.module.workout.vo.LastRecordVO;
+import com.example.fitapp.module.workout.vo.MonthSummaryVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import com.example.fitapp.module.workout.vo.WorkoutListItemVO;
+import com.example.fitapp.module.workout.vo.WorkoutTotalsVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,18 +52,27 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WorkoutService {
 
+    /** 有氧肌群码——有氧动作不参与总容量与 PR（ADR 0023／0024）。 */
+    private static final String MUSCLE_CARDIO = "cardio";
+
+    /** 记录口径：按层数录（爬楼）——这类组不用「重量×次数」（ADR 0025）。 */
+    private static final String METRIC_FLOORS = "floors";
+
     private final WorkoutMapper workoutMapper;
     private final WorkoutBlockMapper blockMapper;
     private final WorkoutSetMapper setMapper;
     private final PlanMapper planMapper;
+    private final ExerciseMapper exerciseMapper;
 
     @Transactional
     public WorkoutDetailVO create(Long userId, WorkoutCreateDTO dto) {
         LocalDateTime now = LocalDateTime.now();
-        BigDecimal total = sumVolume(dto.getBlocks());
+        Map<Long, Exercise> exercises = exerciseByIds(blockExerciseIds(dto.getBlocks()));
+        Set<Long> cardioIds = cardioIds(exercises);
+        BigDecimal total = sumVolume(dto.getBlocks(), cardioIds);
 
-        // PR 判定的起点＝这些动作的历史最大单组容量（weight×reps）；本训练内逐组递进更新
-        Map<Long, BigDecimal> runningMax = historyMax(userId, dto.getBlocks(), null);
+        // PR 判定的起点＝这些动作的历史「最重一组」；本训练内逐组递进更新
+        Map<Long, ExerciseMaxVO> runningMax = historyMax(userId, dto.getBlocks(), null);
 
         Workout w = new Workout();
         w.setUserId(userId);
@@ -63,7 +84,8 @@ public class WorkoutService {
         w.setNote(dto.getNote() == null ? "" : dto.getNote());
         workoutMapper.insert(w);
 
-        List<WorkoutDetailVO.Block> blocks = writeBlocks(w.getId(), dto.getBlocks(), runningMax);
+        List<WorkoutDetailVO.Block> blocks =
+                writeBlocks(w.getId(), dto.getBlocks(), runningMax, cardioIds, exercises);
         return toDetail(w, now, blocks);
     }
 
@@ -75,10 +97,12 @@ public class WorkoutService {
     public WorkoutDetailVO update(Long userId, Long id, WorkoutUpdateDTO dto) {
         Workout w = requireOwn(userId, id);
         List<WorkoutCreateDTO.BlockDTO> blocks = dto.getBlocks();
+        Map<Long, Exercise> exercises = exerciseByIds(blockExerciseIds(blocks));
+        Set<Long> cardioIds = cardioIds(exercises);
 
         w.setTitle(dto.getTitle().trim());
         w.setNote(dto.getNote() == null ? "" : dto.getNote());
-        w.setTotalVolume(sumVolume(blocks));
+        w.setTotalVolume(sumVolume(blocks, cardioIds));
         w.setUpdatedAt(LocalDateTime.now());
         workoutMapper.updateById(w);
 
@@ -86,13 +110,71 @@ public class WorkoutService {
         workoutMapper.deleteSetsByWorkoutId(id);
         blockMapper.delete(Wrappers.<WorkoutBlock>lambdaQuery().eq(WorkoutBlock::getWorkoutId, id));
 
-        Map<Long, BigDecimal> runningMax = historyMax(userId, blocks, id);
-        List<WorkoutDetailVO.Block> vbs = writeBlocks(id, blocks, runningMax);
+        Map<Long, ExerciseMaxVO> runningMax = historyMax(userId, blocks, id);
+        List<WorkoutDetailVO.Block> vbs = writeBlocks(id, blocks, runningMax, cardioIds, exercises);
         return toDetail(w, w.getCreatedAt(), vbs);
     }
 
-    public List<WorkoutListItemVO> list(Long userId, int limit) {
-        return workoutMapper.selectListItems(userId, limit);
+    /**
+     * 日志列表：`month` 为空＝不过滤（首页「上次训练」拿它取最近一条）；否则按月过滤（左闭右开）。
+     * `offset` 供触底分页——列表分页不影响概览数字（概览走 {@link #monthSummary}）。
+     */
+    public List<WorkoutListItemVO> list(Long userId, int limit, int offset, String month) {
+        LocalDateTime start = null;
+        LocalDateTime end = null;
+        if (month != null && !month.isBlank()) {
+            YearMonth m = parseMonth(month);
+            start = m.atDay(1).atStartOfDay();
+            end = m.plusMonths(1).atDay(1).atStartOfDay();
+        }
+        return workoutMapper.selectListItems(userId, start, end, limit, offset);
+    }
+
+    /**
+     * 按月概览：当月次数与总容量、**上月同口径**（环比要有基准才算数，ADR 0023），
+     * 外加**本周次数**（首页统计条也读这里，别再用封顶列表在前端过滤）。
+     */
+    public MonthSummaryVO monthSummary(Long userId, String month) {
+        YearMonth m = parseMonth(month);
+        CountVolumeVO cur = countVolume(userId, m);
+        CountVolumeVO prev = countVolume(userId, m.minusMonths(1));
+        LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        CountVolumeVO week = workoutMapper.selectCountVolume(userId,
+                weekStart.atStartOfDay(), weekStart.plusWeeks(1).atStartOfDay());
+
+        MonthSummaryVO vo = new MonthSummaryVO();
+        vo.setMonth(m.toString());
+        vo.setCount(cur.getCnt() == null ? 0 : cur.getCnt());
+        vo.setTotalVolume(cur.getVol() == null ? BigDecimal.ZERO : cur.getVol());
+        vo.setWeekCount(week.getCnt() == null ? 0 : week.getCnt());
+        vo.setPrevCount(prev.getCnt() == null ? 0 : prev.getCnt());
+        vo.setPrevTotalVolume(prev.getVol() == null ? BigDecimal.ZERO : prev.getVol());
+        return vo;
+    }
+
+    private CountVolumeVO countVolume(Long userId, YearMonth month) {
+        return workoutMapper.selectCountVolume(userId,
+                month.atDay(1).atStartOfDay(), month.plusMonths(1).atDay(1).atStartOfDay());
+    }
+
+    /**
+     * `YYYY-MM` → YearMonth；空＝当月。
+     * 格式不对**直接 400**，不静默当成当月——否则页面会显示一个月的数据却挂着另一个月的标题。
+     */
+    private YearMonth parseMonth(String month) {
+        if (month == null || month.isBlank()) {
+            return YearMonth.now();
+        }
+        try {
+            return YearMonth.parse(month);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "月份参数应为 YYYY-MM");
+        }
+    }
+
+    /** 「我的」页累计口径：全量次数与总容量（ADR 0023）。 */
+    public WorkoutTotalsVO totals(Long userId) {
+        return workoutMapper.selectTotals(userId);
     }
 
     public WorkoutDetailVO detail(Long userId, Long id) {
@@ -102,6 +184,11 @@ public class WorkoutService {
                         .eq(WorkoutBlock::getWorkoutId, id)
                         .orderByAsc(WorkoutBlock::getSortOrder)
                         .orderByAsc(WorkoutBlock::getId));
+        Map<Long, Exercise> exercises = exerciseByIds(blocks.stream()
+                .map(WorkoutBlock::getExerciseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+        Set<Long> cardioIds = cardioIds(exercises);
         List<WorkoutDetailVO.Block> vbs = new ArrayList<>();
         for (WorkoutBlock b : blocks) {
             List<WorkoutSet> sets = setMapper.selectList(
@@ -111,11 +198,14 @@ public class WorkoutService {
             WorkoutDetailVO.Block vb = new WorkoutDetailVO.Block();
             vb.setExerciseId(b.getExerciseId());
             vb.setName(b.getExerciseName());
+            vb.setCardio(cardioIds.contains(b.getExerciseId()));
+            vb.setMetric(metricOf(exercises, b.getExerciseId()));
             vb.setSets(sets.stream().map(s -> {
                 WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
                 item.setWeight(s.getWeight());
                 item.setReps(s.getReps());
                 item.setPr(Boolean.TRUE.equals(s.getPr()));
+                item.setFloors(s.getFloors());
                 item.setDurationSec(s.getDurationSec());
                 return item;
             }).toList());
@@ -165,26 +255,70 @@ public class WorkoutService {
         return workoutMapper.selectLastRecord(userId, exerciseId);
     }
 
-    /** 总容量＝Σ(重量×次数)，服务端自算、不信前端。 */
-    private BigDecimal sumVolume(List<WorkoutCreateDTO.BlockDTO> blocks) {
+    /**
+     * 总容量＝Σ(重量×次数)，**只累计力量动作**（有氧不计入，ADR 0023）；服务端自算、不信前端。
+     * 未挂动作库的组（`exerciseId` 为 null）判不出肌群，按计入处理。
+     */
+    private BigDecimal sumVolume(List<WorkoutCreateDTO.BlockDTO> blocks, Set<Long> cardioIds) {
         return blocks.stream()
+                .filter(b -> !cardioIds.contains(b.getExerciseId()))
                 .flatMap(b -> b.getSets().stream())
                 .map(s -> s.getWeight().multiply(BigDecimal.valueOf(s.getReps())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /**
-     * 这些动作的历史最大单组容量（weight×reps）——PR 判定的历史起点。
-     * {@code excludeWorkoutId} 非空时排除该次训练（编辑场景：不拿自己当基线）。
-     * 无挂库动作时不查库，直接空表。
-     */
-    private Map<Long, BigDecimal> historyMax(Long userId,
-                                             List<WorkoutCreateDTO.BlockDTO> blocks,
-                                             Long excludeWorkoutId) {
-        Set<Long> exerciseIds = blocks.stream()
+    /** 组里所有挂了库的动作 id（未挂库的为 null，过滤掉）。 */
+    private Set<Long> blockExerciseIds(List<WorkoutCreateDTO.BlockDTO> blocks) {
+        return blocks.stream()
                 .map(WorkoutCreateDTO.BlockDTO::getExerciseId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * 批量取动作（肌群与记录口径都从这一份来）；下架（archived）的动作也查得到——
+     * 历史记录仍要能判「有氧」与「按层数录」。
+     */
+    private Map<Long, Exercise> exerciseByIds(Collection<Long> exerciseIds) {
+        if (exerciseIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        return exerciseMapper.selectBatchIds(exerciseIds).stream()
+                .filter(e -> e.getId() != null)
+                .collect(Collectors.toMap(Exercise::getId, e -> e, (a, b) -> a));
+    }
+
+    /**
+     * 这些动作里哪些是有氧——容量与 PR 都不参与（ADR 0023／0024）。
+     * ⚠️ 刻意用 `Collectors.toSet()`（HashSet）而非 `Set.of()`：后者对 `contains(null)` 抛 NPE，
+     * 而未挂动作库的组正是 `exerciseId = null`。
+     */
+    private Set<Long> cardioIds(Map<Long, Exercise> exercises) {
+        return exercises.values().stream()
+                .filter(e -> MUSCLE_CARDIO.equals(e.getMuscle()))
+                .map(Exercise::getId)
+                .collect(Collectors.toSet());
+    }
+
+    /** 该动作的记录口径（`floors`＝按层数录）；未挂库、或库里没有这个动作时为 null。 */
+    private String metricOf(Map<Long, Exercise> exercises, Long exerciseId) {
+        Exercise e = exerciseId == null ? null : exercises.get(exerciseId);
+        return e == null ? null : e.getMetric();
+    }
+
+    private boolean usesFloors(Map<Long, Exercise> exercises, Long exerciseId) {
+        return METRIC_FLOORS.equals(metricOf(exercises, exerciseId));
+    }
+
+    /**
+     * 这些动作的历史「最重一组」——PR 判定的历史起点。
+     * {@code excludeWorkoutId} 非空时排除该次训练（编辑场景：不拿自己当基线）。
+     * 无挂库动作时不查库，直接空表。
+     */
+    private Map<Long, ExerciseMaxVO> historyMax(Long userId,
+                                                List<WorkoutCreateDTO.BlockDTO> blocks,
+                                                Long excludeWorkoutId) {
+        Set<Long> exerciseIds = blockExerciseIds(blocks);
         if (exerciseIds.isEmpty()) {
             return new HashMap<>();
         }
@@ -192,13 +326,15 @@ public class WorkoutService {
                 ? workoutMapper.selectMaxSetVolume(userId, exerciseIds)
                 : workoutMapper.selectMaxSetVolumeExcluding(userId, exerciseIds, excludeWorkoutId);
         return new HashMap<>(rows.stream()
-                .collect(Collectors.toMap(ExerciseMaxVO::getExerciseId, ExerciseMaxVO::getMaxVol)));
+                .collect(Collectors.toMap(ExerciseMaxVO::getExerciseId, r -> r)));
     }
 
     /** 写入动作条目与组次（序号从 1 起、跨动作重置），并顺带组装明细 VO。 */
     private List<WorkoutDetailVO.Block> writeBlocks(Long workoutId,
                                                     List<WorkoutCreateDTO.BlockDTO> blocks,
-                                                    Map<Long, BigDecimal> runningMax) {
+                                                    Map<Long, ExerciseMaxVO> runningMax,
+                                                    Set<Long> cardioIds,
+                                                    Map<Long, Exercise> exercises) {
         List<WorkoutDetailVO.Block> out = new ArrayList<>();
         int order = 0;
         for (WorkoutCreateDTO.BlockDTO b : blocks) {
@@ -209,21 +345,27 @@ public class WorkoutService {
             block.setSortOrder(order++);
             blockMapper.insert(block);
 
+            // floors 口径（爬楼）：只信层数，重量／次数统一存占位值 0／1——
+            // 避免「同一个数在两套语义里混用」（被否的复用次数栏方案，ADR 0025）
+            boolean floors = usesFloors(exercises, b.getExerciseId());
+
             List<WorkoutDetailVO.SetItem> sets = new ArrayList<>();
             int idx = 1;
             for (WorkoutCreateDTO.SetDTO s : b.getSets()) {
                 WorkoutSet ws = new WorkoutSet();
                 ws.setBlockId(block.getId());
                 ws.setSetIndex(idx++);
-                ws.setWeight(s.getWeight());
-                ws.setReps(s.getReps());
-                ws.setPr(isPr(b.getExerciseId(), s, runningMax));
+                ws.setWeight(floors ? BigDecimal.ZERO : s.getWeight());
+                ws.setReps(floors ? 1 : s.getReps());
+                ws.setFloors(floors ? s.getFloors() : null);
+                ws.setPr(isPr(b.getExerciseId(), s, runningMax, cardioIds));
                 ws.setDurationSec(s.getDurationSec());
                 setMapper.insert(ws);
 
                 WorkoutDetailVO.SetItem item = new WorkoutDetailVO.SetItem();
-                item.setWeight(s.getWeight());
-                item.setReps(s.getReps());
+                item.setWeight(ws.getWeight());
+                item.setReps(ws.getReps());
+                item.setFloors(ws.getFloors());
                 item.setPr(ws.getPr());
                 item.setDurationSec(s.getDurationSec());
                 sets.add(item);
@@ -232,6 +374,8 @@ public class WorkoutService {
             WorkoutDetailVO.Block vb = new WorkoutDetailVO.Block();
             vb.setExerciseId(b.getExerciseId());
             vb.setName(block.getExerciseName());
+            vb.setCardio(cardioIds.contains(b.getExerciseId()));
+            vb.setMetric(metricOf(exercises, b.getExerciseId()));
             vb.setSets(sets);
             out.add(vb);
         }
@@ -239,20 +383,31 @@ public class WorkoutService {
     }
 
     /**
-     * PR 口径（scope #7）：该动作历史「最重一组」（weight×reps）。
-     * 严格大于才刷新（并列不算新 PR）；无历史即当前最佳＝PR；未挂动作库的组不判定。
+     * PR 口径（scope #7 ＋ ADR 0024）：该动作历史「最重一组」——**先比重量、同重量比次数**。
+     * 严格大于才刷新（并列不算新 PR）；无历史即当前最佳＝PR；
+     * 未挂动作库的组不判定；**有氧动作不参与**（其「重量」没有可比性）。
      */
-    private boolean isPr(Long exerciseId, WorkoutCreateDTO.SetDTO s, Map<Long, BigDecimal> runningMax) {
-        if (exerciseId == null) {
+    private boolean isPr(Long exerciseId, WorkoutCreateDTO.SetDTO s,
+                         Map<Long, ExerciseMaxVO> runningMax, Set<Long> cardioIds) {
+        if (exerciseId == null || cardioIds.contains(exerciseId)) {
             return false;
         }
-        BigDecimal vol = s.getWeight().multiply(BigDecimal.valueOf(s.getReps()));
-        BigDecimal max = runningMax.get(exerciseId);
-        if (max == null || vol.compareTo(max) > 0) {
-            runningMax.put(exerciseId, vol);
-            return true;
+        ExerciseMaxVO best = runningMax.get(exerciseId);
+        if (best != null && !beats(s, best)) {
+            return false;
         }
-        return false;
+        ExerciseMaxVO cur = new ExerciseMaxVO();
+        cur.setExerciseId(exerciseId);
+        cur.setWeight(s.getWeight());
+        cur.setReps(s.getReps());
+        runningMax.put(exerciseId, cur);
+        return true;
+    }
+
+    /** 本组是否比历史最佳更重（同重量再比次数）——**严格大于**才算法。 */
+    private boolean beats(WorkoutCreateDTO.SetDTO s, ExerciseMaxVO best) {
+        int byWeight = s.getWeight().compareTo(best.getWeight());
+        return byWeight > 0 || (byWeight == 0 && s.getReps() > best.getReps());
     }
 
     private Workout requireOwn(Long userId, Long id) {

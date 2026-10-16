@@ -1,6 +1,8 @@
 package com.example.fitapp.module.workout.service;
 
 import com.example.fitapp.common.BusinessException;
+import com.example.fitapp.module.exercise.entity.Exercise;
+import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.plan.entity.Plan;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.workout.dto.WorkoutCreateDTO;
@@ -11,7 +13,9 @@ import com.example.fitapp.module.workout.entity.WorkoutSet;
 import com.example.fitapp.module.workout.mapper.WorkoutBlockMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutMapper;
 import com.example.fitapp.module.workout.mapper.WorkoutSetMapper;
+import com.example.fitapp.module.workout.vo.CountVolumeVO;
 import com.example.fitapp.module.workout.vo.ExerciseMaxVO;
+import com.example.fitapp.module.workout.vo.MonthSummaryVO;
 import com.example.fitapp.module.workout.vo.WorkoutDetailVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +24,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.Arrays;
 import java.util.List;
 
@@ -28,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -51,9 +59,19 @@ class WorkoutServiceTest {
     private WorkoutSetMapper setMapper;
     @Mock
     private PlanMapper planMapper;
+    @Mock
+    private ExerciseMapper exerciseMapper;
 
     private WorkoutService service() {
-        return new WorkoutService(workoutMapper, blockMapper, setMapper, planMapper);
+        return new WorkoutService(workoutMapper, blockMapper, setMapper, planMapper, exerciseMapper);
+    }
+
+    /** 造一个动作库里的动作（带肌群码）——有氧判定要看 `muscle`。 */
+    private Exercise exercise(long id, String muscle) {
+        Exercise e = new Exercise();
+        e.setId(id);
+        e.setMuscle(muscle);
+        return e;
     }
 
     private WorkoutCreateDTO sampleDto() {
@@ -217,7 +235,7 @@ class WorkoutServiceTest {
         assertEquals("胸 & 三头", captor.getValue().getTitle());
     }
 
-    // ── PR 判定（scope #7：动作历史「最重一组」weight×reps）──
+    // ── PR 判定（scope #7 ＋ ADR 0024：重量优先、同重量比次数；有氧不参与）──
 
     private WorkoutCreateDTO oneExerciseDto(long exerciseId, String[][] sets) {
         WorkoutCreateDTO dto = new WorkoutCreateDTO();
@@ -243,6 +261,15 @@ class WorkoutServiceTest {
         return captor.getAllValues().stream().map(WorkoutSet::getPr).toList();
     }
 
+    /** 历史基线＝该动作的「最重一组」（ADR 0024：重量优先）。 */
+    private ExerciseMaxVO history(long exerciseId, String weight, int reps) {
+        ExerciseMaxVO vo = new ExerciseMaxVO();
+        vo.setExerciseId(exerciseId);
+        vo.setWeight(new BigDecimal(weight));
+        vo.setReps(reps);
+        return vo;
+    }
+
     @Test
     void create_firstSetOfExercise_isPr_thenBelow_notPr() {
         WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"60", "8"}, {"60", "7"}});
@@ -255,31 +282,56 @@ class WorkoutServiceTest {
     }
 
     @Test
-    void create_beatsHistory_pr_tieAndBelow_notPr() {
+    void create_heavierThanHistory_isPr_tie_isNot() {
         WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"61", "8"}, {"60", "8"}});
-        ExerciseMaxVO history = new ExerciseMaxVO();
-        history.setExerciseId(5L);
-        history.setMaxVol(new BigDecimal("480")); // 60×8
-        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history));
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history(5L, "60", 8)));
 
         service().create(1L, dto);
 
-        // 488 刷新 PR；480 与历史并列不算新 PR
+        // 61 > 60 刷新 PR；60×8 与历史并列，不算新 PR
         assertEquals(List.of(true, false), insertedPrFlags());
     }
 
     @Test
-    void create_progressiveWithinWorkout_marksEachNewBest() {
-        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"50", "8"}, {"55", "8"}, {"52", "10"}});
-        ExerciseMaxVO history = new ExerciseMaxVO();
-        history.setExerciseId(5L);
-        history.setMaxVol(new BigDecimal("400"));
-        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history));
+    void create_sameWeightMoreReps_isPr_lighterButMoreVolume_isNot() {
+        // ADR 0024 的头号反例：旧口径下 60×20（容量 1200）会压过 100×5（500）把 PR 抢走
+        WorkoutCreateDTO dto = oneExerciseDto(5L,
+                new String[][]{{"60", "20"}, {"100", "5"}, {"100", "6"}, {"100", "6"}});
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of(history(5L, "100", 5)));
 
         service().create(1L, dto);
 
-        // 400 并列不刷；440 刷；520 再刷（runningMax 随训练内逐组递进）
-        assertEquals(List.of(false, true, true), insertedPrFlags());
+        // 60×20 更轻 → 不是 PR；100×5 与历史并列 → 不是；100×6 同重量多次 → 是；再来一条 100×6 → 并列，不是
+        assertEquals(List.of(false, false, true, false), insertedPrFlags());
+    }
+
+    @Test
+    void create_cardioExercise_notPr_andExcludedFromVolume() {
+        WorkoutCreateDTO dto = new WorkoutCreateDTO();
+        dto.setTitle("腿 + 爬楼");
+        WorkoutCreateDTO.BlockDTO lift = new WorkoutCreateDTO.BlockDTO();
+        lift.setExerciseId(5L);
+        lift.setName("深蹲");
+        lift.setSets(List.of(set("60", 8)));
+        WorkoutCreateDTO.BlockDTO cardio = new WorkoutCreateDTO.BlockDTO();
+        cardio.setExerciseId(9L);
+        cardio.setName("爬楼");
+        cardio.setSets(List.of(set("0", 30)));
+        dto.setBlocks(List.of(lift, cardio));
+        when(exerciseMapper.selectBatchIds(any()))
+                .thenReturn(List.of(exercise(5L, "leg"), exercise(9L, "cardio")));
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of());
+
+        WorkoutDetailVO vo = service().create(1L, dto);
+
+        // 容量只累计力量动作：60×8＝480，有氧的 0×30 不计入（ADR 0023）
+        ArgumentCaptor<Workout> wc = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).insert(wc.capture());
+        assertEquals(0, wc.getValue().getTotalVolume().compareTo(new BigDecimal("480")));
+        // 有氧的组不标 PR（ADR 0024）；VO 带 cardio 标记供前端把容量位显示成「—」
+        assertEquals(List.of(true, false), insertedPrFlags());
+        assertEquals(Boolean.FALSE, vo.getBlocks().get(0).getCardio());
+        assertEquals(Boolean.TRUE, vo.getBlocks().get(1).getCardio());
     }
 
     @Test
@@ -290,6 +342,141 @@ class WorkoutServiceTest {
 
         verify(workoutMapper, never()).selectMaxSetVolume(any(), any());
         assertEquals(List.of(false, false, false), insertedPrFlags());
+    }
+
+    // ── 有氧专属口径：爬楼按层数（ADR 0025）──
+
+    @Test
+    void create_floorsMetric_savesFloorsAndNormalizesWeightReps() {
+        WorkoutCreateDTO dto = new WorkoutCreateDTO();
+        dto.setTitle("爬楼");
+        WorkoutCreateDTO.BlockDTO b = new WorkoutCreateDTO.BlockDTO();
+        b.setExerciseId(9L);
+        b.setName("爬楼");
+        WorkoutCreateDTO.SetDTO s1 = set("0", 1);
+        s1.setFloors(20);
+        WorkoutCreateDTO.SetDTO s2 = set("0", 1);
+        s2.setFloors(15);
+        b.setSets(List.of(s1, s2));
+        dto.setBlocks(List.of(b));
+
+        Exercise climb = exercise(9L, "cardio");
+        climb.setMetric("floors");
+        when(exerciseMapper.selectBatchIds(any())).thenReturn(List.of(climb));
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of());
+
+        WorkoutDetailVO vo = service().create(1L, dto);
+
+        ArgumentCaptor<WorkoutSet> sc = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper, times(2)).insert(sc.capture());
+        assertEquals(List.of(20, 15), sc.getAllValues().stream().map(WorkoutSet::getFloors).toList());
+        // 重量／次数归一成占位值——层数只认 floors 栏（ADR 0025）
+        assertEquals(0, sc.getAllValues().get(0).getWeight().compareTo(BigDecimal.ZERO));
+        assertEquals(1, sc.getAllValues().get(0).getReps());
+        // 有氧仍不计入容量
+        ArgumentCaptor<Workout> wc = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).insert(wc.capture());
+        assertEquals(0, wc.getValue().getTotalVolume().compareTo(BigDecimal.ZERO));
+        // VO 带上口径与层数：前端据此把组行渲染成「层数」栏
+        assertEquals("floors", vo.getBlocks().get(0).getMetric());
+        assertEquals(20, vo.getBlocks().get(0).getSets().get(0).getFloors());
+    }
+
+    @Test
+    void create_weightRepsMetric_ignoresFloorsFromClient() {
+        WorkoutCreateDTO dto = oneExerciseDto(5L, new String[][]{{"60", "8"}});
+        dto.getBlocks().get(0).getSets().get(0).setFloors(99); // 客户端乱传层数
+        when(exerciseMapper.selectBatchIds(any())).thenReturn(List.of(exercise(5L, "chest")));
+        when(workoutMapper.selectMaxSetVolume(eq(1L), any())).thenReturn(List.of());
+
+        service().create(1L, dto);
+
+        ArgumentCaptor<WorkoutSet> sc = ArgumentCaptor.forClass(WorkoutSet.class);
+        verify(setMapper).insert(sc.capture());
+        assertNull(sc.getValue().getFloors());
+        assertEquals(0, sc.getValue().getReps() - 8); // 次数照原样落库
+    }
+
+    // ── 日志按月（scope #26：按月筛选 ＋ 环比；边界算错会让整月数据错位）──
+
+    @Test
+    void list_monthRangeIsHalfOpen() {
+        service().list(1L, 50, 0, "2026-02");
+
+        ArgumentCaptor<LocalDateTime> start = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> end = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(workoutMapper).selectListItems(eq(1L), start.capture(), end.capture(), eq(50), eq(0));
+        assertEquals(LocalDateTime.of(2026, 2, 1, 0, 0), start.getValue());
+        assertEquals(LocalDateTime.of(2026, 3, 1, 0, 0), end.getValue());
+    }
+
+    @Test
+    void list_withoutMonth_noFilter() {
+        service().list(1L, 200, 0, null);
+
+        // 首页「上次训练」走这条路：不传月份就不过滤，否则它会只看到当月
+        verify(workoutMapper).selectListItems(eq(1L), isNull(), isNull(), eq(200), eq(0));
+    }
+
+    @Test
+    void monthSummary_readsCurrentPrevAndWeek() {
+        CountVolumeVO cur = new CountVolumeVO();
+        cur.setCnt(8);
+        cur.setVol(new BigDecimal("6400"));
+        CountVolumeVO prev = new CountVolumeVO();
+        prev.setCnt(6);
+        prev.setVol(new BigDecimal("5760"));
+        CountVolumeVO week = new CountVolumeVO();
+        week.setCnt(2);
+        week.setVol(new BigDecimal("1600"));
+        when(workoutMapper.selectCountVolume(eq(1L), any(), any())).thenReturn(cur, prev, week);
+
+        MonthSummaryVO vo = service().monthSummary(1L, "2026-10");
+
+        assertEquals("2026-10", vo.getMonth());
+        assertEquals(8, vo.getCount());
+        assertEquals(0, vo.getTotalVolume().compareTo(new BigDecimal("6400")));
+        assertEquals(6, vo.getPrevCount());
+        assertEquals(0, vo.getPrevTotalVolume().compareTo(new BigDecimal("5760")));
+        // 首页统计条读的就是它——记录超过封顶也不会少算（ADR 0023）
+        assertEquals(2, vo.getWeekCount());
+
+        // 三次查询分别是 [10-01, 11-01)、[09-01, 10-01) 与本周
+        ArgumentCaptor<LocalDateTime> starts = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> ends = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(workoutMapper, times(3)).selectCountVolume(eq(1L), starts.capture(), ends.capture());
+        assertEquals(List.of(LocalDateTime.of(2026, 10, 1, 0, 0), LocalDateTime.of(2026, 9, 1, 0, 0)),
+                starts.getAllValues().subList(0, 2));
+        assertEquals(List.of(LocalDateTime.of(2026, 11, 1, 0, 0), LocalDateTime.of(2026, 10, 1, 0, 0)),
+                ends.getAllValues().subList(0, 2));
+        // 本周＝周一 00:00 起、跨度 7 天（断言「是不是周一」而不是照抄实现里的算法）
+        LocalDateTime weekStart = starts.getAllValues().get(2);
+        assertEquals(0, weekStart.getHour() + weekStart.getMinute());
+        assertEquals(DayOfWeek.MONDAY, weekStart.toLocalDate().getDayOfWeek());
+        assertEquals(weekStart.plusDays(7), ends.getAllValues().get(2));
+    }
+
+    @Test
+    void monthSummary_blankMonth_fallsBackToCurrent_emptiesBecomeZero() {
+        when(workoutMapper.selectCountVolume(eq(1L), any(), any())).thenReturn(new CountVolumeVO());
+
+        MonthSummaryVO vo = service().monthSummary(1L, "   ");
+
+        assertEquals(YearMonth.now().toString(), vo.getMonth());
+        // 空月份：SUM/COUNT 为 null 时归零，别把 null 甩给前端
+        assertEquals(0, vo.getCount());
+        assertEquals(0, vo.getPrevCount());
+        assertEquals(0, vo.getTotalVolume().compareTo(BigDecimal.ZERO));
+        assertEquals(0, vo.getPrevTotalVolume().compareTo(BigDecimal.ZERO));
+    }
+
+    @Test
+    void month_badFormat_throwsBadRequest_andQueriesNothing() {
+        assertThrows(BusinessException.class, () -> service().list(1L, 50, 0, "2026-13"));
+        assertThrows(BusinessException.class, () -> service().monthSummary(1L, "26-10"));
+
+        verify(workoutMapper, never()).selectListItems(any(), any(), any(), anyInt(), anyInt());
+        verify(workoutMapper, never()).selectCountVolume(any(), any(), any());
     }
 
     // ── 修改记录（详情页「编辑 → ✓」）──
@@ -345,14 +532,12 @@ class WorkoutServiceTest {
         when(workoutMapper.selectById(9L)).thenReturn(existingWorkout(9L, 1L));
         WorkoutUpdateDTO dto = updateDto("推", new String[][]{{"61", "8"}});
         dto.getBlocks().get(0).setExerciseId(5L);
-        ExerciseMaxVO hist = new ExerciseMaxVO();
-        hist.setExerciseId(5L);
-        hist.setMaxVol(new BigDecimal("480")); // 60×8
-        when(workoutMapper.selectMaxSetVolumeExcluding(eq(1L), any(), eq(9L))).thenReturn(List.of(hist));
+        when(workoutMapper.selectMaxSetVolumeExcluding(eq(1L), any(), eq(9L)))
+                .thenReturn(List.of(history(5L, "60", 8)));
 
         service().update(1L, 9L, dto);
 
-        // 历史基线排除本记录自身：61×8=488 > 480 → 判 PR
+        // 历史基线排除本记录自身：61 > 60 → 判 PR（重量优先口径）
         verify(workoutMapper).selectMaxSetVolumeExcluding(eq(1L), any(), eq(9L));
         ArgumentCaptor<WorkoutSet> sc = ArgumentCaptor.forClass(WorkoutSet.class);
         verify(setMapper).insert(sc.capture());

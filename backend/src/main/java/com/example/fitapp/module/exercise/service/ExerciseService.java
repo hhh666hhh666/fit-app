@@ -99,6 +99,6 @@ public class ExerciseService {
     }
 
     private ExerciseVO toVO(Exercise e) {
-        return new ExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getUserId() == null);
+        return new ExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), e.getUserId() == null);
     }
 }

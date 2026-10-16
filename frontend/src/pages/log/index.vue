@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
-import { batchDeleteWorkouts, listWorkouts } from '@/api/workout'
-import type { WorkoutListItem } from '@/api/workout'
+import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
+import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
+const PAGE_SIZE = 50
+
 const items = ref<WorkoutListItem[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMore = ref(false)
 
 // ── 多选删除：长按记录进入多选态；多选态下点击行＝切换勾选（不再进详情）──
 const selectMode = ref(false)
@@ -20,29 +24,95 @@ const allSelected = computed(
 
 const WEEK_CHARS = ['日', '一', '二', '三', '四', '五', '六']
 
-const monthLabel = (() => {
-  const d = new Date()
-  return `${d.getFullYear()}年${d.getMonth() + 1}月`
-})()
+// ── 按月（scope #26）：默认当月、可左右翻月；概览数字按当月算并给环比 ──
+const now = new Date()
+const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+const month = ref(currentMonth)
+const summary = ref<MonthSummary | null>(null)
 
-const totalVolume = computed(() =>
-  items.value.reduce((sum, s) => sum + Number(s.totalVolume || 0), 0)
+const monthLabel = computed(() => {
+  const [y, m] = month.value.split('-')
+  return `${y}年${Number(m)}月`
+})
+/** 不许翻到未来：当月已是最新（右边箭头置灰）。 */
+const canNext = computed(() => month.value < currentMonth)
+
+const emptyText = computed(() =>
+  month.value === currentMonth ? '这个月还没有训练记录——去练一次吧' : `${monthLabel.value}没有训练记录`
 )
 
-async function load() {
-  loading.value = true
+/**
+ * 概览文案：次数与总容量按**当月**算（不再拿列表长度跟封顶列表求和冒充）。
+ * 容量位规则＝**有容量才显示数字**：容量口径已排除有氧（ADR 0023），
+ * 所以空月份与纯有氧月份都显示「—」，不显示 `0 kg`。
+ */
+const overviewText = computed(() => {
+  const s = summary.value
+  if (!s) return '—'
+  const total = Math.round(Number(s.totalVolume))
+  return `${s.count} 练 · 总容量 ${total > 0 ? `${formatThousands(total)} kg` : '—'}`
+})
+
+/**
+ * 环比：百分比 ＋ 绝对量（绝对值才是推着人加量的那个数）。
+ * ⚠️ **没有基准就不给差值**（ADR 0023）：上月没记录、或上月容量为 0（纯有氧月／没练力量）时一律不显示——
+ * 拿 0 当基准会算出「+0 kg」「+∞%」这种没意义的东西。
+ */
+const deltaText = computed(() => {
+  const s = summary.value
+  if (!s) return ''
+  const prevVol = Number(s.prevTotalVolume)
+  if (s.prevCount === 0 || prevVol <= 0) return ''
+  const diff = Math.round(Number(s.totalVolume) - prevVol)
+  const sign = diff >= 0 ? '+' : '-'
+  const pct = Math.round((diff / prevVol) * 100)
+  return `比上月 ${pct >= 0 ? '+' : ''}${pct}%（${sign}${formatThousands(Math.abs(diff))} kg）`
+})
+
+/** 翻月：换月即重载第一页，并退出多选（跨月选择只会让人困惑）。 */
+function shiftMonth(delta: number) {
+  const [y, m] = month.value.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  if (next > currentMonth) return
+  month.value = next
+  exitSelect()
+  void load(true)
+}
+
+/** `reset` ＝ 从头加载（换月／首次进页），否则是触底加下一页。 */
+async function load(reset = false) {
+  if (reset) {
+    loading.value = true
+    items.value = []
+  } else {
+    loadingMore.value = true
+  }
   try {
-    items.value = await listWorkouts()
+    const [list, sum] = await Promise.all([
+      listWorkouts(PAGE_SIZE, reset ? 0 : items.value.length, month.value),
+      reset ? getMonthSummary(month.value) : Promise.resolve(null)
+    ])
+    items.value = reset ? list : [...items.value, ...list]
+    if (sum) summary.value = sum
+    hasMore.value = list.length === PAGE_SIZE
   } catch {
     // 401 时 request 层已跳登录页；其它错误已 toast
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
 
 onShow(() => {
   if (!ensureLogin()) return
-  load()
+  void load(true)
+})
+
+/** 触底加载当月的下一页（本月条目多于 50 条时才用得上）。 */
+onReachBottom(() => {
+  if (!hasMore.value || loading.value || loadingMore.value) return
+  void load()
 })
 
 function weekdayOf(iso: string): string {
@@ -53,10 +123,11 @@ function minutes(item: WorkoutListItem): number {
   return Math.round(item.durationSec / 60)
 }
 
+/** 主项容量文案：纯有氧场次显示「—」（有氧不计入容量，ADR 0023）。 */
 function lineOf(item: WorkoutListItem): string {
-  return item.firstExercise
-    ? `${item.firstExercise} · ${formatThousands(Number(item.totalVolume))} kg`
-    : `${formatThousands(Number(item.totalVolume))} kg`
+  const vol =
+    item.hasStrength === false ? '—' : `${formatThousands(Number(item.totalVolume))} kg`
+  return item.firstExercise ? `${item.firstExercise} · ${vol}` : vol
 }
 
 /** 点一行 → 训练详情（带 id；detail 页自己拉 GET /api/workouts/{id}） */
@@ -99,6 +170,7 @@ function exitSelect() {
   selected.value = new Set()
 }
 
+/** 全选＝当前**已加载**的这些（当月条目多于 50 条时，未加载的下一页不在其中）。 */
 function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))
 }
@@ -115,18 +187,15 @@ function doDelete() {
       if (!confirm) return
       try {
         await batchDeleteWorkouts(ids)
-        items.value = items.value.filter((x) => !selected.value.has(x.id))
         exitSelect()
+        // 重载而不是本地剔除：概览的次数与容量也跟着变，不能只动列表
+        await load(true)
         uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
       } catch {
         // request 层已统一提示
       }
     }
   })
-}
-
-function monthPending() {
-  uni.showToast({ title: '月份筛选建设中', icon: 'none' })
 }
 </script>
 
@@ -137,7 +206,12 @@ function monthPending() {
       <view class="log__head">
         <template v-if="!selectMode">
           <text class="log__title">训练日志</text>
-          <text class="log__month ft-num" @click="monthPending">{{ monthLabel }} ▾</text>
+          <!-- 月份条（自绘）：左右翻月，当月封顶不再往后 -->
+          <view class="log__monthbar">
+            <text class="log__arrow" @click="shiftMonth(-1)">‹</text>
+            <text class="log__month ft-num">{{ monthLabel }}</text>
+            <text class="log__arrow" :class="{ 'log__arrow--off': !canNext }" @click="shiftMonth(1)">›</text>
+          </view>
         </template>
         <template v-else>
           <text class="log__cancel" @click="exitSelect">取消</text>
@@ -155,17 +229,18 @@ function monthPending() {
         </template>
       </view>
 
-      <!-- 月概览条 -->
+      <!-- 月概览条：数字按当月算，环比要给基准（ADR 0023） -->
       <view class="overview">
         <text class="overview__caps">MONTH OVERVIEW</text>
-        <text class="overview__nums ft-num">
-          本月 {{ items.length }} 练 · 总容量 {{ formatThousands(totalVolume) }} kg
-        </text>
+        <view class="overview__right">
+          <text class="overview__nums ft-num">{{ overviewText }}</text>
+          <text v-if="deltaText" class="overview__delta ft-num">{{ deltaText }}</text>
+        </view>
       </view>
 
       <!-- 时间线列表 -->
       <view v-if="loading" class="ft-loading">加载中…</view>
-      <view v-else-if="items.length === 0" class="ft-empty">还没有训练记录——去练一次吧</view>
+      <view v-else-if="items.length === 0" class="ft-empty">{{ emptyText }}</view>
       <view v-else class="ledger">
         <view class="ledger__thead">
           <view v-if="selectMode" class="col-check" />
@@ -204,6 +279,8 @@ function monthPending() {
         </view>
       </view>
 
+      <view v-if="loadingMore" class="log__more">加载中…</view>
+
       <view class="log__pad" />
     </view>
 
@@ -237,6 +314,24 @@ function monthPending() {
   border: 1rpx solid $app-line;
   border-radius: 8rpx;
   padding: 8rpx 16rpx;
+}
+
+/* ── 月份条：自绘（全站顶部栏都是自绘，不用原生 picker，免得破风格）── */
+.log__monthbar {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.log__arrow {
+  font-size: $text-lg;
+  line-height: 1;
+  color: $app-ink-muted;
+  padding: 8rpx 10rpx;
+}
+
+.log__arrow--off {
+  opacity: 0.25;
 }
 
 /* ── 多选态顶栏 ── */
@@ -295,6 +390,17 @@ function monthPending() {
 .overview__nums {
   font-size: $text-sm;
   color: $app-ink;
+}
+
+.overview__right {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+}
+
+.overview__delta {
+  font-size: 22rpx;
+  color: $app-ink-muted;
 }
 
 /* ── 时间线列表 ── */
@@ -429,6 +535,13 @@ function monthPending() {
 
 .log__pad {
   height: 240rpx;
+}
+
+.log__more {
+  padding: 24rpx 0;
+  text-align: center;
+  font-size: $text-sm;
+  color: $app-ink-subtle;
 }
 
 /* ── 底部 tab ── */

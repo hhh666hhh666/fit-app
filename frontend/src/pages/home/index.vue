@@ -7,7 +7,7 @@ import MealSheet from '@/components/MealSheet.vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { useDietStore } from '@/stores/diet'
 import { addWater, getDay, type DayOverview, type MealKey } from '@/api/nutrition'
-import { getWorkout, listWorkouts } from '@/api/workout'
+import { getMonthSummary, getWorkout, listWorkouts } from '@/api/workout'
 import { buildDietRings } from '@/utils/diet'
 import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
@@ -108,10 +108,11 @@ async function refreshLastWorkout() {
           pr: b.sets.some((s) => s.pr)
         }
       }),
-      footer: `总容量 ${formatThousands(Math.round(summary.totalVolume))} kg · ${Math.max(
-        1,
-        Math.round(summary.durationSec / 60)
-      )} 分钟`
+      footer: `${
+        detail.blocks.some((b) => b.cardio !== true)
+          ? `总容量 ${formatThousands(Math.round(summary.totalVolume))} kg`
+          : '总容量 —'
+      } · ${Math.max(1, Math.round(summary.durationSec / 60))} 分钟`
     }
     lastLoaded.value = true
   } catch {
@@ -123,16 +124,15 @@ async function refreshLastWorkout() {
 const weekCount = ref(0)
 const monthCount = ref(0)
 
+/**
+ * 统计条：本周／本月次数走服务端聚合（`/workouts/month-summary` 不传月份＝当月）。
+ * ⚠️ 别改回「拉 200 条在前端过滤」——记录超过 200 条后会静默少算（ADR 0023：累计类数字必须走全量聚合）。
+ */
 async function refreshCounts() {
   try {
-    const list = await listWorkouts(200)
-    const now = new Date()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
-    monday.setHours(0, 0, 0, 0)
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    weekCount.value = list.filter((w) => new Date(w.createdAt) >= monday).length
-    monthCount.value = list.filter((w) => new Date(w.createdAt) >= monthStart).length
+    const summary = await getMonthSummary()
+    weekCount.value = summary.weekCount
+    monthCount.value = summary.count
   } catch {
     // request 层已统一提示
   }

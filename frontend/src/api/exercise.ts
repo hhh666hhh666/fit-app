@@ -4,6 +4,8 @@ export interface ExerciseItem {
   id: number
   name: string
   muscle: string
+  /** 记录口径：`floors`＝按层数录（爬楼）；其余按重量×次数（ADR 0025）。 */
+  metric?: string | null
   preset: boolean
 }
 

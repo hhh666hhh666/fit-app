@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.exercise.entity.Exercise;
+import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.plan.dto.PlanSaveDTO;
 import com.example.fitapp.module.plan.entity.Plan;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -162,6 +164,16 @@ public class PlanService {
                         .eq(PlanExercise::getPlanId, p.getId())
                         .orderByAsc(PlanExercise::getSortOrder)
                         .orderByAsc(PlanExercise::getId));
+        // 记录口径取动作库实时值：爬楼要按层数录（ADR 0025）；动作未挂库时为 null
+        Set<Long> exerciseIds = rows.stream()
+                .map(PlanExercise::getExerciseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> metrics = exerciseIds.isEmpty() ? Map.of()
+                : exerciseMapper.selectBatchIds(exerciseIds).stream()
+                        .filter(e -> e.getId() != null && e.getMetric() != null)
+                        .collect(Collectors.toMap(Exercise::getId, Exercise::getMetric, (a, b) -> a));
+
         PlanDetailVO vo = new PlanDetailVO();
         vo.setId(p.getId());
         vo.setName(p.getName());
@@ -170,6 +182,7 @@ public class PlanService {
             i.setExerciseId(r.getExerciseId());
             i.setName(r.getName());
             i.setMuscle(r.getMuscle());
+            i.setMetric(metrics.get(r.getExerciseId()));
             i.setTargetSets(r.getTargetSets());
             i.setTargetReps(r.getTargetReps());
             i.setTargetWeight(r.getTargetWeight());

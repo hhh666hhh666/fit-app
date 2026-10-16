@@ -6,6 +6,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { getWorkout, updateWorkout, updateWorkoutNote } from '@/api/workout'
 import type { WorkoutDetail } from '@/api/workout'
 import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 
 const detail = ref<WorkoutDetail | null>(null)
@@ -16,8 +17,15 @@ const notFound = ref(false)
 const editing = ref(false)
 const saving = ref(false)
 /** dur 是「分:秒」文本（如 01:42）；留空＝这条没有用时（ADR 0022）。 */
-type DraftSet = { weight: string; reps: string; dur: string }
-type DraftBlock = { exerciseId: number | null; name: string; sets: DraftSet[] }
+type DraftSet = { weight: string; reps: string; floors: string; dur: string }
+type DraftBlock = {
+  exerciseId: number | null
+  name: string
+  cardio?: boolean
+  /** 记录口径：`floors`＝按层数录（爬楼）。见 ADR 0025。 */
+  metric?: string | null
+  sets: DraftSet[]
+}
 const draft = ref<{ title: string; note: string; blocks: DraftBlock[] }>({
   title: '',
   note: '',
@@ -28,24 +36,64 @@ const totalSets = computed(() =>
   detail.value ? detail.value.blocks.reduce((sum, b) => sum + b.sets.length, 0) : 0
 )
 
-/** 指标：编辑态随草稿实时变（改重量/次数看得到总容量跟着动）。 */
+/** 编辑态随草稿实时变（改重量/次数看得到总容量跟着动）；有氧块不计入（ADR 0023）。 */
 const shownSets = computed(() =>
   editing.value ? draft.value.blocks.reduce((s, b) => s + b.sets.length, 0) : totalSets.value
 )
+/** 整场有没有力量动作——纯有氧场次的三格第三格显示「—」。 */
+const hasLift = computed(() => {
+  const blocks = editing.value ? draft.value.blocks : (detail.value?.blocks ?? [])
+  return blocks.some((b) => !b.cardio)
+})
 const shownVolume = computed(() => {
   if (!editing.value) return detail.value ? Number(detail.value.totalVolume) : 0
-  return draft.value.blocks.reduce(
-    (sum, b) => sum + b.sets.reduce((v, x) => v + Number(x.weight || 0) * Number(x.reps || 0), 0),
-    0
-  )
+  return draft.value.blocks
+    .filter((b) => !b.cardio)
+    .reduce(
+      (sum, b) => sum + b.sets.reduce((v, x) => v + Number(x.weight || 0) * Number(x.reps || 0), 0),
+      0
+    )
 })
-const volumeText = computed(() => formatThousands(shownVolume.value))
 
-/** 单块容量 = Σ(重量×次数)，显示在动作名右侧（编辑态与只读态通用）。 */
-function blockVolume(block: { sets: { weight: number | string; reps: number | string }[] }): string {
-  return formatThousands(
-    block.sets.reduce((sum, s) => sum + Number(s.weight || 0) * Number(s.reps || 0), 0)
-  )
+/** 层数口径（爬楼）的合计：编辑态随草稿变，只读态取后端值（ADR 0025）。 */
+const shownFloors = computed(() =>
+  editing.value
+    ? draft.value.blocks
+        .filter((b) => b.metric === 'floors')
+        .reduce((sum, b) => sum + b.sets.reduce((v, x) => v + (Number(x.floors) || 0), 0), 0)
+    : (detail.value?.blocks ?? [])
+        .filter((b) => b.metric === 'floors')
+        .reduce((sum, b) => sum + b.sets.reduce((v, s) => v + (Number(s.floors) || 0), 0), 0)
+)
+const metricKind = computed(() => metricKindOf(hasLift.value, shownFloors.value))
+const volumeLabel = computed(() => metricLabel(metricKind.value))
+const volumeValue = computed(() =>
+  metricValue(metricKind.value, shownVolume.value, shownFloors.value)
+)
+const volumeUnit = computed(() => metricUnit(metricKind.value))
+
+/** 单块指标文案：层数口径给层数、其他有氧给「—」（编辑态与只读态通用）。 */
+function blockMetricText(block: {
+  cardio?: boolean
+  metric?: string | null
+  sets: { weight: number | string; reps: number | string; floors?: number | string | null }[]
+}): string {
+  if (block.metric === 'floors') {
+    const floors = block.sets.reduce((v, s) => v + (Number(s.floors) || 0), 0)
+    return `${formatThousands(floors)} 层`
+  }
+  if (block.cardio) return '—'
+  const sum = block.sets.reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0)
+  return `${formatThousands(sum)} kg`
+}
+
+/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」。 */
+function setReadText(
+  x: { weight?: number | string; reps?: number | string; floors?: number | string | null },
+  floorsMetric: boolean
+): string {
+  if (floorsMetric) return `${x.floors ?? '—'} 层`
+  return `${x.weight ?? 0} kg × ${x.reps ?? 0}`
 }
 
 async function load(id: number) {
@@ -86,9 +134,12 @@ function startEdit() {
     blocks: d.blocks.map((b) => ({
       exerciseId: b.exerciseId ?? null,
       name: b.name,
+      cardio: b.cardio === true,
+      metric: b.metric ?? null,
       sets: b.sets.map((s) => ({
         weight: String(s.weight),
         reps: String(s.reps),
+        floors: s.floors != null ? String(s.floors) : '',
         dur: s.durationSec != null ? formatClock(s.durationSec) : ''
       }))
     }))
@@ -112,7 +163,12 @@ function parseDuration(text: string): { ok: true; value: number | null } | { ok:
 function addSet(bi: number) {
   const b = draft.value.blocks[bi]
   const last = b.sets[b.sets.length - 1]
-  b.sets.push({ weight: last?.weight ?? '', reps: last?.reps ?? '', dur: '' })
+  b.sets.push({
+    weight: last?.weight ?? '',
+    reps: last?.reps ?? '',
+    floors: last?.floors ?? '',
+    dur: ''
+  })
 }
 
 /** 删一组：每个动作至少留一组。 */
@@ -133,9 +189,23 @@ async function save() {
     uni.showToast({ title: '标题不能为空', icon: 'none' })
     return
   }
-  // 组次校验与「结束训练」提交同一口径：重量必填且 ≥0、次数必填且 ≥1；组用时留空或「分:秒」
+  // 组次校验与「结束训练」提交同一口径：重量必填且 ≥0、次数必填且 ≥1；组用时留空或「分:秒」。
+  // 层数口径（爬楼）只看层数——重量／次数是占位值（ADR 0025）
   for (const b of draft.value.blocks) {
+    const floorsMetric = b.metric === 'floors'
     for (const s of b.sets) {
+      if (floorsMetric) {
+        const f = Number(s.floors)
+        if (!String(s.floors).trim() || Number.isNaN(f) || f < 0) {
+          uni.showToast({ title: `「${b.name}」有组次未填层数`, icon: 'none' })
+          return
+        }
+        if (!parseDuration(s.dur).ok) {
+          uni.showToast({ title: `「${b.name}」的组用时请按 01:42 的写法填`, icon: 'none' })
+          return
+        }
+        continue
+      }
       const w = Number(s.weight)
       if (!s.weight.trim() || Number.isNaN(w) || w < 0) {
         uni.showToast({ title: `「${b.name}」有组次未填重量`, icon: 'none' })
@@ -162,9 +232,12 @@ async function save() {
         name: b.name,
         sets: b.sets.map((s) => {
           const d = parseDuration(s.dur)
+          const floors = b.metric === 'floors'
           return {
-            weight: Number(s.weight),
-            reps: Number(s.reps),
+            // floors 口径：重量／次数只是占位，服务端也只信 floors（ADR 0025）
+            weight: floors ? 0 : Number(s.weight),
+            reps: floors ? 1 : Number(s.reps),
+            ...(floors ? { floors: Number(s.floors) || 0 } : {}),
             ...(d.ok && d.value != null ? { durationSec: d.value } : {})
           }
         })
@@ -259,8 +332,8 @@ function back() {
             <text class="metrics__value ft-num">{{ shownSets }}<text class="metrics__unit"> 组</text></text>
           </view>
           <view class="metrics__cell">
-            <text class="metrics__label">总容量</text>
-            <text class="metrics__value ft-num">{{ volumeText }}<text class="metrics__unit"> kg</text></text>
+            <text class="metrics__label">{{ volumeLabel }}</text>
+            <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit"> {{ volumeUnit }}</text></text>
           </view>
         </view>
 
@@ -272,7 +345,7 @@ function back() {
                 <text class="block__dot" />
                 <text class="block__name">{{ b.name }}</text>
               </view>
-              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
+              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
             <view class="block__sets">
               <view v-for="(s, j) in b.sets" :key="j" class="set">
@@ -281,7 +354,7 @@ function back() {
                   <text v-if="s.pr" class="set__pr ft-marker">PR</text>
                 </text>
                 <view class="set__vals">
-                  <text class="set__value ft-num">{{ s.weight }} kg × {{ s.reps }}</text>
+                  <text class="set__value ft-num">{{ setReadText(s, b.metric === 'floors') }}</text>
                   <text v-if="s.durationSec != null" class="set__dur ft-num">
                     {{ formatClock(s.durationSec) }}
                   </text>
@@ -299,7 +372,7 @@ function back() {
                 <text class="block__dot" />
                 <text class="block__name">{{ b.name }}</text>
               </view>
-              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockVolume(b) }} kg</text>
+              <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
             <view class="block__sets">
               <view v-for="(s, j) in b.sets" :key="j" class="set set--edit">
@@ -307,14 +380,22 @@ function back() {
                   <text class="set__label">第 {{ j + 1 }} 组</text>
                   <view class="set__edit">
                     <view class="set__inp">
-                      <input v-model="s.weight" type="digit" class="set__field ft-num" />
-                      <text class="set__unit">kg</text>
+                      <input
+                        v-if="b.metric === 'floors'"
+                        v-model="s.floors"
+                        type="number"
+                        class="set__field ft-num"
+                      />
+                      <input v-else v-model="s.weight" type="digit" class="set__field ft-num" />
+                      <text class="set__unit">{{ b.metric === 'floors' ? '层' : 'kg' }}</text>
                     </view>
-                    <text class="set__x">×</text>
-                    <view class="set__inp">
-                      <input v-model="s.reps" type="number" class="set__field ft-num" />
-                      <text class="set__unit">次</text>
-                    </view>
+                    <template v-if="b.metric !== 'floors'">
+                      <text class="set__x">×</text>
+                      <view class="set__inp">
+                        <input v-model="s.reps" type="number" class="set__field ft-num" />
+                        <text class="set__unit">次</text>
+                      </view>
+                    </template>
                     <text class="set__del" @click="removeSet(i, j)">×</text>
                   </view>
                 </view>
@@ -490,6 +571,8 @@ function back() {
   font-size: $text-sm;
   font-weight: 400;
   color: $app-ink-muted;
+  /* ⚠️ 不靠文本里的空格留间距：模板里的前导空白会被折叠，数字与单位会贴在一起 */
+  margin-left: 6rpx;
 }
 
 /* ── 动作卡 ── */

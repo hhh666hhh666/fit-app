@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
-import { listWorkouts } from '@/api/workout'
+import { getWorkoutTotals } from '@/api/workout'
 import { listExercises } from '@/api/exercise'
 import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
@@ -13,7 +13,7 @@ import { ensureLogin } from '@/utils/guard'
 
 const username = ref('训练者')
 const totalCount = ref(0)
-const totalVolumeT = ref(0)
+const totalVolumeKg = ref(0)
 const exerciseCount = ref(0)
 const foodCount = ref(-1)
 const storage = ref<StorageInfo | null>(null)
@@ -32,17 +32,15 @@ onShow(() => {
 
 async function loadStats() {
   try {
-    // 自用工具初期记录量小；封顶 200 条，超过按「200+」显示（不装精确数）
-    const [workouts, exercises, foodStat] = await Promise.all([
-      listWorkouts(200),
+    // 累计口径走**全量聚合接口**（ADR 0023）：列表接口有 limit 封顶，拿它求和会把「累计」算成「最近 200 次」
+    const [totals, exercises, foodStat] = await Promise.all([
+      getWorkoutTotals(),
       listExercises(),
       // 食物库含预置 1800+ 条：走统计接口拿精确总数（不拉列表）
       getFoodCount()
     ])
-    totalCount.value = workouts.length
-    totalVolumeT.value = Math.round(
-      workouts.reduce((sum, w) => sum + (Number(w.totalVolume) || 0), 0) / 1000
-    )
+    totalCount.value = totals.count
+    totalVolumeKg.value = Math.round(Number(totals.totalVolume) || 0)
     exerciseCount.value = exercises.length
     foodCount.value = foodStat.total
   } catch {
@@ -98,7 +96,15 @@ const recRequestsText = computed(() =>
   recUsage.value ? `共 ${formatThousands(recUsage.value.totalRequests)} 次` : '—'
 )
 
-const countText = computed(() => (totalCount.value >= 200 ? '200+' : String(totalCount.value)))
+const countText = computed(() => String(totalCount.value))
+/**
+ * 累计容量文案：**有容量才显示数字**（有氧不计入容量，ADR 0023）——
+ * 一次力量都没记过时显示「—」，显示 `0 kg` 看着像故障。
+ */
+const totalVolumeText = computed(() =>
+  totalVolumeKg.value > 0 ? formatThousands(totalVolumeKg.value) : '—'
+)
+const showVolumeUnit = computed(() => totalVolumeKg.value > 0)
 const avatarChar = computed(() => username.value.charAt(0).toUpperCase() || 'L')
 const planSummary = computed(() =>
   schedule.plans.length ? `${schedule.plans.length} 个计划` : '还没有计划'
@@ -187,10 +193,10 @@ function logout() {
         </view>
         <view class="stats__divider" />
         <view class="stats__item">
-          <text class="stats__label">总负荷容量</text>
+          <text class="stats__label">总容量</text>
           <view class="stats__num-row">
-            <text class="stats__num ft-num">{{ formatThousands(totalVolumeT) }}</text>
-            <text class="stats__unit">t</text>
+            <text class="stats__num ft-num">{{ totalVolumeText }}</text>
+            <text v-if="showVolumeUnit" class="stats__unit">kg</text>
           </view>
         </view>
       </view>
