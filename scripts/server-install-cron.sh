@@ -29,7 +29,10 @@ TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 
 # 先摘掉旧的受管段（幂等的关键）
-crontab -l 2>/dev/null | awk -v b="$BEGIN" -v e="$END" '
+# ⚠️ 首次安装时 root 还没有 crontab，`crontab -l` 会返回非零（no crontab for root）；
+#    在 `set -o pipefail` 之下，这会让整条管道判失败、脚本**静默退出 1**——
+#    而「首次安装」恰恰是必经场景。所以必须显式把这个非零吃掉。
+(crontab -l 2>/dev/null || true) | awk -v b="$BEGIN" -v e="$END" '
     $0 == b { skip = 1; next }
     $0 == e { skip = 0; next }
     !skip   { print }
