@@ -3,6 +3,12 @@
 本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 版本号以 `git tag` 为唯一真相源，手写点（`frontend/package.json`、`backend/pom.xml`）由 `scripts/check-version.sh` 在推 tag 时校验。
 
+## [0.8.3] - 2026-10-16
+
+### Fixed
+
+- **会话页勾完一组，组用时恒为 `00:00`**：`completeSet()` 先把本组标记完成（写 `done` / `doneAt`）、再回头算用时，而 `setDurationSec()` 取的是 `lastDoneAt()`——全局最新那个已完成组的 `doneAt`，本组刚写上的时刻恰好就是它，于是每组都拿**自己**当起点，`now − now = 0`。连锁后果：提交时 `durationSec: y.dur ?? undefined` 里 `0 ?? undefined` 仍是 `0`（落不了 `NULL`），库里存的就是 0、详情页 `s.durationSec != null` 也成立，**会话页与详情页一起显示 `00:00`**。现在改成**先算后写**，并给 `lastDoneAt()`／`setDurationSec()` 加 `self` 参数把本组排除（双保险：这几行的顺序再被重排也不会算出 0）。⚠️ 勘误——由 `bb94e42` 引入，**v0.8.0～v0.8.2 期间提交的场次全部受影响**；迁移 `V22` 把被污染的 `duration_sec = 0` 统一改回 `NULL`（真实用时**无法反推**：`workout_set` 没存每组的完成时刻）
+
 ## [0.8.2] - 2026-10-16
 
 ### Fixed
