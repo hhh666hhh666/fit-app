@@ -22,9 +22,12 @@ OSSUTIL="${OSSUTIL:-ossutil}"
 OSS_BUCKET="${OSS_BUCKET:-$(sed -n 's/^OSS_BUCKET=//p' "$ENV_FILE" 2>/dev/null | head -1)}"
 PREFIX="${OSS_PREFIX:-fit-app}"
 
+# 没配桶 ＝ 还没启用异地备份，**优雅跳过**（退出 0），不是失败。
+# 这样「先发版、桶以后再说」不会让每天的定时任务在日志里刷错误。
+# 反过来说：桶配了却同步不了，那是真问题，下面照常报错退出。
 if [ -z "$OSS_BUCKET" ]; then
-  echo "❌ 未配置 OSS_BUCKET（在 $ENV_FILE 里或环境变量里给）" >&2
-  exit 1
+  echo "ℹ️ 未配置 OSS_BUCKET（$ENV_FILE）——跳过异地同步（配好桶名与 ossutil 后会自动生效）"
+  exit 0
 fi
 if ! command -v "$OSSUTIL" >/dev/null 2>&1; then
   echo "❌ 找不到 ossutil（$OSSUTIL）；安装与配置见 deploy/README.md" >&2
