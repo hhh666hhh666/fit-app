@@ -12,6 +12,8 @@ public enum ResultCode {
     NOT_FOUND(404, "资源不存在"),
     CONFLICT(409, "资源已存在"),
     BUSINESS_ERROR(1000, "业务处理失败"),
+    /** 基础设施瞬时故障（共用 MySQL 容器重启、连接池整体失效等）：写路径已自动重试过，仍失败才落到这里。 */
+    SERVICE_UNAVAILABLE(503, "服务正在重启，请稍后重试"),
     SYSTEM_ERROR(500, "系统繁忙，请稍后再试");
 
     private final int code;

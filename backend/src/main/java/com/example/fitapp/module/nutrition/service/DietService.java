@@ -3,6 +3,7 @@ package com.example.fitapp.module.nutrition.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.common.TransientRetry;
 import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
@@ -58,6 +59,8 @@ public class DietService {
     private static final List<String> MEAL_ORDER = List.of("breakfast", "lunch", "dinner", "snack");
     private static final Set<String> PHOTO_MIME = Set.of("image/jpeg", "image/png", "image/webp");
     private static final long MAX_PHOTO_BYTES = 10L * 1024 * 1024;
+    /** 餐照入库的尝试次数：正常 1 次 ＋ 瞬时故障重试 2 次（退避节奏见 {@link TransientRetry}）。 */
+    private static final int PHOTO_WRITE_ATTEMPTS = 3;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     /** 缩略图长边上限（px）：相册与列表加载它，点开才拉原图。 */
     private static final int THUMB_MAX_EDGE = 320;
@@ -217,38 +220,47 @@ public class DietService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "照片读取失败");
         }
 
-        MealPhoto existing = mealPhotoMapper.selectOne(Wrappers.<MealPhoto>lambdaQuery()
-                .eq(MealPhoto::getUserId, userId)
-                .eq(MealPhoto::getLogDate, date)
-                .eq(MealPhoto::getMeal, meal));
-
-        // 容量闸（ADR 0013）：达上限直接拒绝。替换时按**净增**算（旧图会被换掉）。
-        long used = mealPhotoMapper.sumBytes(userId);
-        long oldSize = (existing == null || existing.getSizeBytes() == null) ? 0L : existing.getSizeBytes();
-        long delta = bytes.length - oldSize;
-        if (used + delta > photoQuotaBytes) {
-            throw new BusinessException(ResultCode.BAD_REQUEST,
-                    "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
-        }
-
+        // 缩略图与数据库无关，放在重试之外：它是 CPU 密集活，重试时重算一遍没有意义。
         byte[] thumb = makeThumb(bytes);
-        if (existing == null) {
-            MealPhoto p = new MealPhoto();
-            p.setUserId(userId);
-            p.setLogDate(date);
-            p.setMeal(meal);
-            p.setMime(mime);
-            p.setSizeBytes(bytes.length);
-            p.setImage(bytes);
-            p.setThumb(thumb);
-            mealPhotoMapper.insert(p);
-        } else {
-            existing.setMime(mime);
-            existing.setSizeBytes(bytes.length);
-            existing.setImage(bytes);
-            existing.setThumb(thumb);
-            mealPhotoMapper.updateById(existing);
-        }
+
+        // 「查旧行 → 容量闸 → 写库」整块交给重试：三步都打数据库，而共用 MySQL 容器被
+        // OOM-killer 杀掉重启的那几秒，正是它们会失败的地方（原委见 TransientRetry 的注释）。
+        // 幂等靠唯一键 uk_mp_user_date_meal：首次写入其实成功、只是响应阶段才断连时，
+        // 重试会查到自己刚写的那一行，走 update 分支收成同一行，不会多出一条。
+        TransientRetry.run("上传餐照", PHOTO_WRITE_ATTEMPTS, () -> {
+            MealPhoto existing = mealPhotoMapper.selectOne(Wrappers.<MealPhoto>lambdaQuery()
+                    .eq(MealPhoto::getUserId, userId)
+                    .eq(MealPhoto::getLogDate, date)
+                    .eq(MealPhoto::getMeal, meal));
+
+            // 容量闸（ADR 0013）：达上限直接拒绝。替换时按**净增**算（旧图会被换掉）。
+            // 它抛的 BusinessException 不属可重试族，会直接穿过 TransientRetry 冒到全局处理器。
+            long used = mealPhotoMapper.sumBytes(userId);
+            long oldSize = (existing == null || existing.getSizeBytes() == null) ? 0L : existing.getSizeBytes();
+            long delta = bytes.length - oldSize;
+            if (used + delta > photoQuotaBytes) {
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
+            }
+
+            if (existing == null) {
+                MealPhoto p = new MealPhoto();
+                p.setUserId(userId);
+                p.setLogDate(date);
+                p.setMeal(meal);
+                p.setMime(mime);
+                p.setSizeBytes(bytes.length);
+                p.setImage(bytes);
+                p.setThumb(thumb);
+                mealPhotoMapper.insert(p);
+            } else {
+                existing.setMime(mime);
+                existing.setSizeBytes(bytes.length);
+                existing.setImage(bytes);
+                existing.setThumb(thumb);
+                mealPhotoMapper.updateById(existing);
+            }
+        });
     }
 
     /** 删除某餐照片（不可恢复；ADR 0013）。不存在 → 404。 */

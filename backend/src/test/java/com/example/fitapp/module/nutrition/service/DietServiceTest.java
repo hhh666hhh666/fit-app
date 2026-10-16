@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -33,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -185,6 +187,36 @@ class DietServiceTest {
 
         assertThrows(BusinessException.class, () -> s.savePhoto(7L, "2026-10-12", "lunch", file));
         verify(mealPhotoMapper, never()).insert(any(MealPhoto.class));
+        // 容量拒绝是业务性失败，不该被重试——TransientRetry 只认可重试的那一族
+        verify(mealPhotoMapper, times(1)).selectOne(any());
+    }
+
+    @Test
+    void savePhoto_retriesOnTransientDbFailure() {
+        // 共用 MySQL 容器被 OOM-killer 杀掉重启时，insert 抛的就是这一类（线上实测是
+        // RecoverableDataAccessException 包着 MySQL 的 CommunicationsException）。重试应能自愈。
+        when(mealPhotoMapper.selectOne(any())).thenReturn(null);
+        when(mealPhotoMapper.insert(any(MealPhoto.class)))
+                .thenThrow(new RecoverableDataAccessException("Communications link failure"))
+                .thenReturn(1);
+        MockMultipartFile file = new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        service().savePhoto(7L, "2026-10-12", "lunch", file);
+
+        verify(mealPhotoMapper, times(2)).insert(any(MealPhoto.class));
+    }
+
+    @Test
+    void savePhoto_givesUpAfterRetriesExhausted() {
+        when(mealPhotoMapper.selectOne(any())).thenReturn(null);
+        when(mealPhotoMapper.insert(any(MealPhoto.class)))
+                .thenThrow(new RecoverableDataAccessException("Communications link failure"));
+        MockMultipartFile file = new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        // 重试用尽后抛**原异常**，由 GlobalExceptionHandler 统一转成「服务正在重启，请稍后重试」
+        assertThrows(RecoverableDataAccessException.class,
+                () -> service().savePhoto(7L, "2026-10-12", "lunch", file));
+        verify(mealPhotoMapper, times(3)).insert(any(MealPhoto.class));
     }
 
     @Test
