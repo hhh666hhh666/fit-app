@@ -44,9 +44,11 @@ Status: accepted
 
 ## 最新决策
 
-- [ADR 0020](./0020-session-local-persistence-and-wall-clock-timer.md)：训练会话本机持久化、墙钟净计时与返回＝最小化（取代 [ADR 0011](./0011-session-early-finish-and-leave-guard.md) 的离页确认部分）。
 - [ADR 0021](./0021-session-set-order-and-undo.md)：组内顺序推进、删除组次与取消完成。
 - [ADR 0022](./0022-session-pause-and-set-duration.md)：训练暂停与组次净用时落库。
+- [ADR 0023](./0023-volume-metric-scope-and-display.md)：训练容量只累计力量动作、展示必带对比基准、标签按实际口径命名。
+- [ADR 0024](./0024-pr-definition-heaviest-set.md)：PR 判定改为「重量优先」（旧实现取单组重量×次数最大）。
+- [ADR 0025](./0025-cardio-metric-and-floors.md)：有氧专属记录口径——爬楼按层数（动作上声明口径、组次上落层数）。
 
 ## 与其他文档的分工
 
