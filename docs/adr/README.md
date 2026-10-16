@@ -49,6 +49,7 @@ Status: accepted
 - [ADR 0023](./0023-volume-metric-scope-and-display.md)：训练容量只累计力量动作、展示必带对比基准、标签按实际口径命名。
 - [ADR 0024](./0024-pr-definition-heaviest-set.md)：PR 判定改为「重量优先」（旧实现取单组重量×次数最大）。
 - [ADR 0025](./0025-cardio-metric-and-floors.md)：有氧专属记录口径——爬楼按层数（动作上声明口径、组次上落层数）。
+- [ADR 0026](./0026-photo-storage-and-backup.md)：餐照移出数据库（图片落文件系统、库里只留路径）＋ 备份策略（库每日 dump、图片每日硬链接快照、异地 OSS、恢复演练随发版）。
 
 ## 与其他文档的分工
 
