@@ -14,6 +14,7 @@ import FtTrendChart from '@/components/FtTrendChart.vue'
 import MealSheet from '@/components/MealSheet.vue'
 import { useDietStore } from '@/stores/diet'
 import { buildDietRings } from '@/utils/diet'
+import { activityLabel, gapText, sexLabel } from '@/utils/energy'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 全屏「饮食」页：记录（今日 / 按天翻看）＋ 趋势（五指标切换）──
@@ -118,6 +119,21 @@ const kcalTarget = computed(() => {
   const t = overview.value?.targets.kcal
   return t == null ? null : Math.round(Number(t))
 })
+
+/** 每日总消耗与缺口（ADR 0029）：口径在服务端，这里只负责摆与念。 */
+const energy = computed(() => overview.value?.energy ?? null)
+const gapLabel = computed(() => gapText(overview.value?.gap))
+
+function openEnergySheet() {
+  energySheet.value.show = true
+}
+
+/** 档案缺项时给出口：去身体档案页补全（ADR 0029 的降级口径）。 */
+function goProfile() {
+  uni.navigateTo({ url: '/pages/body/index' })
+}
+
+const energySheet = ref({ show: false })
 
 const rings = computed(() => buildDietRings(overview.value))
 
@@ -253,6 +269,17 @@ function goBack() {
             / {{ kcalTarget == null ? '目标 --' : `目标 ${kcalTarget}` }} 大卡
           </text>
         </view>
+        <!-- 每日总消耗与热量缺口（ADR 0029）：目标那一行不动，新信息另起一行 -->
+        <view v-if="energy?.complete" class="burnrow">
+          <text class="burnrow__t ft-num">今日消耗 {{ energy.totalKcal }}</text>
+          <text class="burnrow__sep">·</text>
+          <text class="burnrow__gap ft-num">{{ gapLabel }}</text>
+          <text class="burnrow__how" @click="openEnergySheet">怎么算的</text>
+        </view>
+        <view v-else-if="energy" class="burnrow burnrow--miss" @click="goProfile">
+          <text class="burnrow__t">档案没填完，暂时算不出今日消耗</text>
+          <text class="burnrow__how">去补全 ›</text>
+        </view>
         <FtDietRings :rings="rings" />
       </view>
 
@@ -358,6 +385,58 @@ function goBack() {
       </view>
       <text v-if="metricTargetText" class="ftrend__target ft-num">目标 {{ metricTargetText }}</text>
       <text class="ftrend__tip">单指按住看数值 · 双指捏合缩放 · 双指拖动平移</text>
+    </view>
+
+    <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029） -->
+    <view v-if="energySheet.show" class="esheet-mask" @click="energySheet.show = false" />
+    <view v-if="energySheet.show" class="esheet">
+      <view class="esheet__handle" />
+      <text class="esheet__title">今日消耗怎么算的</text>
+      <template v-if="energy?.complete">
+        <view class="eq">
+          <view class="eq__row">
+            <text class="eq__k">基础代谢</text>
+            <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+          </view>
+          <text class="eq__note">
+            按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
+            {{ energy.age }} · {{ sexLabel(energy.sex) }}
+          </text>
+          <view class="eq__row">
+            <text class="eq__k">× 生活活动系数</text>
+            <text class="eq__v ft-num"
+              >{{ energy.activityFactor }}（{{ activityLabel(energy.activityLevel) }}）</text
+            >
+          </view>
+          <view class="eq__row">
+            <text class="eq__k">= 基础消耗</text>
+            <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
+          </view>
+          <view class="eq__row">
+            <text class="eq__k">+ 今日训练消耗</text>
+            <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
+          </view>
+          <view class="eq__row eq__row--sum">
+            <text class="eq__k">= 今日总消耗</text>
+            <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
+          </view>
+          <view class="eq__row">
+            <text class="eq__k">− 今日摄入</text>
+            <text class="eq__v ft-num">{{ kcalNow }} 大卡</text>
+          </view>
+          <view class="eq__row eq__row--sum">
+            <text class="eq__k">= {{ gapLabel }}</text>
+            <text class="eq__v ft-num">{{ overview?.gap ?? '–' }} 大卡</text>
+          </view>
+        </view>
+        <text class="eq__hint">
+          生活活动系数只算日常活动（工作、走动），专门训练不在里面——训练消耗是单独加上去的，不会重复计算。
+        </text>
+        <text class="eq__hint">
+          目标热量仍是自己设的那个数（设置页），跟这里的消耗是两回事：目标是想达成的量，缺口是今天实际的状态。
+        </text>
+      </template>
+      <view class="ebtn" @click="energySheet.show = false">知道了</view>
     </view>
 
     <MealSheet
@@ -483,6 +562,135 @@ function goBack() {
   font-size: $text-md;
   color: $app-ink-muted;
   margin-left: 6rpx;
+}
+
+/* ── 今日消耗 / 缺口（ADR 0029） ── */
+.burnrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin: -12rpx 0 26rpx;
+}
+
+.burnrow__t {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.burnrow__sep {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.burnrow__gap {
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.burnrow__how {
+  margin-left: auto;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  text-decoration: underline;
+}
+
+.burnrow--miss {
+  padding: 12rpx 16rpx;
+  border-radius: $radius-sm;
+  border: 1rpx dashed $app-line;
+}
+
+/* ── 「怎么算的」弹层 ── */
+.esheet-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(23, 25, 29, 0.4);
+  z-index: 90;
+}
+
+.esheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 91;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: $app-surface;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.esheet__handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: $app-line;
+  margin: 0 auto 28rpx;
+}
+
+.esheet__title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: $app-ink;
+  padding-bottom: 20rpx;
+}
+
+.eq__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  border-bottom: 1rpx dashed $app-line-soft;
+}
+
+.eq__row--sum {
+  border-bottom: none;
+  border-top: 2rpx solid $app-ink;
+  margin-top: 6rpx;
+}
+
+.eq__k {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.eq__v {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.eq__note {
+  display: block;
+  font-size: 20rpx;
+  line-height: 1.5;
+  color: $app-ink-subtle;
+  padding: 0 0 12rpx;
+}
+
+.eq__hint {
+  display: block;
+  font-size: $text-xs;
+  line-height: 1.7;
+  color: $app-ink-muted;
+  padding-top: 14rpx;
+}
+
+.ebtn {
+  margin-top: 28rpx;
+  height: 92rpx;
+  line-height: 92rpx;
+  text-align: center;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-md;
+  font-size: $text-base;
+  color: $app-ink;
 }
 
 /* ── 餐次 ── */

@@ -24,6 +24,8 @@ import com.example.fitapp.module.nutrition.vo.MealItemVO;
 import com.example.fitapp.module.nutrition.vo.SettingVO;
 import com.example.fitapp.module.nutrition.vo.StorageVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
+import com.example.fitapp.module.profile.service.EnergyService;
+import com.example.fitapp.module.profile.vo.EnergyVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -74,6 +76,9 @@ public class DietService {
     private final DietDailyMapper dietDailyMapper;
     private final FoodMapper foodMapper;
     private final SettingService settingService;
+
+    /** 每日总消耗（基础代谢×生活活动系数 ＋ 手填训练消耗）的唯一实现，见 ADR 0029。 */
+    private final EnergyService energyService;
 
     /** 餐照的文件存储（ADR 0026）：图片实体在磁盘上，库里只留路径。 */
     private final PhotoStorage photoStorage;
@@ -144,6 +149,14 @@ public class DietService {
         vo.setTargets(targets);
 
         vo.setPhotoMeals(mealPhotoMapper.selectMealsWithPhoto(userId, date));
+
+        // 每日总消耗与热量缺口（ADR 0029）：消耗口径只有 EnergyService 一处实现，这里只做减法
+        EnergyVO energy = energyService.compute(userId, date);
+        vo.setEnergy(energy);
+        if (energy != null && Boolean.TRUE.equals(energy.getComplete()) && energy.getTotalKcal() != null) {
+            int intake = kcal.setScale(0, RoundingMode.HALF_UP).intValue();
+            vo.setGap(energy.getTotalKcal() - intake);
+        }
         return vo;
     }
 

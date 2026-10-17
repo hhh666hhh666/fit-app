@@ -6,6 +6,7 @@ import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
 import { formatClock, muscleLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
+import { formatSetTargets } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
 import {
   clearSession,
@@ -47,27 +48,53 @@ const curIdx = computed(() => session.value?.current ?? 0)
 const paused = computed(() => !!session.value && isPaused(session.value))
 const clock = computed(() => formatClock(session.value ? netElapsedSec(session.value, nowMs.value) : 0))
 
-/** 按目标铺初始组行：设了目标组数就铺 N 行并预填重量/次数；未设 = 1 行空值。 */
+/**
+ * 本次训练手填的消耗（大卡，ADR 0029）。做了读写代理是为了直接 v-model 到本机会话上——
+ * 这样它跟其他字段一样「改一次就落盘一次」，杀进程也不丢。
+ */
+const calories = computed({
+  get: () => session.value?.calories ?? '',
+  set: (v: string) => {
+    if (session.value) session.value.calories = v
+  }
+})
+
+/** 计划里的一组目标（后端 `PlanSetTarget` 的形状）。 */
+interface PlannedSet {
+  reps?: number | null
+  weight?: number | null
+}
+
+/**
+ * 按逐组目标铺初始组行（ADR 0027）：**第 i 行取第 i 组的目标**；
+ * 计划没给组目标（空数组）＝不设目标，1 行空值起步（与旧行为一致）。
+ */
 function buildSets(
-  t: Pick<SessionBlock, 'targetSets' | 'targetReps' | 'targetWeight'>
+  targets: PlannedSet[] | null | undefined,
+  fallbackReps: number | null,
+  fallbackWeight: number | null
 ): SessionSet[] {
-  const n = t.targetSets && t.targetSets > 0 ? t.targetSets : 1
-  const w = t.targetWeight != null ? String(t.targetWeight) : ''
-  const r = t.targetReps != null ? String(t.targetReps) : ''
-  return Array.from({ length: n }, () => ({ w, r, f: '', done: false, doneAt: null, dur: null }))
+  const list = targets ?? []
+  if (list.length === 0) {
+    return [{ w: '', r: '', f: '', done: false, doneAt: null, dur: null }]
+  }
+  return list.map((t) => ({
+    w: (t.weight ?? fallbackWeight) != null ? String(t.weight ?? fallbackWeight) : '',
+    r: (t.reps ?? fallbackReps) != null ? String(t.reps ?? fallbackReps) : '',
+    f: '',
+    done: false,
+    doneAt: null,
+    dur: null
+  }))
 }
 
 function goalText(e: {
-  targetSets?: number | null
-  targetReps?: number | null
-  targetWeight?: number | null
+  sets?: PlannedSet[] | null
+  metric?: string | null
 }): string {
-  const parts: string[] = []
-  if (e.targetSets != null || e.targetReps != null) {
-    parts.push(`目标 ${e.targetSets ?? '–'} 组 × ${e.targetReps ?? '–'} 次`)
-  }
-  if (e.targetWeight != null) parts.push(`${e.targetWeight} kg`)
-  return parts.join(' · ')
+  const cardio = e.metric === 'floors'
+  const list = (e.sets ?? []).map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null }))
+  return formatSetTargets(list, cardio)
 }
 
 /** 「上次数据」：有 exerciseId 时从真接口取（自动/手动切动作时都要重拉）。 */
@@ -101,7 +128,8 @@ function initFreeBlock() {
       targetSets: null,
       targetReps: null,
       targetWeight: null,
-      sets: buildSets({ targetSets: null, targetReps: null, targetWeight: null })
+      circuitNo: null,
+      sets: buildSets([], null, null)
     }
   ]
   session.value = s
@@ -118,7 +146,7 @@ async function loadPlan(pid: number) {
     }
     const s = createSession(plan.id, plan.name)
     s.blocks = plan.exercises.map((e) => {
-      const targetSets = e.targetSets ?? null
+      const planned = e.sets ?? []
       const targetReps = e.targetReps ?? null
       const targetWeight = e.targetWeight ?? null
       return {
@@ -127,11 +155,12 @@ async function loadPlan(pid: number) {
         muscle: muscleLabel(e.muscle),
         metric: e.metric ?? '',
         last: '暂无记录',
-        goal: goalText({ targetSets, targetReps, targetWeight }),
-        targetSets,
+        goal: goalText({ sets: planned, metric: e.metric }),
+        targetSets: planned.length > 0 ? planned.length : (e.targetSets ?? null),
         targetReps,
         targetWeight,
-        sets: buildSets({ targetSets, targetReps, targetWeight })
+        circuitNo: e.circuitNo ?? null,
+        sets: buildSets(planned, targetReps, targetWeight)
       }
     })
     session.value = s
@@ -232,10 +261,90 @@ function nextUnfinished(from: number): number {
 /** 长按后浏览器／WebView 还会补发一次 click（日志页踩过这个坑），给个抑制窗口。 */
 let clickGuardUntil = 0
 
+// ── 循环组（ADR 0028）──
+
+/** 循环组号 → 显示字母。 */
+const CIRCUIT_LABELS = ['A', 'B', 'C', 'D']
+
+function circuitLabel(no: number | null | undefined): string {
+  if (no == null) return ''
+  return CIRCUIT_LABELS[no - 1] ?? String(no)
+}
+
+/**
+ * 某个循环组展开成一条序列：轮次 × 组内动作。
+ * 轮数 ＝ 组内最大组数，某动作在超出自己组数的轮次直接跳过（顺序如 A1 B1 C1 A2 …）。
+ * 每次现算而不缓存：会话页能临场加减组，轮数必须跟着变。
+ */
+function circuitSequenceOf(no: number): { b: number; s: number }[] {
+  const list = session.value?.blocks ?? []
+  const idxs: number[] = []
+  list.forEach((b, i) => {
+    if (b.circuitNo === no) idxs.push(i)
+  })
+  if (idxs.length === 0) return []
+  const rounds = Math.max(...idxs.map((i) => list[i].sets.length))
+  const seq: { b: number; s: number }[] = []
+  for (let round = 0; round < rounds; round++) {
+    for (const i of idxs) {
+      if (round < list[i].sets.length) seq.push({ b: i, s: round })
+    }
+  }
+  return seq
+}
+
+/** 某个位置的下一个序列位置；走完返回 null。 */
+function nextInCircuit(blockIdx: number, setIdx: number): { b: number; s: number } | null {
+  const no = session.value?.blocks[blockIdx]?.circuitNo
+  if (no == null) return null
+  const seq = circuitSequenceOf(no)
+  const pos = seq.findIndex((p) => p.b === blockIdx && p.s === setIdx)
+  if (pos < 0) return null
+  return seq[pos + 1] ?? null
+}
+
+/** 这一组现在能不能勾：循环组内要等序列里前面的组都完成；普通动作仍按动作内顺序（ADR 0021）。 */
+function canComplete(blockIdx: number, setIdx: number): boolean {
+  const s = session.value
+  const b = s?.blocks[blockIdx]
+  if (!s || !b) return false
+  if (b.circuitNo == null) return b.sets.findIndex((x) => !x.done) === setIdx
+  const seq = circuitSequenceOf(b.circuitNo)
+  const pos = seq.findIndex((p) => p.b === blockIdx && p.s === setIdx)
+  if (pos < 0) return false
+  for (let k = 0; k < pos; k++) {
+    const p = seq[k]
+    if (!s.blocks[p.b]?.sets[p.s]?.done) return false
+  }
+  return true
+}
+
+/** 顶部提示行：只在循环组里出现。 */
+const circuitHint = computed(() => {
+  const s = session.value
+  const b = curBlock.value
+  if (!s || !b || b.circuitNo == null) return ''
+  const list = s.blocks
+  const idxs: number[] = []
+  list.forEach((x, i) => {
+    if (x.circuitNo === b.circuitNo) idxs.push(i)
+  })
+  if (idxs.length === 0) return ''
+  const rounds = Math.max(...idxs.map((i) => list[i].sets.length))
+  const curSet = b.sets.findIndex((x) => !x.done)
+  const round = curSet >= 0 ? curSet + 1 : b.sets.length
+  const next = curSet >= 0 ? nextInCircuit(s.current, curSet) : null
+  const tail = next
+    ? `下一组 ${list[next.b]?.name ?? ''} 第 ${next.s + 1} 组`
+    : '循环已走完'
+  return `循环 ${circuitLabel(b.circuitNo)} · 第 ${round}/${rounds} 轮 · ${tail}`
+})
+
 /**
  * 点勾 = 标记完成 ＋ 记下这一组的净用时（ADR 0022）；
- * 组内顺序推进（ADR 0021）：前面还有没完成的组就**静默无反应**，不弹提示。
- * 本动作全部完成 → 自动切到下一个未完成动作。
+ * 顺序推进（ADR 0021／0028）：普通动作按动作内顺序、循环组按序列顺序；
+ * 前面的还没完成就**静默无反应**，不弹提示。
+ * 循环组内完成一组 → 自动跳到序列的下一组；动作全部完成 → 自动切到下一个未完成动作。
  */
 function completeSet(i: number) {
   const s = session.value
@@ -244,7 +353,7 @@ function completeSet(i: number) {
   if (Date.now() < clickGuardUntil) return
   const row = b.sets[i]
   if (!row || row.done) return
-  if (b.sets.findIndex((x) => !x.done) !== i) return
+  if (!canComplete(s.current, i)) return
   if (isFloors.value ? !row.f : !row.w || !row.r) {
     uni.showToast({ title: isFloors.value ? '请填写层数' : '请填写重量和次数', icon: 'none' })
     return
@@ -256,6 +365,21 @@ function completeSet(i: number) {
   row.done = true
   row.doneAt = now
   row.dur = dur
+
+  // 循环组：立刻跳到序列的下一组（可能是别的动作），这是「循环」的全部意义
+  if (b.circuitNo != null) {
+    const hop = nextInCircuit(s.current, i)
+    if (hop) {
+      s.current = hop.b
+      void loadLastForBlock(hop.b)
+      uni.showToast({
+        title: `轮到 ${s.blocks[hop.b]?.name ?? ''} 第 ${hop.s + 1} 组`,
+        icon: 'none'
+      })
+      return
+    }
+  }
+
   if (isBlockDone(s.current)) {
     const next = nextUnfinished(s.current)
     if (next >= 0) {
@@ -404,7 +528,7 @@ async function finish() {
   if (doneBlocks.length === 0) {
     uni.showModal({
       title: '结束本次训练？',
-      content: '还没有完成任何一组，本次不会有记录。确定结束吗？',
+      content: '还没有完成任何一组，本次不会有记录，填的消耗也不会计入。确定结束吗？',
       confirmText: '结束',
       cancelText: '继续',
       success: ({ confirm }) => {
@@ -438,11 +562,15 @@ async function finish() {
 async function submit(doneBlocks: { b: SessionBlock; sets: SessionSet[] }[]) {
   const s = session.value
   if (!s) return
+  const kcalText = (s.calories ?? '').trim()
+  const kcal = kcalText === '' ? undefined : Number(kcalText)
   try {
     const detail = await createWorkout({
       planId: s.planId,
       title: s.title,
       durationSec: netElapsedSec(s, Date.now()),
+      // 未填就不传（＝null，不计入当日消耗）；与「填 0」是两件事
+      calories: kcal != null && Number.isFinite(kcal) ? Math.max(0, Math.round(kcal)) : undefined,
       blocks: doneBlocks.map((x) => ({
         exerciseId: x.b.exerciseId,
         name: x.b.name,
@@ -497,12 +625,29 @@ function comingSoon(tip: string) {
         <text class="session__end" @click="finish">结束训练</text>
       </view>
 
+      <!-- 本次消耗：手填，计入当日总消耗（ADR 0029）。放这里是因为它跟时长同级，属于「整场」 -->
+      <view class="burn">
+        <text class="burn__label">本次消耗</text>
+        <view class="burn__field">
+          <input
+            v-model="calories"
+            type="number"
+            class="burn__input ft-num"
+            placeholder="–"
+            :disabled="paused"
+          />
+          <text class="burn__unit">大卡</text>
+        </view>
+        <text class="burn__hint">手填，算进今日消耗</text>
+      </view>
+
       <template v-if="curBlock">
         <!-- 动作切换条：自由切换（可做完 A 一组去做 B，再回来做 A 下一组） -->
-        <scroll-view scroll-x class="switcher">
+        <scroll-view scroll-x class="switcher" :scroll-into-view="'chip-' + curIdx" scroll-with-animation>
           <view class="switcher__inner">
             <view
               v-for="(b, i) in blocks"
+              :id="'chip-' + i"
               :key="i"
               class="switcher__chip"
               :class="{
@@ -519,6 +664,12 @@ function comingSoon(tip: string) {
             </view>
           </view>
         </scroll-view>
+
+        <!-- 循环组状态行（ADR 0028）：只在该动作参与循环时出现 -->
+        <view v-if="circuitHint" class="circhint">
+          <text class="circhint__dot" />
+          <text class="circhint__text ft-num">{{ circuitHint }}</text>
+        </view>
 
         <!-- 2. 录入卡（暂停时整块锁住并压暗） -->
         <view class="card" :class="{ 'card--locked': paused }">
@@ -721,6 +872,72 @@ function comingSoon(tip: string) {
 .session__end {
   font-size: $text-sm;
   font-weight: 500;
+  color: $app-ink-muted;
+}
+
+/* ── 本次消耗（ADR 0029） ── */
+.burn {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 14rpx 20rpx;
+  margin: -12rpx 0 26rpx;
+  background: $app-surface;
+  border: 1rpx solid $app-line-soft;
+  border-radius: $radius-md;
+}
+
+.burn__label {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  flex-shrink: 0;
+}
+
+.burn__field {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  flex: 1;
+}
+
+.burn__input {
+  min-width: 0;
+  width: 140rpx;
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+  border-bottom: 2rpx solid $app-line;
+  padding-bottom: 2rpx;
+}
+
+.burn__unit {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
+}
+
+.burn__hint {
+  font-size: 18rpx;
+  color: $app-ink-subtle;
+  flex-shrink: 0;
+}
+
+/* ── 循环组状态行 ── */
+.circhint {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 0 4rpx 18rpx;
+}
+
+.circhint__dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: $app-ink;
+}
+
+.circhint__text {
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 

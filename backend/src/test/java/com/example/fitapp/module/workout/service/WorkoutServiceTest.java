@@ -528,6 +528,33 @@ class WorkoutServiceTest {
     }
 
     @Test
+    void update_setsCalories() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 1L));
+        WorkoutUpdateDTO dto = updateDto("推", new String[][]{{"60", "8"}});
+        dto.setCalories(320);
+
+        service().update(1L, 1L, dto);
+
+        ArgumentCaptor<Workout> wc = ArgumentCaptor.forClass(Workout.class);
+        verify(workoutMapper).updateById(wc.capture());
+        assertEquals(320, wc.getValue().getCalories());
+        // 非 null 不需要额外的显式 set（走 updateById 就够）
+        verify(workoutMapper, never()).update(any(), any());
+    }
+
+    @Test
+    void update_clearsCaloriesWithExplicitSet() {
+        when(workoutMapper.selectById(1L)).thenReturn(existingWorkout(1L, 1L));
+        WorkoutUpdateDTO dto = updateDto("推", new String[][]{{"60", "8"}});
+        dto.setCalories(null);
+
+        service().update(1L, 1L, dto);
+
+        // not_null 策略会跳过 null：清空消耗必须走一次显式 set，否则「删掉填错的数」会静默无效
+        verify(workoutMapper).update(any(), any());
+    }
+
+    @Test
     void update_prBaselineExcludesSelf() {
         when(workoutMapper.selectById(9L)).thenReturn(existingWorkout(9L, 1L));
         WorkoutUpdateDTO dto = updateDto("推", new String[][]{{"61", "8"}});

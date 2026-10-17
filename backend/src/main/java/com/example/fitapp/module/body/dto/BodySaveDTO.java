@@ -22,6 +22,12 @@ public class BodySaveDTO {
     @Digits(integer = 3, fraction = 2, message = "体重最多保留两位小数")
     private BigDecimal weight;
 
+    /** 体脂率 %：只记录、不参与计算；1 位小数（体脂秤给的就是 1 位）。 */
+    @DecimalMin(value = "3", message = "体脂率数值不正确")
+    @DecimalMax(value = "75", message = "体脂率数值不正确")
+    @Digits(integer = 2, fraction = 1, message = "体脂率最多保留一位小数")
+    private BigDecimal bodyFat;
+
     @DecimalMin(value = "10", message = "围度数值不正确")
     @DecimalMax(value = "250", message = "围度数值不正确")
     private BigDecimal chest;

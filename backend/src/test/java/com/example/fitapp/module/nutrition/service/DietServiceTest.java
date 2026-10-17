@@ -17,6 +17,8 @@ import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
 import com.example.fitapp.module.nutrition.vo.SettingVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
+import com.example.fitapp.module.profile.service.EnergyService;
+import com.example.fitapp.module.profile.vo.EnergyVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -65,10 +67,13 @@ class DietServiceTest {
     @Mock
     private PhotoStorage photoStorage;
 
+    @Mock
+    private EnergyService energyService;
+
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, photoStorage);
+                settingService, energyService, photoStorage);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
     }
@@ -219,7 +224,7 @@ class DietServiceTest {
     @Test
     void savePhoto_overQuota_throws() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, photoStorage);
+                settingService, energyService, photoStorage);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);
@@ -350,5 +355,42 @@ class DietServiceTest {
         assertEquals(0, vo.getWater().getMl());
         assertEquals(2000, vo.getWater().getTarget());
         assertEquals(List.of("breakfast"), vo.getPhotoMeals());
+    }
+
+    @Test
+    void day_gapIsTotalBurnMinusIntake() {
+        MealLog breakfast = log("breakfast", "鸡蛋", "100", "100", "10", "1", "8");
+        breakfast.setId(1L);
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(breakfast));
+        when(dietDailyMapper.selectOne(any())).thenReturn(null);
+        when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of());
+        when(settingService.get(7L)).thenReturn(new SettingVO());
+        EnergyVO energy = new EnergyVO();
+        energy.setComplete(true);
+        energy.setTotalKcal(2500);
+        when(energyService.compute(eq(7L), any())).thenReturn(energy);
+
+        DayOverviewVO vo = service().day(7L, "2026-10-12");
+
+        // 摄入 100，总消耗 2500 → 缺口 2400（正数＝缺口，展示时按正数念，ADR 0029）
+        assertEquals(2400, vo.getGap());
+    }
+
+    @Test
+    void day_gapIsNullWhenProfileIncomplete() {
+        when(mealLogMapper.selectList(any())).thenReturn(List.of());
+        when(dietDailyMapper.selectOne(any())).thenReturn(null);
+        when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of());
+        when(settingService.get(7L)).thenReturn(new SettingVO());
+        EnergyVO energy = new EnergyVO();
+        energy.setComplete(false);
+        energy.setMissing("profile");
+        when(energyService.compute(eq(7L), any())).thenReturn(energy);
+
+        DayOverviewVO vo = service().day(7L, "2026-10-12");
+
+        // 算不出消耗就不给缺口数字——不拿兜底值造一个看着精确的假数
+        assertNull(vo.getGap());
+        assertEquals("profile", vo.getEnergy().getMissing());
     }
 }

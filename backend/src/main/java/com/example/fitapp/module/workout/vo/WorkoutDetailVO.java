@@ -20,6 +20,9 @@ public class WorkoutDetailVO {
 
     private Integer durationSec;
 
+    /** 本次训练耗掉的热量（大卡，手填）；null＝未填。 */
+    private Integer calories;
+
     private BigDecimal totalVolume;
 
     private String note;

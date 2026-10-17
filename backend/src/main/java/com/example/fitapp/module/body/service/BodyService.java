@@ -64,6 +64,7 @@ public class BodyService {
                 .eq("user_id", userId)
                 .set("measured_at", r.getMeasuredAt())
                 .set("weight", r.getWeight())
+                .set("body_fat", r.getBodyFat())
                 .set("chest", r.getChest())
                 .set("waist", r.getWaist())
                 .set("hip", r.getHip())
@@ -105,6 +106,7 @@ public class BodyService {
         vo.setIsLowest(false);
         vo.setWeightSeries(new ArrayList<>());
         vo.setGirthSeries(new ArrayList<>());
+        vo.setBodyFatSeries(new ArrayList<>());
 
         if (!weights.isEmpty()) {
             BodyRecord latest = weights.get(weights.size() - 1);
@@ -173,6 +175,20 @@ public class BodyService {
                     vo.setGirth(g);
                 });
 
+        // 体脂率：与体重同一套聚合口径（按日取最小）；只记录、不参与任何计算（ADR 0030）
+        List<BodyRecord> fats = all.stream().filter(r -> r.getBodyFat() != null).toList();
+        for (Map.Entry<LocalDate, BigDecimal> e : minByDay(fats, BodyRecord::getBodyFat).entrySet()) {
+            vo.getBodyFatSeries().add(new BodyOverviewVO.BodyFatPoint(e.getKey(), e.getValue()));
+        }
+        fats.stream()
+                .max(Comparator.comparing(BodyRecord::getMeasuredAt).thenComparing(BodyRecord::getId))
+                .ifPresent(r -> {
+                    BodyOverviewVO.BodyFat f = new BodyOverviewVO.BodyFat();
+                    f.setDate(r.getMeasuredAt());
+                    f.setValue(r.getBodyFat());
+                    vo.setBodyFat(f);
+                });
+
         return vo;
     }
 
@@ -237,6 +253,7 @@ public class BodyService {
 
     private void applyValues(BodyRecord r, BodySaveDTO dto) {
         r.setWeight(dto.getWeight());
+        r.setBodyFat(dto.getBodyFat());
         r.setChest(dto.getChest());
         r.setWaist(dto.getWaist());
         r.setHip(dto.getHip());
@@ -245,12 +262,12 @@ public class BodyService {
         r.setNote(dto.getNote() == null ? "" : dto.getNote().trim());
     }
 
-    /** 体重与四围至少一项非空（前端也会拦一次，这里是服务端闸）。 */
+    /** 体重、体脂、四围至少一项非空（前端也会拦一次，这里是服务端闸）。 */
     private void requireAny(BodySaveDTO dto) {
-        boolean hasAny = dto.getWeight() != null || dto.getChest() != null
+        boolean hasAny = dto.getWeight() != null || dto.getBodyFat() != null || dto.getChest() != null
                 || dto.getWaist() != null || dto.getHip() != null || dto.getArm() != null;
         if (!hasAny) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "体重和围度至少填一项");
+            throw new BusinessException(ResultCode.BAD_REQUEST, "体重、体脂和围度至少填一项");
         }
     }
 
@@ -267,6 +284,7 @@ public class BodyService {
         vo.setId(r.getId());
         vo.setDate(r.getMeasuredAt());
         vo.setWeight(r.getWeight());
+        vo.setBodyFat(r.getBodyFat());
         vo.setChest(r.getChest());
         vo.setWaist(r.getWaist());
         vo.setHip(r.getHip());

@@ -27,6 +27,8 @@ export interface WorkoutDetail {
   title: string
   createdAt: string
   durationSec: number
+  /** 本次手填消耗（大卡）；null/缺省＝未填（ADR 0029）。 */
+  calories?: number | null
   totalVolume: number
   note: string
   blocks: WorkoutBlockItem[]
@@ -37,6 +39,8 @@ export interface WorkoutListItem {
   title: string
   firstExercise: string | null
   durationSec: number
+  /** 本次手填的消耗（大卡）；null/缺省＝未填（ADR 0029）。 */
+  calories?: number | null
   totalVolume: number
   /** 该次训练是否含力量动作——纯有氧场次的容量位显示「—」（ADR 0023）。 */
   hasStrength?: boolean
@@ -61,6 +65,8 @@ export interface CreateWorkoutPayload {
   planId?: number | null
   title: string
   durationSec: number
+  /** 本次手填消耗（大卡）；不传＝未填，不计入当日总消耗（ADR 0029）。 */
+  calories?: number | null
   note?: string
   blocks: {
     exerciseId?: number | null
@@ -73,6 +79,8 @@ export interface CreateWorkoutPayload {
 export interface UpdateWorkoutPayload {
   title: string
   note?: string
+  /** 本次消耗（大卡）；null/不传＝清空。练完随手填、事后可改（ADR 0029 后续）。 */
+  calories?: number | null
   blocks: {
     exerciseId?: number | null
     name: string

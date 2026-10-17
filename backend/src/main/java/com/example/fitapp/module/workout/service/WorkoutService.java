@@ -80,6 +80,7 @@ public class WorkoutService {
         w.setTitle(dto.getTitle().trim());
         w.setStartedAt(now.minusSeconds(dto.getDurationSec() == null ? 0 : dto.getDurationSec()));
         w.setDurationSec(dto.getDurationSec() == null ? 0 : dto.getDurationSec());
+        w.setCalories(dto.getCalories());
         w.setTotalVolume(total);
         w.setNote(dto.getNote() == null ? "" : dto.getNote());
         workoutMapper.insert(w);
@@ -103,8 +104,15 @@ public class WorkoutService {
         w.setTitle(dto.getTitle().trim());
         w.setNote(dto.getNote() == null ? "" : dto.getNote());
         w.setTotalVolume(sumVolume(blocks, cardioIds));
+        w.setCalories(dto.getCalories());
         w.setUpdatedAt(LocalDateTime.now());
         workoutMapper.updateById(w);
+        // 消耗可清空：全局 update-strategy=not_null 会静默跳过 null，必须显式 set（同 week_schedule 的坑）
+        if (dto.getCalories() == null) {
+            workoutMapper.update(null, Wrappers.<Workout>update()
+                    .eq("id", id)
+                    .set("calories", null));
+        }
 
         // 动作与组次整体覆盖：先清旧（组次 → 动作条），再按新数据写回
         workoutMapper.deleteSetsByWorkoutId(id);
@@ -440,6 +448,7 @@ public class WorkoutService {
         vo.setTitle(w.getTitle());
         vo.setCreatedAt(createdAt == null ? LocalDateTime.now() : createdAt);
         vo.setDurationSec(w.getDurationSec());
+        vo.setCalories(w.getCalories());
         vo.setTotalVolume(w.getTotalVolume());
         vo.setNote(w.getNote());
         vo.setBlocks(blocks);

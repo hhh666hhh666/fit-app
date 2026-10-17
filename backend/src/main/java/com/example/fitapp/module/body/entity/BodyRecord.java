@@ -27,6 +27,11 @@ public class BodyRecord {
     /** 体重 kg。 */
     private BigDecimal weight;
 
+    /**
+     * 体脂率 %（3.0–75.0，1 位小数）。**只记录、不参与任何计算**——不进基础代谢、容量、PR、热量缺口（ADR 0030）。
+     */
+    private BigDecimal bodyFat;
+
     /** 胸围 cm。 */
     private BigDecimal chest;
 

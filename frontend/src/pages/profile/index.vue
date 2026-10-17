@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { getWorkoutTotals } from '@/api/workout'
+import { getBodyOverview } from '@/api/body'
+import { formatWeight, getWeightUnit } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
 import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
@@ -18,6 +20,9 @@ const exerciseCount = ref(0)
 const foodCount = ref(-1)
 const storage = ref<StorageInfo | null>(null)
 const recUsage = ref<RecognitionUsage | null>(null)
+/** 最新体重：身体档案入口右侧的那一格不再是死「—」（ADR 0030 顺带修）。 */
+const latestWeight = ref<number | null>(null)
+const weightUnit = ref(getWeightUnit())
 
 const schedule = useScheduleStore()
 
@@ -26,6 +31,8 @@ onShow(() => {
   username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
   schedule.load()
   loadStats()
+  weightUnit.value = getWeightUnit()
+  void loadBody()
   void loadStorage()
   void loadRecognitionUsage()
 })
@@ -45,6 +52,14 @@ async function loadStats() {
     foodCount.value = foodStat.total
   } catch {
     // unwrap 已提示
+  }
+}
+
+async function loadBody() {
+  try {
+    latestWeight.value = (await getBodyOverview()).latest?.weight ?? null
+  } catch {
+    // unwrap 已提示；入口照样能点
   }
 }
 
@@ -205,7 +220,9 @@ function logout() {
       <view class="ft-card entries">
         <view class="entry" @click="goBody">
           <text class="entry__label">身体档案</text>
-          <text class="entry__value ft-num">—</text>
+          <text class="entry__value ft-num">
+            {{ latestWeight == null ? '—' : formatWeight(latestWeight, weightUnit) }}
+          </text>
           <text class="entry__go">›</text>
         </view>
         <view class="entry" @click="goLibrary">

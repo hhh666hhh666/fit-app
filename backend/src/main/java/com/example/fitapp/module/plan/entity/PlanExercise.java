@@ -29,14 +29,17 @@ public class PlanExercise {
     /** 肌群码快照。 */
     private String muscle;
 
-    /** 目标组数；null = 未设。 */
+    /** 目标组数；null = 未设。**冗余列**：真源是 `plan_exercise_set` 的行数，写入时同步（ADR 0027）。 */
     private Integer targetSets;
 
-    /** 目标每组次数；null = 未设。 */
+    /** 目标每组次数；null = 未设。**降级为「新加一组时的默认值」**（ADR 0027）。 */
     private Integer targetReps;
 
-    /** 目标重量 kg；null = 未设（会话页预填负荷默认值用）。 */
+    /** 目标重量 kg；null = 未设。同上，新加一组的默认值。 */
     private BigDecimal targetWeight;
+
+    /** 循环组号；null = 不参与循环。同号动作按 sortOrder 成组（ADR 0028）。 */
+    private Integer circuitNo;
 
     private Integer sortOrder;
 

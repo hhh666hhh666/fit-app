@@ -30,6 +30,12 @@ public class Workout {
 
     private Integer durationSec;
 
+    /**
+     * 本次训练消耗的热量（大卡，主人手填；null＝未填）。见 ADR 0029——
+     * 只有填了才计入当日总消耗，系统不估算。
+     */
+    private Integer calories;
+
     private BigDecimal totalVolume;
 
     private String note;

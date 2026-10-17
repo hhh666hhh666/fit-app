@@ -19,6 +19,9 @@ public class WorkoutListItemVO {
 
     private Integer durationSec;
 
+    /** 本次手填的消耗（大卡）；null＝未填。见 ADR 0029。 */
+    private Integer calories;
+
     private BigDecimal totalVolume;
 
     /**

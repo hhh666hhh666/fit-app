@@ -18,6 +18,9 @@ public class BodyRecordVO {
 
     private BigDecimal weight;
 
+    /** 体脂率 %（只记录，不参与计算）。 */
+    private BigDecimal bodyFat;
+
     private BigDecimal chest;
 
     private BigDecimal waist;

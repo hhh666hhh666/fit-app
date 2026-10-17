@@ -1,6 +1,8 @@
 package com.example.fitapp.module.workout.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -23,6 +25,14 @@ public class WorkoutUpdateDTO {
 
     @Size(max = 500, message = "备注过长")
     private String note = "";
+
+    /**
+     * 本次消耗（大卡，手填）；null ＝ 清空（没填）。
+     * 可编辑是有意的：练完先随手填一个，事后想起来再改比「填错就永远错」合理（ADR 0029 后续）。
+     */
+    @Min(value = 0, message = "消耗热量不能为负")
+    @Max(value = 99999, message = "消耗热量过大")
+    private Integer calories;
 
     @NotEmpty(message = "至少需要一个动作")
     @Valid

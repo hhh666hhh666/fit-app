@@ -2,20 +2,36 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createPlan, deletePlan, getPlan, updatePlan } from '@/api/plan'
+import type { PlanSavePayload } from '@/api/plan'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
+import { formatSetTargets } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 计划编辑/新建（设计稿：.workbuddy/stitch/screen/plan-edit.png）──
+
+/** 一组的目标：两项都可空（只记次数、只记重量都合法）。 */
+interface SetTarget {
+  reps: number | null
+  weight: number | null
+}
 
 interface Row {
   exerciseId: number
   name: string
   muscle: string
-  targetSets: number | null
-  targetReps: number | null
-  targetWeight: number | null
+  /** 记录口径（`floors`＝爬楼）；新建动作时未知，判有氧用肌群兜底。 */
+  metric: string | null
+  /** 逐组目标；**长度即组数**，空数组＝不设目标（ADR 0027）。 */
+  sets: SetTarget[]
+  /** 循环组号；null＝不参与循环（ADR 0028）。 */
+  circuitNo: number | null
 }
+
+/** 循环组号 → 显示字母（组号从 1 起）。 */
+const CIRCUIT_LABELS = ['A', 'B', 'C', 'D']
+const MAX_SETS = 20
+const MAX_CIRCUIT = 4
 
 const pick = usePickStore()
 
@@ -42,13 +58,32 @@ async function loadDetail(id: number) {
       exerciseId: e.exerciseId,
       name: e.name,
       muscle: e.muscle,
-      targetSets: e.targetSets ?? null,
-      targetReps: e.targetReps ?? null,
-      targetWeight: e.targetWeight ?? null
+      metric: e.metric ?? null,
+      sets: toSets(e.sets, e.targetSets, e.targetReps, e.targetWeight),
+      circuitNo: e.circuitNo ?? null
     }))
   } catch {
     // unwrap 已提示
   }
+}
+
+/** 后端一律返回 sets；老数据（只有组数）在这里兜一次，免得打开计划看不到目标。 */
+function toSets(
+  sets: { reps?: number | null; weight?: number | null }[] | null | undefined,
+  targetSets?: number | null,
+  targetReps?: number | null,
+  targetWeight?: number | null
+): SetTarget[] {
+  if (sets && sets.length > 0) {
+    return sets.map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null }))
+  }
+  if (targetSets != null && targetSets > 0) {
+    return Array.from({ length: targetSets }, () => ({
+      reps: targetReps ?? null,
+      weight: targetWeight ?? null
+    }))
+  }
+  return []
 }
 
 // 从动作库（点选模式）返回：取走选中动作并入编排；重复则提示
@@ -64,27 +99,31 @@ onShow(() => {
     exerciseId: p.id,
     name: p.name,
     muscle: p.muscle,
-    targetSets: null,
-    targetReps: null,
-    targetWeight: null
+    metric: null,
+    sets: [],
+    circuitNo: null
   })
 })
 
-const totalSets = computed(() => rows.value.reduce((sum, r) => sum + (r.targetSets ?? 0), 0))
+const totalSets = computed(() => rows.value.reduce((sum, r) => sum + r.sets.length, 0))
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
+/** 有氧动作（按层数录或纯有氧肌群）：不参与循环组，也不设逐组次数（ADR 0028）。 */
+function isCardio(r: Row): boolean {
+  return r.metric === 'floors' || r.muscle === 'cardio'
+}
+
+function circuitLabel(no: number | null): string {
+  if (no == null) return ''
+  return CIRCUIT_LABELS[no - 1] ?? String(no)
+}
+
+/**
+ * 计划行摘要（ADR 0027）：折叠规则抽在 `utils/plan-target` 里，与会话页共用同一份念法。
+ */
 function targetText(r: Row): string {
-  const parts: string[] = []
-  if (r.targetSets != null && r.targetReps != null) {
-    parts.push(`目标 ${r.targetSets} 组 × ${r.targetReps} 次`)
-  } else if (r.targetSets != null) {
-    parts.push(`目标 ${r.targetSets} 组`)
-  } else if (r.targetReps != null) {
-    parts.push(`目标 ${r.targetReps} 次`)
-  }
-  if (r.targetWeight != null) parts.push(`${r.targetWeight} kg`)
-  return parts.length ? parts.join(' · ') : '未设目标'
+  return formatSetTargets(r.sets, isCardio(r))
 }
 
 // ── 行操作：调整目标 / 上移 / 下移 / 移除（拖拽排序留后续迭代）──
@@ -110,38 +149,142 @@ function move(from: number, to: number) {
   rows.value.splice(to, 0, item)
 }
 
-// ── 目标组次编辑弹层 ──
-const targetSheet = ref({ show: false, index: -1, sets: '', reps: '', weight: '' })
+// ── 目标组次弹层（逐组编辑，ADR 0027）──
+interface SheetRow {
+  reps: string
+  weight: string
+}
+
+const targetSheet = ref<{ show: boolean; index: number; count: string; rows: SheetRow[] }>({
+  show: false,
+  index: -1,
+  count: '',
+  rows: []
+})
 
 function openTargetEditor(i: number) {
   const r = rows.value[i]
   targetSheet.value = {
     show: true,
     index: i,
-    sets: r.targetSets != null ? String(r.targetSets) : '',
-    reps: r.targetReps != null ? String(r.targetReps) : '',
-    weight: r.targetWeight != null ? String(r.targetWeight) : ''
+    count: r.sets.length > 0 ? String(r.sets.length) : '',
+    // 有氧只记组数，不展示逐组次数／重量
+    rows: isCardio(r)
+      ? []
+      : r.sets.map((s) => ({
+          reps: s.reps != null ? String(s.reps) : '',
+          weight: s.weight != null ? String(s.weight) : ''
+        }))
   }
+}
+
+/** 当前正在编辑的动作是不是有氧（决定提示语与是否展示逐组行）。 */
+const editingIsCardio = computed(() => {
+  const i = targetSheet.value.index
+  return i >= 0 && rows.value[i] ? isCardio(rows.value[i]) : false
+})
+
+/**
+ * 组数输入：改数字即增删行；新行默认沿用上一行的值。
+ * 事件形态在 H5 与 App 端不同（uni-app 给 `detail.value`，原生 input 给 `target.value`），两处都取。
+ */
+function onCountInput(e: any) {
+  const raw: string = e?.detail?.value ?? e?.target?.value ?? ''
+  targetSheet.value.count = raw
+  // 有氧只记组数：不铺逐组行（铺了也没有可填的两栏）
+  if (editingIsCardio.value) return
+  const n = raw.trim() === '' ? 0 : Math.min(MAX_SETS, Math.max(0, Math.floor(Number(raw) || 0)))
+  const list = targetSheet.value.rows
+  if (n > list.length) {
+    const last = list[list.length - 1] ?? { reps: '', weight: '' }
+    while (list.length < n) list.push({ ...last })
+  } else if (n < list.length) {
+    list.splice(n)
+  }
+}
+
+/** 整组填充：把第 1 组的值刷到所有组（「4 组里 3 组一样」的常用情况）。 */
+function fillAllSets() {
+  const list = targetSheet.value.rows
+  if (list.length === 0) return
+  const first = list[0]
+  list.forEach((r) => {
+    r.reps = first.reps
+    r.weight = first.weight
+  })
 }
 
 function confirmTarget() {
   const t = targetSheet.value
   if (t.index < 0) return
-  const sets = t.sets.trim() === '' ? null : Number(t.sets)
-  const reps = t.reps.trim() === '' ? null : Number(t.reps)
-  const weight = t.weight.trim() === '' ? null : Number(t.weight)
-  if ((sets != null && (sets < 1 || sets > 20)) || (reps != null && (reps < 1 || reps > 100))) {
-    uni.showToast({ title: '组数 1–20、次数 1–100', icon: 'none' })
+  const row = rows.value[t.index]
+  const cardio = isCardio(row)
+
+  if (t.count.trim() === '') {
+    row.sets = []
+    targetSheet.value.show = false
     return
   }
-  if (weight != null && (!Number.isFinite(weight) || weight < 0 || weight > 999.99)) {
-    uni.showToast({ title: '重量 0–999.9 kg', icon: 'none' })
+  const n = Number(t.count)
+  if (!Number.isInteger(n) || n < 1 || n > MAX_SETS) {
+    uni.showToast({ title: `组数 1–${MAX_SETS}`, icon: 'none' })
     return
   }
-  rows.value[t.index].targetSets = sets
-  rows.value[t.index].targetReps = reps
-  rows.value[t.index].targetWeight = weight
+
+  // 有氧动作只记组数（层数目标不在本批范围），组内数值一律留空
+  if (cardio) {
+    row.sets = Array.from({ length: n }, () => ({ reps: null, weight: null }))
+    targetSheet.value.show = false
+    return
+  }
+
+  const parsed: SetTarget[] = []
+  for (const s of t.rows) {
+    const reps = s.reps.trim() === '' ? null : Number(s.reps)
+    const weight = s.weight.trim() === '' ? null : Number(s.weight)
+    if (reps != null && (!Number.isInteger(reps) || reps < 1 || reps > 100)) {
+      uni.showToast({ title: '每组次数 1–100', icon: 'none' })
+      return
+    }
+    if (weight != null && (!Number.isFinite(weight) || weight < 0 || weight > 999.99)) {
+      uni.showToast({ title: '每组重量 0–999.9 kg', icon: 'none' })
+      return
+    }
+    parsed.push({ reps, weight })
+  }
+  // 填了组数却一个值都没有 = 把「不设目标」表达成了 N 个空行，没有意义
+  if (parsed.every((s) => s.reps == null && s.weight == null)) {
+    uni.showToast({ title: '每组的次数或重量至少填一项', icon: 'none' })
+    return
+  }
+  row.sets = parsed
   targetSheet.value.show = false
+}
+
+// ── 高级设置：循环组（ADR 0028）──
+const circuitSheet = ref({ show: false })
+
+function openCircuit() {
+  if (rows.value.length === 0) {
+    uni.showToast({ title: '先添加动作', icon: 'none' })
+    return
+  }
+  circuitSheet.value.show = true
+}
+
+const circuitCount = computed(() => rows.value.filter((r) => r.circuitNo != null).length)
+
+function toggleCircuit(i: number) {
+  const r = rows.value[i]
+  if (isCardio(r)) {
+    uni.showToast({ title: '有氧动作不参与循环', icon: 'none' })
+    return
+  }
+  r.circuitNo = r.circuitNo == null ? 1 : null
+}
+
+function setCircuitNo(i: number, no: number) {
+  rows.value[i].circuitNo = no
 }
 
 function addExercise() {
@@ -161,13 +304,12 @@ async function save() {
     uni.showToast({ title: '至少添加一个动作', icon: 'none' })
     return
   }
-  const payload = {
+  const payload: PlanSavePayload = {
     name: planName,
     exercises: rows.value.map((r) => ({
       exerciseId: r.exerciseId,
-      targetSets: r.targetSets,
-      targetReps: r.targetReps,
-      targetWeight: r.targetWeight
+      sets: r.sets.map((s) => ({ reps: s.reps, weight: s.weight })),
+      circuitNo: r.circuitNo
     }))
   }
   saving.value = true
@@ -247,12 +389,16 @@ function goBack() {
         </view>
       </view>
 
-      <!-- 编排标题 -->
+      <!-- 编排标题：右端是高级设置入口（齿轮） -->
       <view class="pe__sect">
         <text class="pe__sect-l"
           >动作编排 <text class="pe__sect-sub">[按顺序执行]</text></text
         >
-        <text class="pe__sect-r">点行调整</text>
+        <view class="pe__gear" @click="openCircuit">
+          <wd-icon name="setting" size="15px" color="#8a8f98" />
+          <text class="pe__gear-text">高级</text>
+          <text v-if="circuitCount > 0" class="pe__gear-dot ft-num">{{ circuitCount }}</text>
+        </view>
       </view>
 
       <!-- 动作行 -->
@@ -260,7 +406,12 @@ function goBack() {
         <view v-for="(r, i) in rows" :key="r.exerciseId" class="erow" @click="onRowTap(i)">
           <text class="erow__idx ft-num">{{ i + 1 }}</text>
           <view class="erow__mid">
-            <text class="erow__name">{{ r.name }}</text>
+            <view class="erow__name-row">
+              <text class="erow__name">{{ r.name }}</text>
+              <text v-if="r.circuitNo != null" class="erow__circuit ft-num">
+                循环{{ circuitLabel(r.circuitNo) }}
+              </text>
+            </view>
             <text class="erow__sub">{{ muscleLabel(r.muscle) }}</text>
           </view>
           <text class="erow__target ft-num">{{ targetText(r) }}</text>
@@ -288,25 +439,88 @@ function goBack() {
       </view>
     </view>
 
-    <!-- 目标组次弹层 -->
+    <!-- 目标组次弹层（逐组） -->
     <view v-if="targetSheet.show" class="ts-mask" @click="targetSheet.show = false" />
     <view v-if="targetSheet.show" class="ts">
       <view class="ts__handle" />
       <text class="ts__title">目标组次</text>
       <view class="ts__row">
         <text class="ts__label">组数</text>
-        <input v-model="targetSheet.sets" type="number" class="ts__input ft-num" placeholder="–" />
+        <input
+          :value="targetSheet.count"
+          type="number"
+          class="ts__input ft-num"
+          placeholder="–"
+          @input="onCountInput"
+        />
       </view>
-      <view class="ts__row">
-        <text class="ts__label">每组次数</text>
-        <input v-model="targetSheet.reps" type="number" class="ts__input ft-num" placeholder="–" />
+
+      <!-- 逐组次数／重量：行数由上面的组数决定 -->
+      <view v-if="targetSheet.rows.length > 0" class="ts__sets">
+        <view class="ts__sets-head">
+          <text class="ts__sets-title">每组目标</text>
+          <text class="ts__fill" @click="fillAllSets">整组填充</text>
+        </view>
+        <view v-for="(s, i) in targetSheet.rows" :key="i" class="ts__setrow">
+          <text class="ts__setidx ft-num">第 {{ i + 1 }} 组</text>
+          <view class="ts__setfield">
+            <input v-model="s.reps" type="number" class="ts__setinput ft-num" placeholder="–" />
+            <text class="ts__setunit">次</text>
+          </view>
+          <view class="ts__setfield">
+            <input v-model="s.weight" type="digit" class="ts__setinput ft-num" placeholder="–" />
+            <text class="ts__setunit">kg</text>
+          </view>
+        </view>
       </view>
-      <view class="ts__row">
-        <text class="ts__label">重量 (kg)</text>
-        <input v-model="targetSheet.weight" type="digit" class="ts__input ft-num" placeholder="–" />
-      </view>
-      <text class="ts__hint">留空 = 不设目标；开始训练时按目标预填</text>
+
+      <text v-if="editingIsCardio" class="ts__hint">
+        有氧动作只记组数，不设每组次数与重量
+      </text>
+      <text v-else class="ts__hint">组数留空 = 不设目标；开始训练时按各组目标预填</text>
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="confirmTarget">确定</view>
+    </view>
+
+    <!-- 高级设置：循环组 -->
+    <view v-if="circuitSheet.show" class="ts-mask" @click="circuitSheet.show = false" />
+    <view v-if="circuitSheet.show" class="ts ts--tall">
+      <view class="ts__handle" />
+      <text class="ts__title">高级设置 · 循环组</text>
+      <text class="ts__desc">
+        组号相同的动作会轮流做：做完 A 第 1 组马上做 B 第 1 组，一轮走完再进下一轮。轮数按组内最多的组数算。
+      </text>
+      <scroll-view scroll-y class="cs__list">
+        <view v-for="(r, i) in rows" :key="r.exerciseId" class="cs__row">
+          <view class="cs__main">
+            <text class="cs__name">{{ r.name }}</text>
+            <text v-if="isCardio(r)" class="cs__sub">有氧动作不参与循环</text>
+            <view v-else-if="r.circuitNo != null" class="cs__nos">
+              <text
+                v-for="no in MAX_CIRCUIT"
+                :key="no"
+                class="cs__no ft-num"
+                :class="{ 'cs__no--on': r.circuitNo === no }"
+                @click.stop="setCircuitNo(i, no)"
+              >
+                {{ CIRCUIT_LABELS[no - 1] }}
+              </text>
+            </view>
+          </view>
+          <view
+            class="cs__toggle"
+            :class="{
+              'cs__toggle--on': r.circuitNo != null,
+              'cs__toggle--off': isCardio(r)
+            }"
+            @click.stop="toggleCircuit(i)"
+          >
+            {{ r.circuitNo != null ? `循环${circuitLabel(r.circuitNo)}` : '加入循环' }}
+          </view>
+        </view>
+      </scroll-view>
+      <view class="ft-btn ft-btn--primary ft-btn--block" @click="circuitSheet.show = false">
+        完成
+      </view>
     </view>
   </view>
 </template>
@@ -411,7 +625,7 @@ function goBack() {
 /* ── 编排 ── */
 .pe__sect {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   padding: 0 4rpx 20rpx;
 }
@@ -428,10 +642,31 @@ function goBack() {
   color: $app-ink-muted;
 }
 
-.pe__sect-r {
+/* 齿轮入口：高级设置 */
+.pe__gear {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 6rpx 10rpx;
+  border-radius: $radius-sm;
+}
+
+.pe__gear-text {
   font-size: 22rpx;
   letter-spacing: 2rpx;
   color: $app-ink-subtle;
+}
+
+.pe__gear-dot {
+  min-width: 28rpx;
+  height: 28rpx;
+  line-height: 28rpx;
+  padding: 0 6rpx;
+  border-radius: 14rpx;
+  background: $app-ink;
+  color: $app-surface;
+  font-size: 18rpx;
+  text-align: center;
 }
 
 .elist {
@@ -469,10 +704,25 @@ function goBack() {
   min-width: 0;
 }
 
+.erow__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
 .erow__name {
   font-size: $text-md;
   font-weight: 600;
   color: $app-ink;
+}
+
+.erow__circuit {
+  font-size: 18rpx;
+  padding: 2rpx 8rpx;
+  border-radius: 6rpx;
+  background: $app-canvas;
+  border: 1rpx solid $app-line;
+  color: $app-ink-muted;
 }
 
 .erow__sub {
@@ -485,6 +735,8 @@ function goBack() {
   color: $app-ink-muted;
   flex-shrink: 0;
   margin-left: 16rpx;
+  max-width: 300rpx;
+  text-align: right;
 }
 
 /* ── 添加动作 ── */
@@ -528,7 +780,7 @@ function goBack() {
   padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
 }
 
-/* ── 目标弹层 ── */
+/* ── 弹层（目标组次 / 高级设置共用） ── */
 .ts-mask {
   position: fixed;
   left: 0;
@@ -548,6 +800,14 @@ function goBack() {
   border-radius: 40rpx 40rpx 0 0;
   padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
   z-index: 91;
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+.ts--tall {
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .ts__handle {
@@ -564,6 +824,14 @@ function goBack() {
   font-weight: 600;
   color: $app-ink;
   padding-bottom: 24rpx;
+}
+
+.ts__desc {
+  display: block;
+  font-size: $text-xs;
+  line-height: 1.6;
+  color: $app-ink-muted;
+  padding-bottom: 20rpx;
 }
 
 .ts__row {
@@ -592,5 +860,145 @@ function goBack() {
   font-size: $text-xs;
   color: $app-ink-subtle;
   padding: 16rpx 0 32rpx;
+}
+
+/* ── 逐组目标列表 ── */
+.ts__sets {
+  padding-top: 8rpx;
+}
+
+.ts__sets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0 8rpx;
+}
+
+.ts__sets-title {
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.ts__fill {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  padding: 6rpx 14rpx;
+  border: 1rpx solid $app-line;
+  border-radius: 999rpx;
+}
+
+.ts__setrow {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid $app-line-soft;
+}
+
+.ts__setidx {
+  width: 110rpx;
+  flex-shrink: 0;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.ts__setfield {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  background: $app-canvas;
+  border: 1rpx solid $app-line-soft;
+  border-radius: $radius-sm;
+  padding: 10rpx 12rpx;
+}
+
+.ts__setinput {
+  flex: 1;
+  min-width: 0;
+  font-size: $text-sm;
+  font-weight: 600;
+  color: $app-ink;
+  text-align: right;
+}
+
+.ts__setunit {
+  font-size: 18rpx;
+  color: $app-ink-subtle;
+}
+
+/* ── 高级设置：循环组 ── */
+.cs__list {
+  max-height: 52vh;
+}
+
+.cs__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid $app-line-soft;
+}
+
+.cs__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.cs__name {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.cs__sub {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.cs__nos {
+  display: flex;
+  gap: 10rpx;
+}
+
+.cs__no {
+  width: 48rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  border-radius: $radius-sm;
+  border: 1rpx solid $app-line;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.cs__no--on {
+  background: $app-ink;
+  border-color: $app-ink;
+  color: $app-surface;
+}
+
+.cs__toggle {
+  flex-shrink: 0;
+  padding: 12rpx 20rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $app-line;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.cs__toggle--on {
+  background: $app-ink;
+  border-color: $app-ink;
+  color: $app-surface;
+}
+
+.cs__toggle--off {
+  opacity: 0.4;
 }
 </style>

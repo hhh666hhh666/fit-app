@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import type { EnergyInfo } from './profile'
 import type { PhotoQuality } from '@/utils/photo'
 
 // ── 饮食记录（nutrition）：食物库 / 当日总览 / 条目 / 饮水 / 趋势 / 设置 ──
@@ -103,6 +104,13 @@ export interface DayOverview {
   meals: { meal: MealKey; items: MealItem[] }[]
   /** 有照片的餐次。 */
   photoMeals: MealKey[]
+  /**
+   * 当天的每日总消耗拆解（ADR 0029）。档案不全时 `complete=false`，
+   * 前端据此换成「补全档案」入口，不显示缺口。
+   */
+  energy?: EnergyInfo | null
+  /** 热量缺口 ＝ 总消耗 − 摄入（正数＝缺口，负数＝盈余）；算不出消耗时为 null。 */
+  gap?: number | null
 }
 
 export interface TrendPoint {

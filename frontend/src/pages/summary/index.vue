@@ -96,6 +96,13 @@ async function close() {
           </view>
         </view>
 
+        <!-- 本次消耗（ADR 0029）：没填就整行不出现，别拿 0 占位 -->
+        <view v-if="summary.calories != null" class="burnsum">
+          <text class="burnsum__label">本次消耗</text>
+          <text class="burnsum__value ft-num">{{ summary.calories }}</text>
+          <text class="burnsum__unit">大卡</text>
+        </view>
+
         <!-- 本次动作明细 -->
         <view class="detail">
           <view class="detail__head">
@@ -144,6 +151,31 @@ async function close() {
 </template>
 
 <style lang="scss" scoped>
+.burnsum {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 4rpx 0 20rpx;
+}
+
+.burnsum__label {
+  font-size: 22rpx;
+  letter-spacing: 0.06em;
+  color: $app-ink-muted;
+}
+
+.burnsum__value {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.burnsum__unit {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
+}
+
 .summary__body {
   padding: 36rpx 32rpx 0;
 }

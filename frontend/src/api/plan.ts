@@ -15,6 +15,14 @@ export interface PlanListItem {
   lastHasStrength?: boolean | null
 }
 
+/** 某一组的目标（ADR 0027）：两项都可为空，但不能当组数不存在。 */
+export interface PlanSetTarget {
+  setIndex?: number
+  reps?: number | null
+  /** 该组目标重量 kg。 */
+  weight?: number | null
+}
+
 export interface PlanExerciseItem {
   exerciseId: number
   name: string
@@ -22,10 +30,15 @@ export interface PlanExerciseItem {
   muscle: string
   /** 记录口径：`floors`＝按层数录（爬楼）；其余按重量×次数（ADR 0025）。 */
   metric?: string | null
+  /** 逐组目标；**长度即组数**（ADR 0027）。空数组＝不设目标。 */
+  sets?: PlanSetTarget[] | null
+  /** 冗余的组数（旧口径残留，读 sets 长度即可）。 */
   targetSets?: number | null
   targetReps?: number | null
-  /** 目标重量 kg；未设缺省（会话页预填负荷默认值用）。 */
+  /** 目标重量 kg；未设缺省（新加一组时的默认值）。 */
   targetWeight?: number | null
+  /** 循环组号；null/缺省＝不参与循环（ADR 0028）。 */
+  circuitNo?: number | null
 }
 
 export interface PlanDetail {
@@ -38,9 +51,10 @@ export interface PlanSavePayload {
   name: string
   exercises: {
     exerciseId: number
-    targetSets?: number | null
-    targetReps?: number | null
-    targetWeight?: number | null
+    /** 逐组目标；数组顺序即组序，空数组＝不设目标。 */
+    sets?: { reps?: number | null; weight?: number | null }[]
+    /** 循环组号；null/不传＝不参与循环。 */
+    circuitNo?: number | null
   }[]
 }
 

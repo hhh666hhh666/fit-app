@@ -17,6 +17,7 @@ import java.util.List;
 /**
  * 新建 / 更新计划（前端「保存修改」整体提交）：名称 ＋ 按顺序的完整动作编排。
  * 更新为整体替换（先清空再插入），不做增量 diff——编排数据量小，简单可靠优先。
+ * 目标按组设置：`sets` 的**长度即组数**（ADR 0027），`targetSets` 由服务端同步为长度。
  */
 @Data
 public class PlanSaveDTO {
@@ -35,19 +36,45 @@ public class PlanSaveDTO {
         @NotNull(message = "动作不能为空")
         private Long exerciseId;
 
-        /** 目标组数；null = 不设。 */
+        /** 逐组目标；空/null = 不设目标（组数留空）。有值时按数组顺序即组序。 */
+        @Size(max = 20, message = "组数过多")
+        @Valid
+        private List<SetDTO> sets;
+
+        /**
+         * 旧版客户端的兼容入口：只传目标组数、不传 sets 时，服务端按它展开成同值的 N 行。
+         * 新版客户端不传本字段（组数以 sets 长度为准）。
+         */
         @Min(value = 1, message = "目标组数至少为 1")
         @Max(value = 20, message = "目标组数过多")
         private Integer targetSets;
 
-        /** 目标每组次数；null = 不设。 */
+        /** 旧版兼容：展开 sets 时每行的默认次数。 */
         @Min(value = 1, message = "目标次数至少为 1")
         @Max(value = 100, message = "目标次数过多")
         private Integer targetReps;
 
-        /** 目标重量 kg；null = 不设。会话页「开始训练」预填负荷默认值用。 */
+        /** 旧版兼容：展开 sets 时每行的默认重量。 */
         @DecimalMin(value = "0", message = "目标重量不能为负")
         @DecimalMax(value = "999.99", message = "目标重量过大")
         private BigDecimal targetWeight;
+
+        /** 循环组号；null = 不参与循环。多个动作同号即成一组，组内顺序＝数组顺序（ADR 0028）。 */
+        @Min(value = 1, message = "循环组号至少为 1")
+        @Max(value = 9, message = "循环组号过大")
+        private Integer circuitNo;
+    }
+
+    /** 某一组的目标。两项都可为 null，但不能两项同时为空（每组的次数或重量至少填一项）。 */
+    @Data
+    public static class SetDTO {
+
+        @Min(value = 1, message = "该组次数至少为 1")
+        @Max(value = 100, message = "该组次数过多")
+        private Integer reps;
+
+        @DecimalMin(value = "0", message = "该组重量不能为负")
+        @DecimalMax(value = "999.99", message = "该组重量过大")
+        private BigDecimal weight;
     }
 }

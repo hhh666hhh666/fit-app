@@ -32,6 +32,33 @@ public class BodyOverviewVO {
     /** 最新围度（四围任一非空的最近一条）；从未测过为 null。 */
     private Girth girth;
 
+    /** 最新体脂率（体脂非空的最近一条）；从未测过为 null。 */
+    private BodyFat bodyFat;
+
+    /** 体脂序列（按日升序，同一天取最小）；从未测过为空数组。 */
+    private List<BodyFatPoint> bodyFatSeries;
+
+    @Data
+    public static class BodyFat {
+
+        private LocalDateTime date;
+
+        private BigDecimal value;
+    }
+
+    @Data
+    public static class BodyFatPoint {
+
+        private LocalDate date;
+
+        private BigDecimal bodyFat;
+
+        public BodyFatPoint(LocalDate date, BigDecimal bodyFat) {
+            this.date = date;
+            this.bodyFat = bodyFat;
+        }
+    }
+
     @Data
     public static class Latest {
 

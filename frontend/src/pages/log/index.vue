@@ -281,6 +281,8 @@ function doDelete() {
           </view>
           <view class="lrow__time">
             <text class="ft-num">{{ minutes(item) }} 分钟</text>
+            <!-- 消耗（ADR 0029）：没填就不显示，别让「—」挤进这一列 -->
+            <text v-if="item.calories != null" class="lrow__kcal ft-num">{{ item.calories }} 大卡</text>
           </view>
         </view>
       </view>
@@ -532,11 +534,21 @@ function doDelete() {
 }
 
 .lrow__time {
-  width: 130rpx;
+  width: 150rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
   text-align: right;
   font-size: $text-sm;
   color: $app-ink-muted;
   flex-shrink: 0;
+}
+
+/* 消耗那一行：比时长小一号，扫列表时不抢注意力（ADR 0029） */
+.lrow__kcal {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
 }
 
 .log__pad {

@@ -2,6 +2,7 @@ package com.example.fitapp.module.workout.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -28,6 +29,14 @@ public class WorkoutCreateDTO {
 
     @Min(value = 0, message = "时长不正确")
     private Integer durationSec = 0;
+
+    /**
+     * 本次训练消耗的热量（大卡，手填）；不传或 null ＝ 未填，不计入当日总消耗。
+     * 系统不估算（ADR 0029）：与手填并存会让「本日消耗」对不上。
+     */
+    @Min(value = 0, message = "消耗热量不能为负")
+    @Max(value = 99999, message = "消耗热量过大")
+    private Integer calories;
 
     @Size(max = 500, message = "备注过长")
     private String note = "";

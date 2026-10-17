@@ -26,9 +26,11 @@ type DraftBlock = {
   metric?: string | null
   sets: DraftSet[]
 }
-const draft = ref<{ title: string; note: string; blocks: DraftBlock[] }>({
+const draft = ref<{ title: string; note: string; calories: string; blocks: DraftBlock[] }>({
   title: '',
   note: '',
+  /** 本次消耗（大卡）文本：留空＝没填（与「填 0」是两件事）。 */
+  calories: '',
   blocks: []
 })
 
@@ -131,6 +133,7 @@ function startEdit() {
   draft.value = {
     title: d.title,
     note: d.note ?? '',
+    calories: d.calories != null ? String(d.calories) : '',
     blocks: d.blocks.map((b) => ({
       exerciseId: b.exerciseId ?? null,
       name: b.name,
@@ -222,11 +225,19 @@ async function save() {
       }
     }
   }
+  // 消耗：留空＝清空；填了就必须是 0–99999 的整数
+  const kcalText = draft.value.calories.trim()
+  const kcal = kcalText === '' ? null : Number(kcalText)
+  if (kcal != null && (!Number.isInteger(kcal) || kcal < 0 || kcal > 99999)) {
+    uni.showToast({ title: '消耗填 0–99999 的大卡整数', icon: 'none' })
+    return
+  }
   saving.value = true
   try {
     detail.value = await updateWorkout(d.id, {
       title,
       note: draft.value.note,
+      calories: kcal,
       blocks: draft.value.blocks.map((b) => ({
         exerciseId: b.exerciseId,
         name: b.name,
@@ -334,6 +345,25 @@ function back() {
           <view class="metrics__cell">
             <text class="metrics__label">{{ volumeLabel }}</text>
             <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit"> {{ volumeUnit }}</text></text>
+          </view>
+        </view>
+
+        <!-- 消耗（ADR 0029）：与时长同级的一行；编辑态可改，留空＝没填 -->
+        <view class="burnline">
+          <text class="burnline__label">消耗</text>
+          <view class="burnline__right">
+            <input
+              v-if="editing"
+              v-model="draft.calories"
+              type="number"
+              class="burnline__input ft-num"
+              placeholder="未填"
+              placeholder-class="burnline__ph"
+            />
+            <text v-else class="burnline__value ft-num">
+              {{ detail.calories != null ? detail.calories : '—' }}
+            </text>
+            <text v-if="editing || detail.calories != null" class="burnline__unit">大卡</text>
           </view>
         </view>
 
@@ -533,6 +563,55 @@ function back() {
 }
 
 /* ── 三格指标 ── */
+.burnline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: $app-surface;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-lg;
+  padding: 20rpx 28rpx;
+  margin-bottom: 24rpx;
+}
+
+.burnline__label {
+  font-size: 22rpx;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: $app-ink-muted;
+}
+
+.burnline__right {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.burnline__value {
+  font-size: $text-lg;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.burnline__input {
+  width: 180rpx;
+  text-align: right;
+  font-size: $text-lg;
+  font-weight: 600;
+  color: $app-ink;
+  border-bottom: 2rpx solid $app-line;
+}
+
+.burnline__ph {
+  color: $app-ink-subtle;
+  font-weight: 400;
+}
+
+.burnline__unit {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
 .metrics {
   display: flex;
   background: $app-surface;

@@ -27,8 +27,8 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
      */
     @Select("""
             <script>
-            SELECT w.id, w.title, w.duration_sec AS durationSec, w.total_volume AS totalVolume,
-                   w.created_at AS createdAt,
+            SELECT w.id, w.title, w.duration_sec AS durationSec, w.calories AS calories,
+                   w.total_volume AS totalVolume, w.created_at AS createdAt,
                    (SELECT wb.exercise_name FROM workout_block wb
                     WHERE wb.workout_id = w.id ORDER BY wb.sort_order LIMIT 1) AS firstExercise,
                    EXISTS (SELECT 1 FROM workout_block wb2
@@ -177,4 +177,16 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
             WHERE w.user_id = #{userId}
             """)
     WorkoutTotalsVO selectTotals(@Param("userId") Long userId);
+
+    /**
+     * 区间内手填的训练消耗合计（大卡），给「每日总消耗」用（ADR 0029）。
+     * 归属口径是 {@code started_at}：跨零点的训练算开始那天。
+     */
+    @Select("""
+            SELECT COALESCE(SUM(w.calories), 0) FROM workout w
+            WHERE w.user_id = #{userId} AND w.started_at >= #{start} AND w.started_at < #{end}
+            """)
+    Integer selectBurnedBetween(@Param("userId") Long userId,
+                                @Param("start") LocalDateTime start,
+                                @Param("end") LocalDateTime end);
 }

@@ -18,6 +18,14 @@ const props = defineProps<{
   height?: number
   /** y 轴是否从 0 起（默认 true）。体重这类值域很窄的序列要传 false，否则曲线会挤成一条直线。 */
   zeroBased?: boolean
+  /**
+   * 准星气泡里数值的格式化（不传则取整）。
+   *
+   * ⚠️ 只作用于**气泡**，不作用于 y 轴刻度：刻度是视觉参考、取整更干净，气泡是读数、
+   * 必须跟人眼在别处看到的一致（斤 1 位 / 千克 2 位，ADR 0019／0030）。
+   * 组件本身不感知单位——单位换算留在调用方，别渗进绘图层。
+   */
+  formatValue?: (v: number) => string
 }>()
 
 const MIN_SPAN = 3
@@ -236,7 +244,8 @@ function draw() {
     ctx.fill()
 
     const d = dateAt(ci)
-    const text = `${d.getMonth() + 1}/${d.getDate()} · ${Math.round(cv)}`
+    const shown = props.formatValue ? props.formatValue(cv) : String(Math.round(cv))
+    const text = `${d.getMonth() + 1}/${d.getDate()} · ${shown}`
     ctx.setFontSize(11)
     const tw = text.length * 6.2 + 16
     const bx = clamp(cx - tw / 2, 2, w - tw - 2)

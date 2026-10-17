@@ -9,6 +9,9 @@ import {
   updateBodyRecord
 } from '@/api/body'
 import type { BodyOverview, BodyRecordRow } from '@/api/body'
+import { getProfile, saveProfile } from '@/api/profile'
+import type { ActivityLevel, ProfileInfo, ProfileSex } from '@/api/profile'
+import { ACTIVITY_OPTIONS, activityLabel, sexLabel, SEX_OPTIONS } from '@/utils/energy'
 import FtTrendChart from '@/components/FtTrendChart.vue'
 import {
   formatDateLabel,
@@ -40,6 +43,8 @@ function goBack() {
 
 const overview = ref<BodyOverview | null>(null)
 const records = ref<BodyRecordRow[]>([])
+/** 个人档案（身高／性别／生日／活动档）＋ 今日消耗拆解（ADR 0029／0030）。 */
+const profile = ref<ProfileInfo | null>(null)
 const loading = ref(true)
 const hasMore = ref(false)
 const loadingMore = ref(false)
@@ -48,9 +53,15 @@ const weightUnit = ref<WeightUnit>('jin')
 async function load() {
   loading.value = true
   try {
-    const [ov, rows] = await Promise.all([getBodyOverview(), getBodyRecords(PAGE_SIZE, 0)])
+    const [ov, rows, pf] = await Promise.all([
+      getBodyOverview(),
+      getBodyRecords(PAGE_SIZE, 0),
+      // 档案拿不到不该让整页空着——身体数据才是主角
+      getProfile().catch(() => null)
+    ])
     overview.value = ov
     records.value = rows
+    profile.value = pf
     hasMore.value = rows.length >= PAGE_SIZE
   } catch {
     // request 层已统一提示
@@ -93,18 +104,54 @@ onShow(() => {
   }
 })
 
-// ── 体重图（序列已由后端按日聚合、取当天最小）──
+// ── 体重／体脂图（序列已由后端按日聚合、取当天最小）──
+// 同一张图、点标题上的「体重 / 体脂」切换序列（ADR 0030）：不做双线，量纲不同会读出假相关。
 const weightPoints = computed(() =>
   (overview.value?.weightSeries ?? []).map((p) => ({
     date: p.date,
     value: kgToDisplay(Number(p.weight), weightUnit.value)
   }))
 )
-const firstWeight = computed(() => overview.value?.weightSeries[0]?.weight ?? null)
-const lastWeight = computed(() => {
-  const points = overview.value?.weightSeries ?? []
-  return points.length ? points[points.length - 1].weight : null
+/** 体脂率是百分数，不参与斤／千克换算。 */
+const bodyFatPoints = computed(() =>
+  (overview.value?.bodyFatSeries ?? []).map((p) => ({
+    date: p.date,
+    value: Number(p.bodyFat)
+  }))
+)
+
+const chartMetric = ref<'weight' | 'fat'>('weight')
+
+const chartPoints = computed(() =>
+  chartMetric.value === 'weight' ? weightPoints.value : bodyFatPoints.value
+)
+
+/** 区间文案：两个序列的值都已经是「展示单位」（体重已换算成斤／千克），按单位精度取位即可。 */
+const chartRange = computed(() => {
+  const pts = chartPoints.value
+  if (pts.length < 2) return ''
+  const head = pts[0].value
+  const tail = pts[pts.length - 1].value
+  if (chartMetric.value === 'fat') {
+    return `${head.toFixed(1)} → ${tail.toFixed(1)} %`
+  }
+  const p = weightPrecision(weightUnit.value)
+  return `${head.toFixed(p)} → ${tail.toFixed(p)} ${weightUnitShort(weightUnit.value)}`
 })
+
+/**
+ * 准星气泡的数值格式（ADR 0030 的唯一精度改动点）：斤 1 位／千克 2 位，与卡片、列表一致。
+ * y 轴刻度仍取整——刻度是视觉参考，气泡是读数。
+ */
+const chartFormat = computed(() => {
+  if (chartMetric.value === 'fat') return (v: number) => `${v.toFixed(1)}`
+  const p = weightPrecision(weightUnit.value)
+  return (v: number) => v.toFixed(p)
+})
+
+const chartEmptyText = computed(() =>
+  chartMetric.value === 'fat' ? '再记一次体脂，就能看到趋势线' : '再记一次体重，就能看到趋势线'
+)
 
 // ── 围度图：一张图 + 部位分段条切换（四个部位数值跨度大，共用 y 轴会压扁）──
 type GirthKey = 'chest' | 'waist' | 'hip' | 'arm'
@@ -203,6 +250,8 @@ const sheet = ref({
   date: todayKey(),
   time: nowTime(),
   weight: '',
+  /** 体脂率 %：只记录、不参与计算（ADR 0030）。 */
+  bodyFat: '',
   chest: '',
   waist: '',
   hip: '',
@@ -215,6 +264,20 @@ const sheet = ref({
 
 function numOrBlank(v: number | null | undefined): string {
   return v == null ? '' : formatWeight(v, weightUnit.value)
+}
+
+/**
+ * 体脂率输入解析：空＝null；不合规返回 NaN（调用方据此拦下）。
+ * 1 位小数是体脂秤的精度，多留一位是假精度（ADR 0030）。
+ */
+function parseBodyFat(input: string): number | null {
+  const raw = input.trim()
+  if (raw === '') return null
+  if (!/^\d+(?:\.\d+)?$/.test(raw)) return Number.NaN
+  if ((raw.split('.')[1]?.length ?? 0) > 1) return Number.NaN
+  const v = Number(raw)
+  if (!Number.isFinite(v) || v < 3 || v > 75) return Number.NaN
+  return v
 }
 
 function displayWeight(v: number | null | undefined): string {
@@ -245,6 +308,7 @@ function openSheet() {
     date: todayKey(),
     time: nowTime(),
     weight: numOrBlank(last?.weight),
+    bodyFat: last?.bodyFat != null ? String(last.bodyFat) : '',
     chest: numOrBlank(last?.chest),
     waist: numOrBlank(last?.waist),
     hip: numOrBlank(last?.hip),
@@ -264,6 +328,7 @@ function openEdit(r: BodyRecordRow) {
     date,
     time,
     weight: numOrBlank(r.weight),
+    bodyFat: r.bodyFat != null ? String(r.bodyFat) : '',
     chest: numOrBlank(r.chest),
     waist: numOrBlank(r.waist),
     hip: numOrBlank(r.hip),
@@ -301,9 +366,16 @@ async function save() {
     uni.showToast({ title: `${weightUnitLabel(weightUnit.value)}最多保留${weightPrecision(weightUnit.value)}位小数`, icon: 'none' })
     return
   }
+  // 体脂率不合规要被拦住（否则后端 400，用户看到的是通用报错）
+  const bodyFat = parseBodyFat(f.bodyFat)
+  if (Number.isNaN(bodyFat)) {
+    uni.showToast({ title: '体脂率 3–75，最多 1 位小数', icon: 'none' })
+    return
+  }
   const payload = {
     measuredAt: toIsoMinute(f.date, f.time),
     weight: parsedWeight,
+    bodyFat,
     chest: f.chest ? Number(f.chest) : null,
     waist: f.waist ? Number(f.waist) : null,
     hip: f.hip ? Number(f.hip) : null,
@@ -312,12 +384,13 @@ async function save() {
   }
   if (
     payload.weight == null &&
+    payload.bodyFat == null &&
     payload.chest == null &&
     payload.waist == null &&
     payload.hip == null &&
     payload.arm == null
   ) {
-    uni.showToast({ title: '体重和围度至少填一项', icon: 'none' })
+    uni.showToast({ title: '体重、体脂和围度至少填一项', icon: 'none' })
     return
   }
   f.saving = true
@@ -334,6 +407,76 @@ async function save() {
   }
 }
 
+// ── 个人档案弹层（ADR 0030）：四项一起提交，缺一项就算不出消耗 ──
+const LEVEL_OPTIONS = ACTIVITY_OPTIONS
+
+const profileSheet = ref({
+  show: false,
+  sex: 'male' as ProfileSex,
+  birthDate: '',
+  height: '',
+  activityLevel: 'light' as ActivityLevel,
+  saving: false
+})
+
+function openProfileSheet() {
+  const x = profile.value
+  profileSheet.value = {
+    show: true,
+    sex: x?.sex ?? 'male',
+    birthDate: x?.birthDate ?? '',
+    height: x?.heightCm != null ? String(x.heightCm) : '',
+    activityLevel: x?.activityLevel ?? 'light',
+    saving: false
+  }
+}
+
+function onBirthChange(e: { detail: { value: string } }) {
+  profileSheet.value.birthDate = e.detail.value
+}
+
+async function saveProfileSheet() {
+  const f = profileSheet.value
+  if (!f.birthDate) {
+    uni.showToast({ title: '请选择出生日期', icon: 'none' })
+    return
+  }
+  const height = Number(f.height)
+  if (!Number.isFinite(height) || height < 100 || height > 250) {
+    uni.showToast({ title: '身高填 100–250 cm', icon: 'none' })
+    return
+  }
+  f.saving = true
+  try {
+    profile.value = await saveProfile({
+      sex: f.sex,
+      birthDate: f.birthDate,
+      heightCm: Math.round(height * 10) / 10,
+      activityLevel: f.activityLevel
+    })
+    f.show = false
+    uni.showToast({ title: '已保存', icon: 'success' })
+  } catch {
+    // request 层已统一提示
+  } finally {
+    f.saving = false
+  }
+}
+
+/** 「怎么算的」弹层：算式与代入值全部来自服务端，前端只排版。 */
+const energySheet = ref({ show: false })
+
+/** 标签统一取 `utils/energy`（与饮食页同一份念法）。 */
+const levelLabel = activityLabel
+
+const energy = computed(() => profile.value?.energy ?? null)
+
+/** 「怎么算的」里的体重日期提示（空＝没有记录）。 */
+const weightDateHint = computed(() => {
+  const at = energy.value?.weightAt
+  return at ? `（${formatDateLabel(String(at).slice(0, 10))}）` : ''
+})
+
 // ── 展示用小工具 ──
 function signed(v: number | null | undefined, unit: WeightUnit = 'kg'): string {
   if (v == null) return ''
@@ -345,14 +488,20 @@ function girthValue(v: number | null | undefined): string {
   return v == null ? '–' : String(v)
 }
 
-/** 明细行第二行：把量过的围度挤成一行小字，没量的不出现。 */
+/** 明细行第二行：把量过的围度挤成一行小字，没量的不出现；体脂排在最前。 */
 function girthLine(r: BodyRecordRow): string {
   const parts: string[] = []
+  if (r.bodyFat != null) parts.push(`体脂 ${Number(r.bodyFat).toFixed(1)}%`)
   if (r.chest != null) parts.push(`胸 ${r.chest}`)
   if (r.waist != null) parts.push(`腰 ${r.waist}`)
   if (r.hip != null) parts.push(`臀 ${r.hip}`)
   if (r.arm != null) parts.push(`臂 ${r.arm}`)
   return parts.join(' · ')
+}
+
+/** 体脂率文案：固定 1 位小数（ADR 0030）。 */
+function fatText(v: number | null | undefined): string {
+  return v == null ? '–' : `${Number(v).toFixed(1)}%`
 }
 </script>
 
@@ -384,6 +533,51 @@ function girthLine(r: BodyRecordRow): string {
     <view v-if="loading" class="ft-loading">加载中…</view>
 
     <view v-else class="bodypg__body">
+      <!-- 个人档案卡：四项 ＋ 今日消耗 ＋ 「怎么算的」（ADR 0029／0030） -->
+      <view class="ft-card pcard">
+        <view class="pcard__head">
+          <text class="pcard__label">个人档案</text>
+          <text v-if="profile?.complete" class="pcard__edit" @click="openProfileSheet">编辑</text>
+        </view>
+
+        <template v-if="profile?.complete">
+          <view class="pcard__grid">
+            <view class="pcard__cell">
+              <text class="pcard__k">性别</text>
+              <text class="pcard__v">{{ sexLabel(profile.sex) }}</text>
+            </view>
+            <view class="pcard__cell">
+              <text class="pcard__k">年龄</text>
+              <text class="pcard__v ft-num">{{ profile.age ?? '–' }}</text>
+            </view>
+            <view class="pcard__cell">
+              <text class="pcard__k">身高</text>
+              <text class="pcard__v ft-num">{{ profile.heightCm ?? '–' }} cm</text>
+            </view>
+            <view class="pcard__cell">
+              <text class="pcard__k">活动量</text>
+              <text class="pcard__v">{{ levelLabel(profile.activityLevel) }}</text>
+            </view>
+          </view>
+
+          <view v-if="energy?.complete" class="pcard__energy">
+            <view class="pcard__burn-row">
+              <text class="pcard__burn ft-num">{{ energy.totalKcal }}</text>
+              <text class="pcard__burn-unit">大卡 · 今日消耗</text>
+            </view>
+            <text class="pcard__how" @click="energySheet.show = true">怎么算的</text>
+          </view>
+          <view v-else class="pcard__miss" @click="openSheet">
+            还没有体重记录，补一条才能算消耗 ›
+          </view>
+        </template>
+
+        <view v-else class="pcard__empty" @click="openProfileSheet">
+          <text class="pcard__empty-t">填一下性别、生日、身高，就能算出每天消耗</text>
+          <text class="pcard__fill">去填写 +</text>
+        </view>
+      </view>
+
       <!-- 当前体重卡 -->
       <view class="ft-card wcard">
         <view class="wcard__head">
@@ -405,6 +599,12 @@ function girthLine(r: BodyRecordRow): string {
           <text v-if="overview.weekDiff != null" class="wcard__diff ft-num">
             较上周 {{ signed(overview.weekDiff, weightUnit) }} {{ weightUnitShort(weightUnit) }}
           </text>
+        </view>
+        <!-- 体脂：与体重并列，只记录不参与计算（ADR 0030） -->
+        <view v-if="overview?.bodyFat" class="wcard__fat">
+          <text class="wcard__fat-k">体脂</text>
+          <text class="wcard__fat-v ft-num">{{ fatText(overview.bodyFat.value) }}</text>
+          <text class="wcard__fat-d ft-num">{{ formatDateLabel(overview.bodyFat.date) }}</text>
         </view>
       </view>
 
@@ -449,22 +649,36 @@ function girthLine(r: BodyRecordRow): string {
         <text v-else class="gcard__empty">还没有围度记录——「记一笔」里可以一起量</text>
       </view>
 
-      <!-- 体重趋势 -->
+      <!-- 体重 / 体脂趋势（点标题切换序列，ADR 0030） -->
       <view class="ft-card chartcard">
         <view class="chartcard__head">
-          <text class="chartcard__title">体重趋势</text>
-          <text v-if="firstWeight != null && lastWeight != null" class="chartcard__range ft-num">
-            {{ displayWeight(firstWeight) }} → {{ displayWeight(lastWeight) }} {{ weightUnitShort(weightUnit) }}
-          </text>
+          <view class="chartcard__title-row">
+            <text
+              class="chartcard__title"
+              :class="{ 'chartcard__title--on': chartMetric === 'weight' }"
+              @click="chartMetric = 'weight'"
+              >体重</text
+            >
+            <text class="chartcard__slash">/</text>
+            <text
+              class="chartcard__title"
+              :class="{ 'chartcard__title--on': chartMetric === 'fat' }"
+              @click="chartMetric = 'fat'"
+              >体脂</text
+            >
+          </view>
+          <text v-if="chartRange" class="chartcard__range ft-num">{{ chartRange }}</text>
         </view>
         <FtTrendChart
-          v-if="weightPoints.length >= 2"
-          :points="weightPoints"
+          v-if="chartPoints.length >= 2"
+          :key="chartMetric"
+          :points="chartPoints"
           :height="180"
           :zero-based="false"
+          :format-value="chartFormat"
         />
-        <text v-else class="chartcard__empty">再记一次体重，就能看到趋势线</text>
-        <text v-if="weightPoints.length >= 2" class="chartcard__tip">
+        <text v-else class="chartcard__empty">{{ chartEmptyText }}</text>
+        <text v-if="chartPoints.length >= 2" class="chartcard__tip">
           同一天记多次取最小值 · 单指按住看数值 · 双指捏合缩放
         </text>
       </view>
@@ -588,6 +802,22 @@ function girthLine(r: BodyRecordRow): string {
         />
       </view>
 
+      <!-- 体脂率：跟体重并列的一项，只记录不参与任何计算（ADR 0030） -->
+      <view class="fld">
+        <view class="fld__label-row">
+          <text class="fld__label">体脂率（%）</text>
+          <text class="fld__aside">只做记录，不参与计算</text>
+        </view>
+        <input
+          v-model="sheet.bodyFat"
+          class="fld__input ft-num"
+          type="digit"
+          step="0.1"
+          placeholder="如 18.4"
+          placeholder-class="fld__ph"
+        />
+      </view>
+
       <view class="fld-grid">
         <view class="fld">
           <text class="fld__label">胸围（cm）</text>
@@ -625,6 +855,116 @@ function girthLine(r: BodyRecordRow): string {
       >
         保存
       </view>
+    </view>
+
+    <!-- 个人档案弹层（ADR 0030） -->
+    <view v-if="profileSheet.show" class="sheet-mask" @click="profileSheet.show = false" />
+    <view v-if="profileSheet.show" class="sheet">
+      <view class="sheet__handle" />
+      <text class="sheet__title">个人档案</text>
+      <text class="sheet__hint">填一次就行；体重始终取「身体档案」里最新的一条</text>
+
+      <view class="fld">
+        <text class="fld__label">性别</text>
+        <view class="pick-row">
+          <text
+            v-for="o in SEX_OPTIONS"
+            :key="o.key"
+            class="pick"
+            :class="{ 'pick--on': profileSheet.sex === o.key }"
+            @click="profileSheet.sex = o.key"
+            >{{ o.label }}</text
+          >
+        </view>
+      </view>
+
+      <view class="fld">
+        <text class="fld__label">出生日期</text>
+        <picker mode="date" :value="profileSheet.birthDate" @change="onBirthChange">
+          <view class="fld__picker ft-num">{{ profileSheet.birthDate || '选择日期' }} ▾</view>
+        </picker>
+      </view>
+
+      <view class="fld">
+        <text class="fld__label">身高（cm）</text>
+        <input
+          v-model="profileSheet.height"
+          class="fld__input ft-num"
+          type="digit"
+          step="0.1"
+          placeholder="如 175"
+          placeholder-class="fld__ph"
+        />
+      </view>
+
+      <view class="fld">
+        <view class="fld__label-row">
+          <text class="fld__label">平时活动量</text>
+          <text class="fld__aside">只算日常，训练另记</text>
+        </view>
+        <view class="pick-col">
+          <view
+            v-for="o in LEVEL_OPTIONS"
+            :key="o.key"
+            class="pick-card"
+            :class="{ 'pick-card--on': profileSheet.activityLevel === o.key }"
+            @click="profileSheet.activityLevel = o.key"
+          >
+            <text class="pick-card__t">{{ o.label }}</text>
+            <text class="pick-card__d">{{ o.desc }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view
+        class="ft-btn ft-btn--primary ft-btn--block sheet__btn"
+        :class="{ 'ft-btn--disabled': profileSheet.saving }"
+        @click="saveProfileSheet"
+      >
+        保存
+      </view>
+    </view>
+
+    <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029） -->
+    <view v-if="energySheet.show" class="sheet-mask" @click="energySheet.show = false" />
+    <view v-if="energySheet.show" class="sheet">
+      <view class="sheet__handle" />
+      <text class="sheet__title">今日消耗怎么算的</text>
+      <template v-if="energy?.complete">
+        <view class="eq">
+          <view class="eq__row">
+            <text class="eq__k">基础代谢</text>
+            <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+          </view>
+          <text class="eq__note">
+            按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
+            {{ energy.age }} · {{ sexLabel(energy.sex) }}
+          </text>
+          <view class="eq__row">
+            <text class="eq__k">× 生活活动系数</text>
+            <text class="eq__v ft-num">{{ energy.activityFactor }}（{{ levelLabel(energy.activityLevel) }}）</text>
+          </view>
+          <view class="eq__row">
+            <text class="eq__k">= 基础消耗</text>
+            <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
+          </view>
+          <view class="eq__row">
+            <text class="eq__k">+ 今日训练消耗</text>
+            <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
+          </view>
+          <view class="eq__row eq__row--sum">
+            <text class="eq__k">= 今日总消耗</text>
+            <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
+          </view>
+        </view>
+        <text class="eq__hint">
+          生活活动系数只算日常活动（工作、走动），专门训练不在里面——所以训练消耗是单独加上去的，不会重复计算。
+        </text>
+        <text class="eq__hint">
+          体重取身体档案里最新一条{{ weightDateHint }}，换体重后数字会跟着变。
+        </text>
+      </template>
+      <view class="ft-btn ft-btn--block sheet__btn" @click="energySheet.show = false">知道了</view>
     </view>
   </view>
 </template>
@@ -835,6 +1175,27 @@ function girthLine(r: BodyRecordRow): string {
   font-size: $text-md;
   font-weight: 600;
   color: $app-ink;
+}
+
+/* 标题当切换器用：「体重 / 体脂」（ADR 0030，同一张图换序列） */
+.chartcard__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.chartcard__title--on {
+  color: $app-ink;
+}
+
+.chartcard__title:not(.chartcard__title--on) {
+  color: $app-ink-subtle;
+  font-weight: 400;
+}
+
+.chartcard__slash {
+  font-size: $text-sm;
+  color: $app-ink-subtle;
 }
 
 .chartcard__range {
@@ -1146,5 +1507,249 @@ function girthLine(r: BodyRecordRow): string {
 
 .sheet__btn {
   margin-top: 32rpx;
+}
+
+/* ── 个人档案卡（ADR 0030） ── */
+.pcard {
+  margin-bottom: 24rpx;
+}
+
+.pcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 18rpx;
+}
+
+.pcard__label {
+  font-size: $text-sm;
+  color: $app-ink-subtle;
+}
+
+.pcard__edit {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  padding: 4rpx 12rpx;
+  border: 1rpx solid $app-line;
+  border-radius: 999rpx;
+}
+
+.pcard__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx 0;
+}
+
+.pcard__cell {
+  flex: 1 1 50%;
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.pcard__k {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.pcard__v {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.pcard__energy {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.pcard__burn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.pcard__burn {
+  font-size: 56rpx;
+  font-weight: 700;
+  line-height: 1;
+  color: $app-ink;
+}
+
+.pcard__burn-unit {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.pcard__how {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  text-decoration: underline;
+}
+
+.pcard__miss {
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid $app-line-soft;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.pcard__empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 6rpx 0 4rpx;
+}
+
+.pcard__empty-t {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.pcard__fill {
+  flex-shrink: 0;
+  font-size: $text-xs;
+  color: $app-ink;
+  padding: 8rpx 18rpx;
+  border: 1rpx solid $app-line;
+  border-radius: 999rpx;
+}
+
+/* 当前体重卡里的体脂行 */
+.wcard__fat {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.wcard__fat-k {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.wcard__fat-v {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.wcard__fat-d {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
+}
+
+/* ── 档案弹层里的选择器 ── */
+.fld__aside {
+  font-size: 20rpx;
+  color: $app-ink-subtle;
+}
+
+.pick-row {
+  display: flex;
+  gap: 16rpx;
+  margin-left: auto;
+}
+
+.pick {
+  min-width: 96rpx;
+  text-align: center;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $app-line;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.pick--on {
+  background: $app-ink;
+  border-color: $app-ink;
+  color: #ffffff;
+}
+
+.pick-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding-top: 12rpx;
+}
+
+.pick-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding: 16rpx 20rpx;
+  border-radius: $radius-md;
+  border: 1rpx solid $app-line;
+}
+
+.pick-card--on {
+  border-color: $app-ink;
+  background: $app-surface-2;
+}
+
+.pick-card__t {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.pick-card__d {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+/* ── 「怎么算的」算式 ── */
+.eq {
+  padding: 8rpx 0 4rpx;
+}
+
+.eq__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  border-bottom: 1rpx dashed $app-line-soft;
+}
+
+.eq__row--sum {
+  border-bottom: none;
+  border-top: 2rpx solid $app-ink;
+  margin-top: 6rpx;
+}
+
+.eq__k {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.eq__v {
+  font-size: $text-base;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.eq__note {
+  display: block;
+  font-size: 20rpx;
+  line-height: 1.5;
+  color: $app-ink-subtle;
+  padding: 0 0 12rpx;
+}
+
+.eq__hint {
+  display: block;
+  font-size: $text-xs;
+  line-height: 1.7;
+  color: $app-ink-muted;
+  padding-top: 14rpx;
 }
 </style>

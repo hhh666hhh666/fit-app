@@ -37,6 +37,8 @@ export interface SessionBlock {
   targetSets: number | null
   targetReps: number | null
   targetWeight: number | null
+  /** 循环组号（[ADR 0028]）：null/缺省＝不参与循环；同号动作按顺序轮流做。 */
+  circuitNo?: number | null
   sets: SessionSet[]
 }
 
@@ -58,11 +60,25 @@ export interface Session {
   /** 当前查看的动作下标。 */
   current: number
   pauses: PauseInterval[]
+  /**
+   * 本次训练手填的消耗（大卡，[ADR 0029]）。留字符串：输入框的中间态不该被改写。
+   * 空串＝未填——未填不计入当日总消耗，与「填 0」是两件事。
+   */
+  calories: string
 }
 
 /** 新建一条会话（还没铺动作；动作由调用方填）。 */
 export function createSession(planId: number | null, title: string): Session {
-  return { v: 1, startedAt: Date.now(), planId, title, blocks: [], current: 0, pauses: [] }
+  return {
+    v: 1,
+    startedAt: Date.now(),
+    planId,
+    title,
+    blocks: [],
+    current: 0,
+    pauses: [],
+    calories: ''
+  }
 }
 
 /** 是否正停在暂停里。 */
@@ -143,9 +159,13 @@ export function loadSession(): Session | null {
     const parsed = typeof raw === 'string' ? (JSON.parse(raw) as Session) : (raw as Session)
     if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.blocks)) return null
     if (!Array.isArray(parsed.pauses)) parsed.pauses = []
+    // 老会话（ADR 0029 之前存的）没有 calories：补空串（＝未填）
+    if (typeof parsed.calories !== 'string') parsed.calories = ''
     // 老会话（V24 之前存的）没有 metric 与 f：就地补默认值，别让旧数据把页面弄崩
     for (const b of parsed.blocks) {
       if (typeof b.metric !== 'string') b.metric = ''
+      // 老会话（ADR 0028 之前存的）没有 circuitNo：补 null（不参与循环）
+      if (b.circuitNo === undefined) b.circuitNo = null
       for (const x of b.sets ?? []) {
         if (typeof x.f !== 'string') x.f = ''
       }

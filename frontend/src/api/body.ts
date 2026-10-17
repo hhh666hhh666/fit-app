@@ -40,6 +40,15 @@ export interface BodyOverview {
   /** 按日聚合，各部位分别取当天最小。 */
   girthSeries: BodyGirthPoint[]
   girth: BodyGirth | null
+  /** 最新体脂率（体脂非空的最近一条）；从未测过为 null。 */
+  bodyFat?: { date: string; value: number } | null
+  /** 体脂序列（按日聚合取最小）。 */
+  bodyFatSeries?: BodyFatPoint[]
+}
+
+export interface BodyFatPoint {
+  date: string
+  bodyFat: number
 }
 
 /** 明细行：体重与围度同一条时间线（体重可空——只量了围度的那条也在）。 */
@@ -48,6 +57,8 @@ export interface BodyRecordRow {
   /** 测定时刻，ISO 带 T：`2026-10-13T23:51:00`。 */
   date: string
   weight: number | null
+  /** 体脂率 %（只记录，不参与计算）。 */
+  bodyFat?: number | null
   chest: number | null
   waist: number | null
   hip: number | null
@@ -61,6 +72,8 @@ export interface BodySavePayload {
   /** 测定时刻，ISO 带 T：`2026-10-13T23:51:00`（后端只认这一种，空格分隔会 400）。 */
   measuredAt?: string
   weight?: number | null
+  /** 体脂率 %（3–75，1 位小数；只记录、不参与计算）。 */
+  bodyFat?: number | null
   chest?: number | null
   waist?: number | null
   hip?: number | null

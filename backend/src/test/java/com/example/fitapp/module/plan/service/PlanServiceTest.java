@@ -6,7 +6,9 @@ import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.plan.dto.PlanSaveDTO;
 import com.example.fitapp.module.plan.entity.Plan;
 import com.example.fitapp.module.plan.entity.PlanExercise;
+import com.example.fitapp.module.plan.entity.PlanExerciseSet;
 import com.example.fitapp.module.plan.mapper.PlanExerciseMapper;
+import com.example.fitapp.module.plan.mapper.PlanExerciseSetMapper;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.plan.mapper.WeekScheduleMapper;
 import org.junit.jupiter.api.Test;
@@ -17,17 +19,21 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * 纯单元测试（不碰库）：专测静默错误——
- * 重名计划、重复动作、已下架/他人动作混入编排、动作名快照被前端篡改、删计划不清周表引用。
+ * 重名计划、重复动作、已下架/他人动作混入编排、动作名快照被前端篡改、删计划不清周表引用、
+ * 逐组目标漏落库、组数冗余列与行数不一致、有氧动作被塞进循环组。
  */
 @ExtendWith(MockitoExtension.class)
 class PlanServiceTest {
@@ -39,13 +45,17 @@ class PlanServiceTest {
     private PlanExerciseMapper planExerciseMapper;
 
     @Mock
+    private PlanExerciseSetMapper planExerciseSetMapper;
+
+    @Mock
     private WeekScheduleMapper weekScheduleMapper;
 
     @Mock
     private ExerciseMapper exerciseMapper;
 
     private PlanService service() {
-        return new PlanService(planMapper, planExerciseMapper, weekScheduleMapper, exerciseMapper);
+        return new PlanService(planMapper, planExerciseMapper, planExerciseSetMapper,
+                weekScheduleMapper, exerciseMapper);
     }
 
     private static Exercise exercise(long id, Long ownerId, boolean archived) {
@@ -58,6 +68,14 @@ class PlanServiceTest {
         return e;
     }
 
+    private static Exercise cardio(long id) {
+        Exercise e = exercise(id, null, false);
+        e.setName("爬楼");
+        e.setMuscle("cardio");
+        e.setMetric("floors");
+        return e;
+    }
+
     private static Plan ownPlan(long id, long userId) {
         Plan p = new Plan();
         p.setId(id);
@@ -66,6 +84,7 @@ class PlanServiceTest {
         return p;
     }
 
+    /** 旧版请求：只给组数／次数／重量三个汇总值。 */
     private static PlanSaveDTO dto(String name, Long... exerciseIds) {
         PlanSaveDTO dto = new PlanSaveDTO();
         dto.setName(name);
@@ -80,6 +99,13 @@ class PlanServiceTest {
         return dto;
     }
 
+    private static PlanSaveDTO.SetDTO set(Integer reps, String weight) {
+        PlanSaveDTO.SetDTO s = new PlanSaveDTO.SetDTO();
+        s.setReps(reps);
+        s.setWeight(weight == null ? null : new BigDecimal(weight));
+        return s;
+    }
+
     @Test
     void create_duplicateName_throws() {
         when(planMapper.selectCount(any())).thenReturn(1L);
@@ -91,7 +117,7 @@ class PlanServiceTest {
     void create_nameTrimmedAndSnapshotFromDb() {
         when(planMapper.selectCount(any())).thenReturn(0L);
         when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
-        when(planExerciseMapper.selectList(any())).thenReturn(java.util.List.of());
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
 
         service().create(7L, dto("  胸 & 三头  ", 1L));
 
@@ -108,6 +134,98 @@ class PlanServiceTest {
         assertEquals(0, peCaptor.getValue().getSortOrder());
         // 目标重量（含组次）必须整体透传落库，漏映射 = 静默丢数据
         assertEquals(new BigDecimal("60"), peCaptor.getValue().getTargetWeight());
+    }
+
+    @Test
+    void create_perSetTargets_persistedInOrderAndSetsCountSynced() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        PlanSaveDTO dto = dto("胸 & 三头", 1L);
+        dto.getExercises().get(0).setTargetSets(null);
+        dto.getExercises().get(0).setTargetReps(null);
+        dto.getExercises().get(0).setTargetWeight(null);
+        dto.getExercises().get(0).setSets(List.of(
+                set(12, "60"), set(10, "65"), set(8, "65")));
+
+        service().create(7L, dto);
+
+        // 组数的唯一真相是行数：冗余列必须同步成 3（否则列表页 EST. VOLUME 会错）
+        ArgumentCaptor<PlanExercise> peCaptor = ArgumentCaptor.forClass(PlanExercise.class);
+        verify(planExerciseMapper).insert(peCaptor.capture());
+        assertEquals(3, peCaptor.getValue().getTargetSets());
+
+        ArgumentCaptor<PlanExerciseSet> setCaptor = ArgumentCaptor.forClass(PlanExerciseSet.class);
+        verify(planExerciseSetMapper, times(3)).insert(setCaptor.capture());
+        List<PlanExerciseSet> rows = setCaptor.getAllValues();
+        assertEquals(List.of(1, 2, 3), rows.stream().map(PlanExerciseSet::getSetIndex).toList());
+        assertEquals(List.of(12, 10, 8), rows.stream().map(PlanExerciseSet::getReps).toList());
+        assertEquals(new BigDecimal("60"), rows.get(0).getWeight());
+        assertEquals(new BigDecimal("65"), rows.get(2).getWeight());
+    }
+
+    @Test
+    void create_legacyTargetSets_expandedToSameValueRows() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        // dto() 只给 targetSets=4 / reps=8 / weight=60，没有 sets
+        service().create(7L, dto("胸 & 三头", 1L));
+
+        ArgumentCaptor<PlanExerciseSet> setCaptor = ArgumentCaptor.forClass(PlanExerciseSet.class);
+        verify(planExerciseSetMapper, times(4)).insert(setCaptor.capture());
+        assertEquals(List.of(1, 2, 3, 4),
+                setCaptor.getAllValues().stream().map(PlanExerciseSet::getSetIndex).toList());
+        assertEquals(List.of(8, 8, 8, 8),
+                setCaptor.getAllValues().stream().map(PlanExerciseSet::getReps).toList());
+    }
+
+    @Test
+    void create_noTargets_writesNoSetRows() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        PlanSaveDTO dto = dto("胸 & 三头", 1L);
+        dto.getExercises().get(0).setTargetSets(null);
+        dto.getExercises().get(0).setTargetReps(null);
+        dto.getExercises().get(0).setTargetWeight(null);
+        service().create(7L, dto);
+
+        verify(planExerciseSetMapper, never()).insert(any(PlanExerciseSet.class));
+        ArgumentCaptor<PlanExercise> peCaptor = ArgumentCaptor.forClass(PlanExercise.class);
+        verify(planExerciseMapper).insert(peCaptor.capture());
+        assertNull(peCaptor.getValue().getTargetSets());
+    }
+
+    @Test
+    void create_circuitNo_persisted() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        PlanSaveDTO dto = dto("推日", 1L);
+        dto.getExercises().get(0).setCircuitNo(2);
+
+        service().create(7L, dto);
+
+        ArgumentCaptor<PlanExercise> peCaptor = ArgumentCaptor.forClass(PlanExercise.class);
+        verify(planExerciseMapper).insert(peCaptor.capture());
+        assertEquals(2, peCaptor.getValue().getCircuitNo());
+    }
+
+    @Test
+    void create_cardioInCircuit_throws() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(5L)).thenReturn(cardio(5L));
+
+        PlanSaveDTO dto = dto("推日", 5L);
+        dto.getExercises().get(0).setCircuitNo(1);
+
+        assertThrows(BusinessException.class, () -> service().create(7L, dto));
+        verify(planExerciseMapper, never()).insert(any(PlanExercise.class));
     }
 
     @Test
@@ -152,7 +270,7 @@ class PlanServiceTest {
         when(planMapper.selectById(10L)).thenReturn(ownPlan(10L, 7L));
         when(planMapper.selectCount(any())).thenReturn(0L);
         when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
-        when(planExerciseMapper.selectList(any())).thenReturn(java.util.List.of());
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
 
         service().update(7L, 10L, dto("胸 & 三头", 1L));
 
@@ -160,6 +278,23 @@ class PlanServiceTest {
         verify(planExerciseMapper).delete(any());
         verify(planExerciseMapper).insert(any(PlanExercise.class));
         verify(planMapper).updateById(any(Plan.class));
+    }
+
+    @Test
+    void update_deletesOldSetRowsBeforeReinserting() {
+        when(planMapper.selectById(10L)).thenReturn(ownPlan(10L, 7L));
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        PlanExercise old = new PlanExercise();
+        old.setId(99L);
+        old.setPlanId(10L);
+        old.setExerciseId(1L);
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of(old));
+
+        service().update(7L, 10L, dto("胸 & 三头", 1L));
+
+        // 子表没有外键级联：不显式删就会留下孤儿行
+        verify(planExerciseSetMapper).delete(any());
     }
 
     @Test

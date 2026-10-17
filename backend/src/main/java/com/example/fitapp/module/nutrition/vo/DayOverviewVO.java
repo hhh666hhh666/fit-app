@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.vo;
 
+import com.example.fitapp.module.profile.vo.EnergyVO;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -24,6 +25,18 @@ public class DayOverviewVO {
 
     /** 有照片的餐次（如 ["breakfast"]）。 */
     private List<String> photoMeals;
+
+    /**
+     * 当天的每日总消耗拆解（ADR 0029）；档案不全时 `complete=false`，前端据此换成「补全档案」入口。
+     * 计算在服务端（EnergyService），前端不再自己算一遍。
+     */
+    private EnergyVO energy;
+
+    /**
+     * 热量缺口 ＝ 总消耗 − 摄入（正数＝缺口，负数＝盈余）；算不出消耗时为 null。
+     * 展示时按正数念：「缺口 320」「盈余 410」，不带正负号（ADR 0029）。
+     */
+    private Integer gap;
 
     @Data
     public static class Totals {
