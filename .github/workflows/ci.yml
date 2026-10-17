@@ -37,6 +37,11 @@ jobs:
       - name: 模块测试守卫
         run: bash scripts/check-module-tests.sh
 
+      # 注解 SQL 的实体误用只在真连库时才炸（编译与 mock 单测全绿），
+      # 2026-10-17 计划列表「系统繁忙」就是这么上的线，所以放进最便宜的 docs job。
+      - name: 注解 SQL 实体用法守卫
+        run: bash scripts/check-mapper-sql.sh
+
   backend:
     name: 后端 · Maven 单测
     runs-on: ubuntu-latest
