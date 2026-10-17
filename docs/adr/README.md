@@ -50,6 +50,10 @@ Status: accepted
 - [ADR 0024](./0024-pr-definition-heaviest-set.md)：PR 判定改为「重量优先」（旧实现取单组重量×次数最大）。
 - [ADR 0025](./0025-cardio-metric-and-floors.md)：有氧专属记录口径——爬楼按层数（动作上声明口径、组次上落层数）。
 - [ADR 0026](./0026-photo-storage-and-backup.md)：餐照移出数据库（图片落文件系统、库里只留路径）＋ 备份策略（库每日 dump、图片每日硬链接快照、异地 OSS、恢复演练随发版）。
+- [ADR 0027](./0027-plan-per-set-targets.md)：计划目标按组设置——每组各一份次数与重量，组数的唯一真相是子表行数。
+- [ADR 0028](./0028-plan-circuit-groups.md)：计划的循环组——若干动作按组轮流做，轮数取最大、组内按序列严格推进。
+- [ADR 0029](./0029-daily-energy-and-calorie-gap.md)：每日总消耗（基础代谢×生活活动系数 ＋ 手填训练消耗）与热量缺口的口径。
+- [ADR 0030](./0030-body-profile-fields-and-body-fat.md)：身体档案的档案字段（性别／出生日期／身高／生活活动档）与体脂率（只记录、不参与计算）。
 
 ## 与其他文档的分工
 
