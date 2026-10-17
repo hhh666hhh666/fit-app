@@ -19,8 +19,11 @@ import java.util.List;
 public interface WorkoutMapper extends BaseMapper<Workout> {
 
     /**
-     * 日志列表：每条带「第一个动作名」概要，按时间倒序。
+     * 日志列表：每条带「第一个动作名」概要与**层数合计**，按时间倒序。
      * `start`／`end` 非空时按月过滤（左闭右开）；`offset` 供触底分页。
+     *
+     * <p>成绩位口径（ADR 0025）：`hasStrength` 为真看容量，否则看 `totalFloors`，
+     * 两者都空才是「—」——纯有氧场次不许显示「0 kg」那种像故障的文案。</p>
      */
     @Select("""
             <script>
@@ -31,7 +34,10 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
                    EXISTS (SELECT 1 FROM workout_block wb2
                            LEFT JOIN exercise e2 ON e2.id = wb2.exercise_id
                            WHERE wb2.workout_id = w.id
-                             AND (e2.muscle IS NULL OR e2.muscle &lt;&gt; 'cardio')) AS hasStrength
+                             AND (e2.muscle IS NULL OR e2.muscle &lt;&gt; 'cardio')) AS hasStrength,
+                   (SELECT COALESCE(SUM(ws2.floors), 0) FROM workout_set ws2
+                    JOIN workout_block wb3 ON wb3.id = ws2.block_id
+                    WHERE wb3.workout_id = w.id) AS totalFloors
             FROM workout w
             WHERE w.user_id = #{userId}
             <if test="start != null"> AND w.created_at &gt;= #{start} AND w.created_at &lt; #{end} </if>

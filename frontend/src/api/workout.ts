@@ -40,6 +40,11 @@ export interface WorkoutListItem {
   totalVolume: number
   /** 该次训练是否含力量动作——纯有氧场次的容量位显示「—」（ADR 0023）。 */
   hasStrength?: boolean
+  /**
+   * 该次训练各组的层数合计（爬楼梯等 `metric = floors` 的动作；没有则 0）。
+   * 纯有氧场次的成绩位改显「总层数」（ADR 0025 的成绩位口径，日志页是后补的那处）。
+   */
+  totalFloors?: number
   createdAt: string
 }
 

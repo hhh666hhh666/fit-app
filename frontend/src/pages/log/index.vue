@@ -5,6 +5,7 @@ import FtTabBar from '@/components/FtTabBar.vue'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands } from '@/utils/format'
+import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 
 const PAGE_SIZE = 50
@@ -123,11 +124,16 @@ function minutes(item: WorkoutListItem): number {
   return Math.round(item.durationSec / 60)
 }
 
-/** 主项容量文案：纯有氧场次显示「—」（有氧不计入容量，ADR 0023）。 */
+/**
+ * 主项成绩文案，口径与详情页／汇总页同一套（ADR 0025，`utils/metric.ts`）：
+ * 有力量动作 → 容量；纯层数口径（爬楼）→ 总层数；都没有 → 「—」。
+ * ⚠️ 纯有氧场次不许写「0 kg」（ADR 0023）——那看着像故障。
+ */
 function lineOf(item: WorkoutListItem): string {
-  const vol =
-    item.hasStrength === false ? '—' : `${formatThousands(Number(item.totalVolume))} kg`
-  return item.firstExercise ? `${item.firstExercise} · ${vol}` : vol
+  const floors = item.totalFloors ?? 0
+  const kind = metricKindOf(item.hasStrength !== false, floors)
+  const val = metricText(kind, Number(item.totalVolume), floors)
+  return item.firstExercise ? `${item.firstExercise} · ${val}` : val
 }
 
 /** 点一行 → 训练详情（带 id；detail 页自己拉 GET /api/workouts/{id}） */
@@ -245,7 +251,7 @@ function doDelete() {
         <view class="ledger__thead">
           <view v-if="selectMode" class="col-check" />
           <text class="col-date">日期 / DATE</text>
-          <text class="col-mid">项目 &amp; 主项容量 / DETAILS</text>
+          <text class="col-mid">项目 &amp; 主项成绩 / DETAILS</text>
           <text class="col-time">用时 / TIME</text>
         </view>
         <view

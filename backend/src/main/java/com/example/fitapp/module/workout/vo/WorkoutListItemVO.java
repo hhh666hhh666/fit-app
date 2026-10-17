@@ -27,5 +27,11 @@ public class WorkoutListItemVO {
      */
     private Boolean hasStrength;
 
+    /**
+     * 该次训练各组的层数合计（`metric = floors` 的动作；没有则 0）。
+     * 成绩位口径见 ADR 0025：有力量动作看容量，纯有氧看层数，都没有才是「—」。
+     */
+    private Integer totalFloors;
+
     private LocalDateTime createdAt;
 }
