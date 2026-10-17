@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.exercise.entity.Exercise;
-import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.plan.dto.PlanSaveDTO;
 import com.example.fitapp.module.plan.entity.Plan;

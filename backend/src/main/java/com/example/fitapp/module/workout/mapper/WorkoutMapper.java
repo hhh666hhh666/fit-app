@@ -141,6 +141,9 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
      * 各动作的历史最佳（ADR 0024 口径：**重量优先，同重量比次数**，并列取最近）。
      * 现算而不读 workout_set.pr（那是「提交时点」的历史布尔），保证归档始终等于当前事实；
      * **有氧动作不参与**（ADR 0023／0024：其「重量」没有可比性）。
+     *
+     * <p>⚠️ 本段 SQL 不带 {@code <script>}，MyBatis 原样发给 MySQL、不做 XML 解析：
+     * 这里必须写裸的 {@code <>}，写成 {@code &lt;&gt;} 会变成字面量、直接语法错误。</p>
      */
     @Select("""
             SELECT * FROM (
@@ -154,7 +157,7 @@ public interface WorkoutMapper extends BaseMapper<Workout> {
                 JOIN workout_block wb ON wb.id = ws.block_id
                 JOIN workout w ON w.id = wb.workout_id
                 JOIN exercise e ON e.id = wb.exercise_id
-                WHERE w.user_id = #{userId} AND wb.exercise_id IS NOT NULL AND e.muscle &lt;&gt; 'cardio'
+                WHERE w.user_id = #{userId} AND wb.exercise_id IS NOT NULL AND e.muscle <> 'cardio'
             ) t
             WHERE t.rn = 1
             ORDER BY t.performedAt DESC
