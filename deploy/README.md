@@ -61,11 +61,18 @@ compose 与本目录下的脚本倒是可以不发版就换（`scp` 到 `/srv/fi
 
 | 时机 | 做什么 | 脚本 |
 |---|---|---|
-| 每次发版、`up -d` **之前** | 强制 dump 一次库；**失败即中止部署** | `backup-mysql.sh` |
+| 每次发版、`up -d` **之前** | 强制 dump 一次业务库；**失败即中止部署** | `backup-mysql.sh` |
+| 每天 03:25 | **quizzy 库**（与 fit_app 共用实例，用它自己的脚本） | `quizzy/.../backup-mysql.sh` |
+| 每天 03:27 | **MySQL 系统库**（账号与权限） | `backup-system-mysql.sh` |
 | 每天 03:30 | 给餐照目录打一份硬链接快照（保留 30 册） | `backup-uploads.sh` |
-| 每天 03:35 | 库全量 dump（保留 30 份） | `backup-mysql.sh` |
+| 每天 03:35 | fit_app 库全量 dump（保留 30 份） | `backup-mysql.sh` |
 | 每天 03:50 | 推一份异地副本到 OSS | `backup-to-oss.sh` |
 | 每次发版、部署**之后** | 用最新备份做一次恢复演练 | `restore-verify.sh` |
+
+**范围说明**：`fit_app`、`quizzy`、`mysql` 三个库**共用同一个 MySQL 实例**（`quizzy-mysql`），
+故障域完全相同，所以每日任务也覆盖另外两个——quizzy 用它自己的脚本（那是它仓库管的东西，
+这里只调用），系统库用本仓库的 `backup-system-mysql.sh`。⚠️ 三者保留策略不同：
+fit_app 与系统库留 **30 份**、quizzy 按它自己的规则留 **7 天**、且 quizzy 的 dump **未压缩**。
 
 ⚠️ 顺序是**先图片、后数据库**。两者没法在同一瞬间完成，顺序决定「万一卡在中间」的最坏结果：
 先图后库最坏是多一张没人认领的图片（无害）；反过来会出现「记录指向不存在的图」（空号，最麻烦）。
