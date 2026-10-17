@@ -227,8 +227,8 @@ jobs:
           # 备份与恢复脚本随发版一起送（ADR 0026）：server-deploy.sh 在 up -d 之前会检查
           # ./backup-mysql.sh 是否**可执行**，所以下面必须补 chmod——scp 不保留执行位。
           scp scripts/server-deploy.sh scripts/server-rollback.sh scripts/server-compose.sh \
-            scripts/backup-mysql.sh scripts/backup-uploads.sh scripts/backup-to-oss.sh \
-            scripts/restore-verify.sh scripts/server-install-cron.sh \
+            scripts/backup-mysql.sh scripts/backup-system-mysql.sh scripts/backup-uploads.sh \
+            scripts/backup-to-oss.sh scripts/restore-verify.sh scripts/server-install-cron.sh \
             "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/srv/fit-app/compose/scripts/"
           ssh "${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}" \
             'chmod +x /srv/fit-app/compose/scripts/*.sh'
