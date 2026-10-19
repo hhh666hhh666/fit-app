@@ -87,6 +87,19 @@ const lastWorkout = ref<{
 } | null>(null)
 const lastLoaded = ref(false)
 
+/** 爬楼块的行值＝该块各组层数合计；一层都没登记（历史数据）时返回 null，页面显示「—」。 */
+function totalFloorsOf(sets: { floors?: number | null }[]): number | null {
+  let seen = false
+  let sum = 0
+  for (const s of sets) {
+    if (s.floors != null) {
+      seen = true
+      sum += s.floors
+    }
+  }
+  return seen ? sum : null
+}
+
 async function refreshLastWorkout() {
   try {
     const list = await listWorkouts(1)
@@ -102,17 +115,27 @@ async function refreshLastWorkout() {
       date: formatDateLabel(summary.createdAt),
       rows: detail.blocks.map((b) => {
         const lastSet = b.sets[b.sets.length - 1]
+        // 爬楼（ADR 0025／0031）：一行给整块总层数——层数没有「最后一组有意义」这回事；
+        // 力量动作仍读最后一组，那是看渐进超负荷的依据。
+        const floors = b.metric === 'floors' ? totalFloorsOf(b.sets) : null
         return {
           name: b.name,
-          value: lastSet ? `${lastSet.weight} kg × ${lastSet.reps}` : '—',
+          value:
+            b.metric === 'floors'
+              ? floors != null
+                ? `${formatThousands(floors)} 层`
+                : '—'
+              : lastSet
+                ? `${lastSet.weight} kg × ${lastSet.reps}`
+                : '—',
           pr: b.sets.some((s) => s.pr)
         }
       }),
-      footer: `${
-        detail.blocks.some((b) => b.cardio !== true)
-          ? `总容量 ${formatThousands(Math.round(summary.totalVolume))} kg`
-          : '总容量 —'
-      } · ${Math.max(1, Math.round(summary.durationSec / 60))} 分钟`
+      // 底部口径（2026-10-19 拍定）：消耗（手填，未填写「—」）＋ 时长，不再给总容量
+      footer: `消耗 ${summary.calories != null ? `${summary.calories} 大卡` : '—'} · ${Math.max(
+        1,
+        Math.round(summary.durationSec / 60)
+      )} 分钟`
     }
     lastLoaded.value = true
   } catch {
