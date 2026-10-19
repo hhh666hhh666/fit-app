@@ -81,5 +81,11 @@ mysqld 常驻本身就 230MB，余量只剩约 125MB。昨晚那 156 秒也不�
   而 `swappiness=0` 让匿名页永不换出（宿主还有 753MB 空闲 swap）、容器 swap 占用为 0；
   dump 只贡献最后一次 6MB 分配。补方案戊（容器级 swappiness 调 60）并改为「戊优先、乙次之」。
   另：`2026-10-16` 结案时的占用是 146MB，到 OOM 时 383.6MB，三天涨了 **237MB**——「只涨不降」是关键特征。
+- 2026-10-19 20:38：**空闲 120 秒抽样，RSS 252.0 → 252.0MB、大页 204 → 204MB，零增长**。
+  所以不是「持续泄漏」，而是**活动期把水位抬高、空闲时不回落**的棘轮：分配器（absl/tcmalloc）
+  保留高水位、THP 让归还以 2MB 为单位、且没有人调用 `malloc_trim`。活动期的抬升来源可测的有：
+  `temptable_max_ram` 仍是默认 **1GB**（`internal_tmp_mem_storage_engine=TempTable`）、
+  重启后 2 小时创建了 **288 个内部临时表**、**1611 次连接**（约 13 次/分，来自两个 app 容器，呈突发式）；
+  `thread_stack=1MB`、`table_open_cache=400`、连接按需分配的 sort/join 缓冲各 256KB。
 
 > 关联：ADR 0026、ADR 0005
