@@ -7,7 +7,7 @@
 2026-10-19 18:28 发 v0.12.0 时，部署前的强制备份（`scripts/backup-mysql.sh`，走 `docker exec … mysqldump`）
 把 `quizzy-mysql` 顶到 384MB 上限，内核在 18:31:11 直接 OOM-kill 掉 `mysqld`（`dmesg` 的 `oom_memcg`
 指向该容器，容器随后就地重启）。备份因此产出 2.8K 的半截文件、脚本非零退出，`server-deploy.sh`
-按 [ADR 0026](../../adr/0026-photo-storage-and-backup.md) 中止部署——**服务没被换掉，但发版失败**；
+按 [ADR 0026](../adr/0026-photo-storage-and-backup.md) 中止部署——**服务没被换掉，但发版失败**；
 同一条流水线重跑一次（MySQL 刚重启、占用回到 208MB）就成功了。
 
 历史上同名问题在 [2026-10-16 已结案](./archive/2026-10-16-TODO-共享MySQL容器内存.md)：当时把
@@ -27,7 +27,7 @@ mysqld 常驻本身就 230MB，余量只剩约 125MB。昨晚那 156 秒也不�
   代价：`mysqldump` 进程不再计入容器 cgroup（真正顶爆的那部分是它），但要接受「备份依赖宿主客户端与 root 账号」；
   宿主已有 `/usr/bin/mysqldump`、3306 只绑 `127.0.0.1`，2026-10-19 实测 `--no-data` 可通。
 - **方案乙：抬高 `quizzy-mysql` 的 `mem_limit`**——代价：跨项目改 quizzy 编排，且整机本来就超卖
-  （见 [内存策略](../../operations/内存策略.md) §二）；旧结论是把「杀 MySQL」变成「杀别的容器」。
+  （见 [内存策略](../operations/内存策略.md) §二）；旧结论是把「杀 MySQL」变成「杀别的容器」。
 - **方案丙：备份前加内存闸**——`docker stats` 里占用超过阈值就明确失败并给出提示，而不是生成半截文件——
   代价：治标；且部署会被更频繁地挡住（挡住总比带病迁移好）。
 - **方案丁：查透明大页与 mysqld 常驻**——`memory.stat` 里 `rss_huge = 190MB`，而缓冲池只有 64MB；
