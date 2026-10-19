@@ -15,12 +15,14 @@ export interface PlanListItem {
   lastHasStrength?: boolean | null
 }
 
-/** 某一组的目标（ADR 0027）：两项都可为空，但不能当组数不存在。 */
+/** 某一组的目标（ADR 0027／0031）：三项都可为空，组数由数组长度表达。 */
 export interface PlanSetTarget {
   setIndex?: number
   reps?: number | null
   /** 该组目标重量 kg。 */
   weight?: number | null
+  /** 该组目标层数：仅 `metric = floors` 的动作（爬楼）有值。 */
+  floors?: number | null
 }
 
 export interface PlanExerciseItem {
@@ -52,7 +54,7 @@ export interface PlanSavePayload {
   exercises: {
     exerciseId: number
     /** 逐组目标；数组顺序即组序，空数组＝不设目标。 */
-    sets?: { reps?: number | null; weight?: number | null }[]
+    sets?: { reps?: number | null; weight?: number | null; floors?: number | null }[]
     /** 循环组号；null/不传＝不参与循环。 */
     circuitNo?: number | null
   }[]

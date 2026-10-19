@@ -140,6 +140,9 @@ public class PlanService {
             }
 
             List<PlanSaveDTO.SetDTO> sets = resolveSets(item);
+            // 记录口径决定这一行存哪套目标值：floors（爬楼）只认层数，其余只认次数／重量。
+            // 归一放在服务端：客户端多传的那几个字段一律丢弃，避免同一个数在两套语义里混用（ADR 0031）。
+            boolean floorsMetric = METRIC_FLOORS.equals(e.getMetric());
 
             PlanExercise pe = new PlanExercise();
             pe.setPlanId(planId);
@@ -148,8 +151,8 @@ public class PlanService {
             pe.setMuscle(e.getMuscle());
             // 组数的唯一真相是 sets 行数；target_sets 只是同步过来的冗余列（ADR 0027）
             pe.setTargetSets(sets.isEmpty() ? null : sets.size());
-            pe.setTargetReps(firstReps(sets));
-            pe.setTargetWeight(firstWeight(sets));
+            pe.setTargetReps(floorsMetric ? null : firstReps(sets));
+            pe.setTargetWeight(floorsMetric ? null : firstWeight(sets));
             pe.setCircuitNo(item.getCircuitNo());
             pe.setSortOrder(order++);
             planExerciseMapper.insert(pe);
@@ -159,8 +162,9 @@ public class PlanService {
                 PlanExerciseSet row = new PlanExerciseSet();
                 row.setPlanExerciseId(pe.getId());
                 row.setSetIndex(index++);
-                row.setReps(s.getReps());
-                row.setWeight(s.getWeight());
+                row.setReps(floorsMetric ? null : s.getReps());
+                row.setWeight(floorsMetric ? null : s.getWeight());
+                row.setFloors(floorsMetric ? s.getFloors() : null);
                 planExerciseSetMapper.insert(row);
             }
         }
@@ -267,6 +271,7 @@ public class PlanService {
                 vo2.setSetIndex(s.getSetIndex());
                 vo2.setReps(s.getReps());
                 vo2.setWeight(s.getWeight());
+                vo2.setFloors(s.getFloors());
                 return vo2;
             }).toList());
             return i;

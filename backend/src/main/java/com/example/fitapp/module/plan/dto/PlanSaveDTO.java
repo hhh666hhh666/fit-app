@@ -65,7 +65,7 @@ public class PlanSaveDTO {
         private Integer circuitNo;
     }
 
-    /** 某一组的目标。两项都可为 null，但不能两项同时为空（每组的次数或重量至少填一项）。 */
+    /** 某一组的目标：次数／重量／层数都可为 null（组数由数组长度表达）。 */
     @Data
     public static class SetDTO {
 
@@ -76,5 +76,13 @@ public class PlanSaveDTO {
         @DecimalMin(value = "0", message = "该组重量不能为负")
         @DecimalMax(value = "999.99", message = "该组重量过大")
         private BigDecimal weight;
+
+        /**
+         * 该组目标层数：只对 `metric = floors` 的动作（爬楼）有意义（ADR 0031）。
+         * 上限取 51102（主人 2026-10-19 拍定），前端同一口径。
+         */
+        @Min(value = 1, message = "该组层数至少为 1")
+        @Max(value = 51102, message = "该组层数过大")
+        private Integer floors;
     }
 }

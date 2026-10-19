@@ -55,5 +55,8 @@ public class PlanDetailVO {
         private Integer reps;
 
         private BigDecimal weight;
+
+        /** 该组目标层数：仅 `metric = floors` 的动作有值，其余 null（ADR 0031）。 */
+        private Integer floors;
     }
 }

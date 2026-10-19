@@ -106,6 +106,13 @@ class PlanServiceTest {
         return s;
     }
 
+    /** 一组爬楼目标：层数＋（故意多传的）次数与重量，用来验服务端归一。 */
+    private static PlanSaveDTO.SetDTO floorsSet(Integer floors, Integer reps, String weight) {
+        PlanSaveDTO.SetDTO s = set(reps, weight);
+        s.setFloors(floors);
+        return s;
+    }
+
     @Test
     void create_duplicateName_throws() {
         when(planMapper.selectCount(any())).thenReturn(1L);
@@ -183,8 +190,82 @@ class PlanServiceTest {
     }
 
     @Test
-    void create_noTargets_writesNoSetRows() {
+    void create_floorsMetric_persistsFloorsAndDropsRepsWeight() {
         when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(5L)).thenReturn(cardio(5L));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        PlanSaveDTO dto = new PlanSaveDTO();
+        dto.setName("爬楼日");
+        PlanSaveDTO.ItemDTO item = new PlanSaveDTO.ItemDTO();
+        item.setExerciseId(5L);
+        // 第一组故意多传次数／重量：服务端只信层数，多传的字段必须被丢掉（ADR 0031）
+        item.setSets(List.of(floorsSet(20, 12, "60"), floorsSet(20, null, null), floorsSet(15, null, null)));
+        dto.setExercises(List.of(item));
+
+        service().create(7L, dto);
+
+        ArgumentCaptor<PlanExercise> peCaptor = ArgumentCaptor.forClass(PlanExercise.class);
+        verify(planExerciseMapper).insert(peCaptor.capture());
+        assertEquals(3, peCaptor.getValue().getTargetSets());
+        assertNull(peCaptor.getValue().getTargetReps());
+        assertNull(peCaptor.getValue().getTargetWeight());
+
+        ArgumentCaptor<PlanExerciseSet> setCaptor = ArgumentCaptor.forClass(PlanExerciseSet.class);
+        verify(planExerciseSetMapper, times(3)).insert(setCaptor.capture());
+        List<PlanExerciseSet> rows = setCaptor.getAllValues();
+        assertEquals(List.of(20, 20, 15), rows.stream().map(PlanExerciseSet::getFloors).toList());
+        assertEquals(Arrays.asList(null, null, null), rows.stream().map(PlanExerciseSet::getReps).toList());
+        assertEquals(Arrays.asList(null, null, null), rows.stream().map(PlanExerciseSet::getWeight).toList());
+    }
+
+    @Test
+    void create_strengthMetric_ignoresClientFloors() {
+        when(planMapper.selectCount(any())).thenReturn(0L);
+        when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of());
+
+        PlanSaveDTO dto = new PlanSaveDTO();
+        dto.setName("胸 & 三头");
+        PlanSaveDTO.ItemDTO item = new PlanSaveDTO.ItemDTO();
+        item.setExerciseId(1L);
+        item.setSets(List.of(floorsSet(20, 12, "60")));
+        dto.setExercises(List.of(item));
+
+        service().create(7L, dto);
+
+        ArgumentCaptor<PlanExerciseSet> setCaptor = ArgumentCaptor.forClass(PlanExerciseSet.class);
+        verify(planExerciseSetMapper).insert(setCaptor.capture());
+        assertNull(setCaptor.getValue().getFloors());
+        assertEquals(12, setCaptor.getValue().getReps());
+    }
+
+    @Test
+    void detail_floorsTarget_surfacedInSets() {
+        when(planMapper.selectById(10L)).thenReturn(ownPlan(10L, 7L));
+        PlanExercise pe = new PlanExercise();
+        pe.setId(99L);
+        pe.setPlanId(10L);
+        pe.setExerciseId(5L);
+        pe.setName("爬楼");
+        pe.setMuscle("cardio");
+        when(planExerciseMapper.selectList(any())).thenReturn(List.of(pe));
+        when(exerciseMapper.selectBatchIds(any())).thenReturn(List.of(cardio(5L)));
+
+        PlanExerciseSet row = new PlanExerciseSet();
+        row.setPlanExerciseId(99L);
+        row.setSetIndex(1);
+        row.setFloors(18);
+        when(planExerciseSetMapper.selectList(any())).thenReturn(List.of(row));
+
+        var vo = service().detail(7L, 10L);
+
+        assertEquals("floors", vo.getExercises().get(0).getMetric());
+        assertEquals(18, vo.getExercises().get(0).getSets().get(0).getFloors());
+    }
+
+    @Test
+    void create_noTargets_writesNoSetRows() {        when(planMapper.selectCount(any())).thenReturn(0L);
         when(exerciseMapper.selectById(1L)).thenReturn(exercise(1L, null, false));
         when(planExerciseMapper.selectList(any())).thenReturn(List.of());
 

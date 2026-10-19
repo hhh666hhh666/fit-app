@@ -5,15 +5,17 @@ import { createPlan, deletePlan, getPlan, updatePlan } from '@/api/plan'
 import type { PlanSavePayload } from '@/api/plan'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
-import { formatSetTargets } from '@/utils/plan-target'
+import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 计划编辑/新建（设计稿：.workbuddy/stitch/screen/plan-edit.png）──
 
-/** 一组的目标：两项都可空（只记次数、只记重量都合法）。 */
+/** 一组的目标：三项都可空（只记次数、只记重量、只记层数都合法）。 */
 interface SetTarget {
   reps: number | null
   weight: number | null
+  /** 该组目标层数：仅爬楼（`metric = floors`）使用（ADR 0031）。 */
+  floors: number | null
 }
 
 interface Row {
@@ -32,6 +34,8 @@ interface Row {
 const CIRCUIT_LABELS = ['A', 'B', 'C', 'D']
 const MAX_SETS = 20
 const MAX_CIRCUIT = 4
+/** 单组层数上限（2026-10-19 拍定，与后端 `PlanSaveDTO.SetDTO.floors` 同一口径）。 */
+const MAX_FLOORS = 51102
 
 const pick = usePickStore()
 
@@ -69,18 +73,23 @@ async function loadDetail(id: number) {
 
 /** 后端一律返回 sets；老数据（只有组数）在这里兜一次，免得打开计划看不到目标。 */
 function toSets(
-  sets: { reps?: number | null; weight?: number | null }[] | null | undefined,
+  sets: { reps?: number | null; weight?: number | null; floors?: number | null }[] | null | undefined,
   targetSets?: number | null,
   targetReps?: number | null,
   targetWeight?: number | null
 ): SetTarget[] {
   if (sets && sets.length > 0) {
-    return sets.map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null }))
+    return sets.map((s) => ({
+      reps: s.reps ?? null,
+      weight: s.weight ?? null,
+      floors: s.floors ?? null
+    }))
   }
   if (targetSets != null && targetSets > 0) {
     return Array.from({ length: targetSets }, () => ({
       reps: targetReps ?? null,
-      weight: targetWeight ?? null
+      weight: targetWeight ?? null,
+      floors: null
     }))
   }
   return []
@@ -109,7 +118,7 @@ const totalSets = computed(() => rows.value.reduce((sum, r) => sum + r.sets.leng
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
-/** 有氧动作（按层数录或纯有氧肌群）：不参与循环组，也不设逐组次数（ADR 0028）。 */
+/** 有氧动作（按层数录或纯有氧肌群）：不参与循环组（ADR 0028）。 */
 function isCardio(r: Row): boolean {
   return r.metric === 'floors' || r.muscle === 'cardio'
 }
@@ -120,10 +129,10 @@ function circuitLabel(no: number | null): string {
 }
 
 /**
- * 计划行摘要（ADR 0027）：折叠规则抽在 `utils/plan-target` 里，与会话页共用同一份念法。
+ * 计划行摘要（ADR 0027／0031）：折叠规则抽在 `utils/plan-target` 里，与会话页、预览弹层共用同一份念法。
  */
 function targetText(r: Row): string {
-  return formatSetTargets(r.sets, isCardio(r))
+  return formatSetTargets(r.sets, targetModeOf(r.metric, r.muscle))
 }
 
 // ── 行操作：调整目标 / 上移 / 下移 / 移除（拖拽排序留后续迭代）──
@@ -149,10 +158,12 @@ function move(from: number, to: number) {
   rows.value.splice(to, 0, item)
 }
 
-// ── 目标组次弹层（逐组编辑，ADR 0027）──
+// ── 目标组次弹层（逐组编辑，ADR 0027／0031）──
 interface SheetRow {
   reps: string
   weight: string
+  /** 层数：仅爬楼行使用，其余口径一直是空串。 */
+  floors: string
 }
 
 const targetSheet = ref<{ show: boolean; index: number; count: string; rows: SheetRow[] }>({
@@ -164,25 +175,33 @@ const targetSheet = ref<{ show: boolean; index: number; count: string; rows: She
 
 function openTargetEditor(i: number) {
   const r = rows.value[i]
+  const mode = targetModeOf(r.metric, r.muscle)
   targetSheet.value = {
     show: true,
     index: i,
     count: r.sets.length > 0 ? String(r.sets.length) : '',
-    // 有氧只记组数，不展示逐组次数／重量
-    rows: isCardio(r)
-      ? []
-      : r.sets.map((s) => ({
-          reps: s.reps != null ? String(s.reps) : '',
-          weight: s.weight != null ? String(s.weight) : ''
-        }))
+    // 纯有氧（非 floors）只记组数，不铺逐组行；爬楼铺「层数」行；力量铺「次数／重量」行
+    rows:
+      mode === 'cardio'
+        ? []
+        : r.sets.map((s) => ({
+            reps: s.reps != null ? String(s.reps) : '',
+            weight: s.weight != null ? String(s.weight) : '',
+            floors: s.floors != null ? String(s.floors) : ''
+          }))
   }
 }
 
-/** 当前正在编辑的动作是不是有氧（决定提示语与是否展示逐组行）。 */
-const editingIsCardio = computed(() => {
+/** 当前正在编辑的动作按哪种口径（决定提示语与逐组行的字段）。 */
+const editingMode = computed(() => {
   const i = targetSheet.value.index
-  return i >= 0 && rows.value[i] ? isCardio(rows.value[i]) : false
+  return i >= 0 && rows.value[i] ? targetModeOf(rows.value[i].metric, rows.value[i].muscle) : 'strength'
 })
+
+/** 纯有氧（只记组数、没有逐组行）。 */
+const editingIsCardio = computed(() => editingMode.value === 'cardio')
+/** 爬楼：逐组行只有一个「层数」栏。 */
+const editingIsFloors = computed(() => editingMode.value === 'floors')
 
 /**
  * 组数输入：改数字即增删行；新行默认沿用上一行的值。
@@ -191,12 +210,12 @@ const editingIsCardio = computed(() => {
 function onCountInput(e: any) {
   const raw: string = e?.detail?.value ?? e?.target?.value ?? ''
   targetSheet.value.count = raw
-  // 有氧只记组数：不铺逐组行（铺了也没有可填的两栏）
+  // 纯有氧只记组数：不铺逐组行（没有可填的栏）
   if (editingIsCardio.value) return
   const n = raw.trim() === '' ? 0 : Math.min(MAX_SETS, Math.max(0, Math.floor(Number(raw) || 0)))
   const list = targetSheet.value.rows
   if (n > list.length) {
-    const last = list[list.length - 1] ?? { reps: '', weight: '' }
+    const last = list[list.length - 1] ?? { reps: '', weight: '', floors: '' }
     while (list.length < n) list.push({ ...last })
   } else if (n < list.length) {
     list.splice(n)
@@ -211,6 +230,7 @@ function fillAllSets() {
   list.forEach((r) => {
     r.reps = first.reps
     r.weight = first.weight
+    r.floors = first.floors
   })
 }
 
@@ -218,7 +238,7 @@ function confirmTarget() {
   const t = targetSheet.value
   if (t.index < 0) return
   const row = rows.value[t.index]
-  const cardio = isCardio(row)
+  const mode = targetModeOf(row.metric, row.muscle)
 
   if (t.count.trim() === '') {
     row.sets = []
@@ -231,9 +251,25 @@ function confirmTarget() {
     return
   }
 
-  // 有氧动作只记组数（层数目标不在本批范围），组内数值一律留空
-  if (cardio) {
-    row.sets = Array.from({ length: n }, () => ({ reps: null, weight: null }))
+  // 纯有氧（口径不是 floors）：只记组数，组内数值一律留空
+  if (mode === 'cardio') {
+    row.sets = Array.from({ length: n }, () => ({ reps: null, weight: null, floors: null }))
+    targetSheet.value.show = false
+    return
+  }
+
+  // 爬楼：只校验层数；每组可留空（全空＝只记组数），不做「至少填一项」那套要求
+  if (mode === 'floors') {
+    const parsed: SetTarget[] = []
+    for (const s of t.rows) {
+      const floors = s.floors.trim() === '' ? null : Number(s.floors)
+      if (floors != null && (!Number.isInteger(floors) || floors < 1 || floors > MAX_FLOORS)) {
+        uni.showToast({ title: `每组层数 1–${MAX_FLOORS}`, icon: 'none' })
+        return
+      }
+      parsed.push({ reps: null, weight: null, floors })
+    }
+    row.sets = parsed
     targetSheet.value.show = false
     return
   }
@@ -250,7 +286,7 @@ function confirmTarget() {
       uni.showToast({ title: '每组重量 0–999.9 kg', icon: 'none' })
       return
     }
-    parsed.push({ reps, weight })
+    parsed.push({ reps, weight, floors: null })
   }
   // 填了组数却一个值都没有 = 把「不设目标」表达成了 N 个空行，没有意义
   if (parsed.every((s) => s.reps == null && s.weight == null)) {
@@ -308,7 +344,7 @@ async function save() {
     name: planName,
     exercises: rows.value.map((r) => ({
       exerciseId: r.exerciseId,
-      sets: r.sets.map((s) => ({ reps: s.reps, weight: s.weight })),
+      sets: r.sets.map((s) => ({ reps: s.reps, weight: s.weight, floors: s.floors })),
       circuitNo: r.circuitNo
     }))
   }
@@ -463,18 +499,28 @@ function goBack() {
         </view>
         <view v-for="(s, i) in targetSheet.rows" :key="i" class="ts__setrow">
           <text class="ts__setidx ft-num">第 {{ i + 1 }} 组</text>
-          <view class="ts__setfield">
-            <input v-model="s.reps" type="number" class="ts__setinput ft-num" placeholder="–" />
-            <text class="ts__setunit">次</text>
+          <!-- 爬楼：一层一栏（ADR 0031）；力量：次数／重量两栏 -->
+          <view v-if="editingIsFloors" class="ts__setfield">
+            <input v-model="s.floors" type="number" class="ts__setinput ft-num" placeholder="–" />
+            <text class="ts__setunit">层</text>
           </view>
-          <view class="ts__setfield">
-            <input v-model="s.weight" type="digit" class="ts__setinput ft-num" placeholder="–" />
-            <text class="ts__setunit">kg</text>
-          </view>
+          <template v-else>
+            <view class="ts__setfield">
+              <input v-model="s.reps" type="number" class="ts__setinput ft-num" placeholder="–" />
+              <text class="ts__setunit">次</text>
+            </view>
+            <view class="ts__setfield">
+              <input v-model="s.weight" type="digit" class="ts__setinput ft-num" placeholder="–" />
+              <text class="ts__setunit">kg</text>
+            </view>
+          </template>
         </view>
       </view>
 
-      <text v-if="editingIsCardio" class="ts__hint">
+      <text v-if="editingIsFloors" class="ts__hint">
+        每组层数可留空（全空＝只记组数）；开始训练时按各组目标预填
+      </text>
+      <text v-else-if="editingIsCardio" class="ts__hint">
         有氧动作只记组数，不设每组次数与重量
       </text>
       <text v-else class="ts__hint">组数留空 = 不设目标；开始训练时按各组目标预填</text>

@@ -6,7 +6,7 @@ import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
 import { formatClock, muscleLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
-import { formatSetTargets } from '@/utils/plan-target'
+import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
 import {
   clearSession,
@@ -63,11 +63,14 @@ const calories = computed({
 interface PlannedSet {
   reps?: number | null
   weight?: number | null
+  /** 该组目标层数：仅爬楼（`metric = floors`）（ADR 0031）。 */
+  floors?: number | null
 }
 
 /**
- * 按逐组目标铺初始组行（ADR 0027）：**第 i 行取第 i 组的目标**；
+ * 按逐组目标铺初始组行（ADR 0027／0031）：**第 i 行取第 i 组的目标**；
  * 计划没给组目标（空数组）＝不设目标，1 行空值起步（与旧行为一致）。
+ * 爬楼组的层数同样预填进「层数」栏——目标只是默认值，训练中可改（ADR 0007）。
  */
 function buildSets(
   targets: PlannedSet[] | null | undefined,
@@ -81,7 +84,7 @@ function buildSets(
   return list.map((t) => ({
     w: (t.weight ?? fallbackWeight) != null ? String(t.weight ?? fallbackWeight) : '',
     r: (t.reps ?? fallbackReps) != null ? String(t.reps ?? fallbackReps) : '',
-    f: '',
+    f: t.floors != null ? String(t.floors) : '',
     done: false,
     doneAt: null,
     dur: null
@@ -92,9 +95,12 @@ function goalText(e: {
   sets?: PlannedSet[] | null
   metric?: string | null
 }): string {
-  const cardio = e.metric === 'floors'
-  const list = (e.sets ?? []).map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null }))
-  return formatSetTargets(list, cardio)
+  const list = (e.sets ?? []).map((s) => ({
+    reps: s.reps ?? null,
+    weight: s.weight ?? null,
+    floors: s.floors ?? null
+  }))
+  return formatSetTargets(list, targetModeOf(e.metric))
 }
 
 /** 「上次数据」：有 exerciseId 时从真接口取（自动/手动切动作时都要重拉）。 */
