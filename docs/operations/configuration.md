@@ -89,10 +89,8 @@ Get-Content .env -Encoding UTF8 | ForEach-Object {
 | `MYSQL_DATA_DIR` | 云上不再需要（那是自带 MySQL 时才用的数据卷路径） |
 | 库不存在时 | JDBC URL 带 `createDatabaseIfNotExist=true`，首次部署自动建 `fit_app` |
 
-⚠️ 备份脚本**默认从宿主直连 `127.0.0.1:3306`** dump（3306 只绑回环，它映射到 `quizzy-mysql`）；
-宿主没有 `mysqldump` 时才退回 `docker exec`。⚠️ 别在容器里连 `localhost`——那是 MySQL 自己；
-也别从宿主连 `localhost` 之外的地址，3306 没有对外暴露。2026-10-19 之前走的是容器内 dump，
-它在容器被 OOM 时会把备份一起带走（见 `scripts/backup-mysql.sh` 头部注释）。
+⚠️ 备份脚本要 `docker exec` 进 `quizzy-mysql` 去 dump `fit_app`，不能连 `localhost:3306`
+（宿主上 3306 只绑回环，且那是 quizzy 的映射；容器里的 localhost 是它自己）。
 
 ## 同源部署不需要配 CORS
 
