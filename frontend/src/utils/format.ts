@@ -23,6 +23,12 @@ export function formatDateLabel(iso: string): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+/** ISO 时间 → "23:51"（只取时分，与日期分两行显示时用） */
+export function formatTimeLabel(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 /** ISO 时间 → "10月11日 23:51"（精确到分，用来区分同一天的多条记录） */
 export function formatDateTimeLabel(iso: string): string {
   const d = new Date(iso)

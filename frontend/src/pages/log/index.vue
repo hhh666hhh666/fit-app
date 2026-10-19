@@ -4,7 +4,7 @@ import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
-import { formatDateLabel, formatThousands } from '@/utils/format'
+import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 
@@ -271,7 +271,10 @@ function doDelete() {
           </view>
           <view class="lrow__date">
             <text class="lrow__date-main ft-num">{{ formatDateLabel(item.createdAt) }}</text>
-            <text class="lrow__date-week">{{ weekdayOf(item.createdAt) }}</text>
+            <!-- 时分放在副行：日期列只有 170rpx，挤进主行会把中间标题列压扁（2026-10-19） -->
+            <text class="lrow__date-week ft-num">
+              {{ formatTimeLabel(item.createdAt) }} · {{ weekdayOf(item.createdAt) }}
+            </text>
           </view>
           <view class="lrow__mid">
             <view class="lrow__title-line">

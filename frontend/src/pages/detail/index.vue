@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getWorkout, updateWorkout, updateWorkoutNote } from '@/api/workout'
 import type { WorkoutDetail } from '@/api/workout'
-import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 
@@ -303,7 +303,7 @@ function back() {
         <view class="detail__head-mid">
           <text v-if="!detail" class="detail__head-title">训练详情</text>
           <template v-else-if="editing">
-            <text class="detail__head-date ft-num">{{ formatDateLabel(detail.createdAt) }}</text>
+            <text class="detail__head-date ft-num">{{ formatDateTimeLabel(detail.createdAt) }}</text>
             <input
               v-model="draft.title"
               class="detail__title-input"
@@ -313,7 +313,7 @@ function back() {
             />
           </template>
           <text v-else class="detail__head-title">
-            {{ formatDateLabel(detail.createdAt) }} · {{ detail.title }}
+            {{ formatDateTimeLabel(detail.createdAt) }} · {{ detail.title }}
           </text>
         </view>
         <view v-if="detail" class="detail__act" @click="onHeadAction">

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { updateWorkoutNote } from '@/api/workout'
-import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureLogin } from '@/utils/guard'
@@ -77,7 +77,7 @@ async function close() {
         <!-- 标题 -->
         <view class="summary__title-wrap">
           <text class="summary__title">训练完成</text>
-          <text class="summary__sub">{{ formatDateLabel(summary.createdAt) }} · {{ summary.title }}</text>
+          <text class="summary__sub">{{ formatDateTimeLabel(summary.createdAt) }} · {{ summary.title }}</text>
         </view>
 
         <!-- 数据条：时长 / 组数 / 总容量 -->
