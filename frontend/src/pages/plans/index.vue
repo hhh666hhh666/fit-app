@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
-import type { PlanListItem } from '@/api/plan'
-import { formatDateLabel, formatThousands } from '@/utils/format'
+import { getPlan, type PlanDetail, type PlanListItem } from '@/api/plan'
+import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
+import { clearSession, loadSession, netElapsedSec } from '@/utils/session'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 训练计划列表（设计稿：.workbuddy/stitch/screen/plans.png）──
@@ -40,9 +42,75 @@ function toEdit(id: number) {
   uni.navigateTo({ url: `/pages/plan-edit/index?id=${id}` })
 }
 
-/** 打开一个计划即可照着练：直接进训练会话 */
-function toTrain(id: number) {
-  uni.navigateTo({ url: `/pages/session/index?plan=${id}` })
+// ── 点计划＝先看编排，再决定开练（ADR 0032）──
+// 整卡点击不再直接进会话页：误触代价从「莫名开始一场训练」降到「多看一眼」。
+const preview = ref<{ open: boolean; id: number | null; loading: boolean; plan: PlanDetail | null }>({
+  open: false,
+  id: null,
+  loading: false,
+  plan: null
+})
+
+async function openPreview(id: number) {
+  preview.value = { open: true, id, loading: true, plan: null }
+  try {
+    const detail = await getPlan(id)
+    // 快速换点另一张卡时，旧请求回来不许覆盖新的
+    if (preview.value.id === id) preview.value.plan = detail
+  } catch {
+    preview.value.open = false
+  } finally {
+    if (preview.value.id === id) preview.value.loading = false
+  }
+}
+
+function closePreview() {
+  preview.value.open = false
+}
+
+const CIRCUIT_LABELS = ['A', 'B', 'C', 'D']
+
+function previewGoalOf(e: PlanDetail['exercises'][number]): string {
+  return formatSetTargets(e.sets, targetModeOf(e.metric, e.muscle))
+}
+
+function previewCircuitOf(no?: number | null): string {
+  if (no == null) return ''
+  return `循环${CIRCUIT_LABELS[no - 1] ?? no}`
+}
+
+/**
+ * 「开始训练」：已有进行中的会话时先问一次（ADR 0020 同一套口径）——
+ * 会话不设过期，冲突只在「要开新的」这一刻才需要决定。
+ * ⚠️ 开新会话必须带 `fresh=1`：不带的话会话页会静默接续本机那条旧会话，点 A 计划却进了 B。
+ */
+function startPreviewPlan() {
+  const id = preview.value.id
+  if (id == null) return
+  const s = loadSession()
+  if (s && s.blocks.length > 0) {
+    const done = s.blocks.reduce((n, b) => n + b.sets.filter((x) => x.done).length, 0)
+    uni.showModal({
+      title: '上一次训练还没结束',
+      content: `已记 ${done} 组 · 已进行 ${formatClock(
+        netElapsedSec(s, Date.now())
+      )}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
+      confirmText: '继续上次',
+      cancelText: '开新的',
+      success: ({ confirm }) => {
+        preview.value.open = false
+        if (confirm) {
+          uni.navigateTo({ url: '/pages/session/index' })
+          return
+        }
+        clearSession()
+        uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
+      }
+    })
+    return
+  }
+  preview.value.open = false
+  uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
 }
 </script>
 
@@ -72,7 +140,7 @@ function toTrain(id: number) {
       v-for="p in schedule.plans"
       :key="p.id"
       class="ft-card pcard"
-      @click="toTrain(p.id)"
+      @click="openPreview(p.id)"
     >
       <view class="pcard__head">
         <view class="pcard__name-wrap">
@@ -107,7 +175,47 @@ function toTrain(id: number) {
 
     <view v-if="schedule.plans.length > 0" class="plans__hint">
       <text class="plans__hint-dot">●</text>
-      <text>打开一个计划即可照着练</text>
+      <text>点开计划先看编排，再决定开始</text>
+    </view>
+
+    <!-- 计划预览弹层：先看清编排骨再开练（ADR 0032） -->
+    <view v-if="preview.open" class="sheet-mask" @click="closePreview" />
+    <view v-if="preview.open" class="sheet">
+      <view class="sheet__handle" />
+      <text class="sheet__title">{{ preview.plan?.name ?? '训练计划' }}</text>
+      <text class="sheet__sub ft-num">
+        {{
+          preview.loading
+            ? '读取编排…'
+            : `${preview.plan?.exercises.length ?? 0} 个动作 · 开始前先看清练什么`
+        }}
+      </text>
+
+      <scroll-view v-if="preview.plan" scroll-y class="sheet__list">
+        <view
+          v-for="(e, i) in preview.plan.exercises"
+          :key="e.exerciseId"
+          class="pvrow"
+        >
+          <text class="pvrow__idx ft-num">{{ i + 1 }}</text>
+          <view class="pvrow__mid">
+            <view class="pvrow__name-row">
+              <text class="pvrow__name">{{ e.name }}</text>
+              <text v-if="e.circuitNo != null" class="pvrow__circuit ft-num">
+                {{ previewCircuitOf(e.circuitNo) }}
+              </text>
+            </view>
+            <text class="pvrow__goal ft-num">{{ previewGoalOf(e) }}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view v-if="preview.plan" class="ft-btn ft-btn--primary ft-btn--block" @click="startPreviewPlan">
+        开始训练
+      </view>
+      <view class="ft-btn ft-btn--ghost ft-btn--block sheet__second" @click="closePreview">
+        先不练
+      </view>
     </view>
   </view>
 </template>
@@ -288,5 +396,109 @@ function toTrain(id: number) {
 
 .plans__hint-dot {
   font-size: 18rpx;
+}
+
+/* ── 计划预览弹层（与首页「选择训练计划」同一套壳） ── */
+.sheet-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(23, 25, 29, 0.4);
+  z-index: 90;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: $app-surface;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  z-index: 91;
+}
+
+.sheet__handle {
+  width: 72rpx;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: $app-line;
+  margin: 0 auto 28rpx;
+}
+
+.sheet__title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.sheet__sub {
+  display: block;
+  font-size: $text-base;
+  color: $app-ink-muted;
+  padding: 10rpx 0 24rpx;
+}
+
+.sheet__list {
+  max-height: 620rpx;
+  margin-bottom: 28rpx;
+}
+
+.sheet__second {
+  margin-top: 16rpx;
+}
+
+.pvrow {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 4rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.pvrow:first-child {
+  border-top: none;
+}
+
+.pvrow__idx {
+  width: 44rpx;
+  flex-shrink: 0;
+  font-size: $text-sm;
+  color: $app-ink-subtle;
+}
+
+.pvrow__mid {
+  flex: 1;
+  min-width: 0;
+}
+
+.pvrow__name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.pvrow__name {
+  font-size: $text-md;
+  font-weight: 600;
+  color: $app-ink;
+}
+
+.pvrow__circuit {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-sm;
+  padding: 2rpx 10rpx;
+  flex-shrink: 0;
+}
+
+.pvrow__goal {
+  display: block;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+  padding-top: 6rpx;
 }
 </style>
