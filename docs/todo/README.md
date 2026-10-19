@@ -61,6 +61,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | [2026-10-15-TODO-Mockito测试环境.md](./2026-10-15-TODO-Mockito测试环境.md) | Mockito 本机偶发初始化失败（byte-buddy 自附着间歇失败，重跑可恢复） | 待办 | 低 |
 | [2026-10-16-TODO-前端测试体系.md](./2026-10-16-TODO-前端测试体系.md) | 前端测试体系（零测试框架，`utils/` 纯口径逻辑裸奔） | 待办 | 中 |
 | [2026-10-17-TODO-后端真库SQL覆盖.md](./2026-10-17-TODO-后端真库SQL覆盖.md) | 后端真库 SQL 覆盖（零 `*IT`，注解 SQL 从没被 MySQL 执行过） | 待办 | 中 |
+| [2026-10-19-TODO-备份时MySQL被OOM.md](./2026-10-19-TODO-备份时MySQL被OOM.md) | 共用 MySQL 在备份时被 OOM（部署前备份失败、发版中止） | 待办 | 高 |
 
 ## 已归档
 
