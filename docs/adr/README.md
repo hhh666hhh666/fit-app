@@ -54,6 +54,9 @@ Status: accepted
 - [ADR 0028](./0028-plan-circuit-groups.md)：计划的循环组——若干动作按组轮流做，轮数取最大、组内按序列严格推进。
 - [ADR 0029](./0029-daily-energy-and-calorie-gap.md)：每日总消耗（基础代谢×生活活动系数 ＋ 手填训练消耗）与热量缺口的口径。
 - [ADR 0030](./0030-body-profile-fields-and-body-fat.md)：身体档案的档案字段（性别／出生日期／身高／生活活动档）与体脂率（只记录、不参与计算）。
+- [ADR 0031](./0031-plan-set-floors.md)：计划目标支持逐组层数——`plan_exercise_set.floors` 与录制侧同构，服务端按动作口径只留一套值。
+- [ADR 0032](./0032-plan-card-preview-before-start.md)：计划卡点击＝先弹预览再开练，编辑入口仍只在卡片右上。
+- [ADR 0033](./0033-home-last-workout-metric.md)：首页「上次训练」卡的爬楼行给块合计层数、底部改成「消耗 · 时长」。
 
 ## 与其他文档的分工
 
