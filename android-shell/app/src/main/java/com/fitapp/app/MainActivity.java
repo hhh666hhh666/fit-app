@@ -2,6 +2,7 @@ package com.fitapp.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -69,6 +70,12 @@ public class MainActivity extends Activity {
     /** 后台更新器：只在 onCreate 里用来触发探测。 */
     private WebUpdater updater;
 
+    /** 已下好、等着重启生效的版本号；null ＝ 没有待提示的更新。 */
+    private String stagedVersion;
+
+    /** 弹窗只弹一次，避免 onResume 反复触发。 */
+    private boolean updateDialogShown;
+
     /** WebView 的文件选择回调：结果回来前必须一直持有，且只能回传一次。 */
     private ValueCallback<Uri[]> filePathCallback;
 
@@ -134,8 +141,8 @@ public class MainActivity extends Activity {
             // 本地优先、线上兜底——这一行就是「白屏几秒」与「即开即用」的分界
             String localEntry = LocalWeb.entryUrl(this);
             webView.loadUrl(localEntry != null ? localEntry : getString(R.string.app_url));
-            // 后台探测新版：下好了不立刻换，等下次启动（见 WebUpdater 的类注释）
-            updater.checkAsync(siteRoot());
+            // 后台探测新版：下好了提示重启，主人点了才换（见 onUpdateStaged）
+            updater.checkAsync(siteRoot(), this::onUpdateStaged);
         } else {
             webView.restoreState(savedInstanceState);
         }
@@ -160,6 +167,56 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /** 新产物已下好（**后台线程**回调）→ 切回主线程弹提示。 */
+    private void onUpdateStaged(String version) {
+        runOnUiThread(() -> {
+            stagedVersion = version;
+            maybeShowUpdateDialog();
+        });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 下载可能是在 App 处于后台时完成的：回到前台补一次提示
+        maybeShowUpdateDialog();
+    }
+
+    /**
+     * 提示「新版本已下载，重启生效」。
+     *
+     * <h3>为什么不在下载完直接换</h3>
+     * 运行中替换 {@code filesDir/web} 会把 WebView 正在读取的文件抽掉，页面会直接崩。
+     * 所以下载只落 {@code web-staging}，真正的切换发生在**新实例的 onCreate 最早期**。
+     *
+     * <h3>为什么「立即重启」要用全新实例</h3>
+     * {@code recreate()} 会把 savedInstanceState 带回来，走 {@code webView.restoreState()}，
+     * 结果是**资源是新的、页面快照是旧的**，看起来像没更新。用
+     * {@code NEW_TASK | CLEAR_TASK} 起一个干净实例，onCreate 拿到 null，
+     * 直接按新产物 loadUrl。
+     */
+    private void maybeShowUpdateDialog() {
+        if (stagedVersion == null || updateDialogShown || isFinishing() || isDestroyed()) {
+            return;
+        }
+        updateDialogShown = true;
+        new AlertDialog.Builder(this)
+                .setTitle("新版本已下载")
+                .setMessage("重启后生效（" + stagedVersion + "）。当前正在进行的操作不会丢失。")
+                .setPositiveButton("立即重启", (dialog, which) -> restartIntoNewVersion())
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    /** 立即重启到新产物。 */
+    private void restartIntoNewVersion() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
+        overridePendingTransition(0, 0);
     }
 
     /**

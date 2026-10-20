@@ -18,13 +18,12 @@ android {
         applicationId "com.fitapp.app"
         minSdk 26
         targetSdk 34
-        // 与线上版本对齐：git tag v0.1.3 → versionName 0.1.3；
+        // 与线上版本对齐：git tag v0.1.4 → versionName 0.1.4；
         // versionCode 是单调递增的整数（同一 keystore 下覆盖安装才认它），
-        // 每次发版都要 +1——这里 4 对应 v0.1.3（3 是 v0.1.2，2 是 v0.1.1）。
-        // v0.1.3 的内容：双轨加载（本地产物优先 ＋ 后台自动更新，ADR 0034），
-        // 解决「点图标后白屏几秒、切页要等」。
-        versionCode 4
-        versionName "0.1.3"
+        // 每次发版都要 +1——这里 5 对应 v0.1.4（4 是 v0.1.3，3 是 v0.1.2）。
+        // v0.1.4 的内容：新产物下好后弹窗提示重启，带「立即重启 / 稍后」。
+        versionCode 5
+        versionName "0.1.4"
     }
 
     signingConfigs {

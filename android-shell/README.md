@@ -52,9 +52,14 @@ export JAVA_HOME=E:/jdk21
 1. `scripts/build-apk-web.sh` 生成 `dist/build/h5/web/version.json` 与 `web-<版本>.zip`；
 2. 站点部署时这两项随 `dist` 一起上线（`/web/version.json` 已配成不缓存）；
 3. 手机上打开 App → 后台拉到清单 → 版本不同就下载 zip → sha256 校验 → 解到 `web-staging`；
-4. **下次启动**最早期 `renameTo` 切成 `web`，原子生效。
+4. 下好后**弹窗提示**「新版本已下载」，给「立即重启 / 稍后」：
+   - 「立即重启」→ 起一个全新实例（`CLEAR_TASK`），切换发生在它的 `onCreate` 最早期；
+   - 「稍后」→ 下次启动 App 时生效。
 
-所以：部署完成后，手机上要**再打开一次** App 才是新版（第一次是下载，第二次生效）。
+所以：部署完成后，手机上打开一次 App 就会下载，弹窗点「立即重启」即是新版——**不需要重装 apk**。
+
+⚠️ 弹窗里的「立即重启」用的是**全新实例**而不是 `recreate()`：后者会把 `savedInstanceState` 带回来、
+走 `restoreState()`，结果是「资源是新的、页面快照是旧的」，看起来像没更新。
 
 ## 必须一起配的后端开关
 
@@ -83,5 +88,8 @@ unzip -l app/build/outputs/apk/release/app-release.apk | grep -c "assets/web/"
 - ⚠️ keystore 丢了就没法覆盖安装升级——备份 `.workbuddy/android-secrets/`。
 - **升级后要重新登录一次**：localStorage 按 origin 隔离，原先存在线上域名下的 token 在虚拟域里读不到。只此一次。
 - WebView 的返回键语义：页面内可后退则后退，到根页退出（见 `MainActivity`）。
-- 新版**下次启动**才生效，不打断当前使用——刻意如此，避免替换正在被读取的文件。
+- **新版不自动立刻生效**：下载完弹窗提示，点「立即重启」即刻切换、点「稍后」则下次启动生效。
+  刻意如此——运行中替换 `filesDir/web` 会把 WebView 正在读取的文件抽掉。
+- **下载失败是静默的**：只写 Logcat（tag `WebUpdater`），不弹任何东西。症状是「发了版但手机端没动静」，
+  用 `adb logcat -s WebUpdater` 看那一刻到底探测到没有。
 - 壳只是「容器」：前端迭代不动它；改 `app_url`、Java、依赖才需要重打包。

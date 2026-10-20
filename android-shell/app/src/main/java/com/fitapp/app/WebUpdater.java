@@ -114,15 +114,23 @@ final class WebUpdater {
         }
     }
 
+    /** 新产物已下好、等着下次启动切换时的回调（在**后台线程**触发，调用方自行切主线程）。 */
+    interface OnStagedListener {
+        void onStaged(String version);
+    }
+
     /** 后台检查更新，不阻塞启动、失败只记日志。 */
-    void checkAsync(String siteRoot) {
+    void checkAsync(String siteRoot, OnStagedListener listener) {
         if (siteRoot == null || siteRoot.isEmpty()) {
             return;
         }
         // 独立线程：壳里没有线程池基础设施，为这一次网络往返开一个就够
         Thread t = new Thread(() -> {
             try {
-                check(siteRoot);
+                String staged = check(siteRoot);
+                if (staged != null && listener != null) {
+                    listener.onStaged(staged);
+                }
             } catch (Exception e) {
                 Log.i(TAG, "检查更新跳过：" + e.getMessage());
             }
@@ -131,7 +139,10 @@ final class WebUpdater {
         t.start();
     }
 
-    private void check(String siteRootRaw) throws Exception {
+    /**
+     * @return 暂存成功的版本号；已是最新、或本次无需更新时返回 null
+     */
+    private String check(String siteRootRaw) throws Exception {
         seedAppliedIfEmpty();
         String root = siteRootRaw.endsWith("/")
                 ? siteRootRaw.substring(0, siteRootRaw.length() - 1)
@@ -142,17 +153,18 @@ final class WebUpdater {
         String zipUrl = manifest.optString("url", "");
         String sha = manifest.optString("sha256", "");
         if (version.isEmpty() || zipUrl.isEmpty()) {
-            return;
+            return null;
         }
 
         String applied = prefs().getString(KEY_APPLIED, null);
         String pending = prefs().getString(KEY_PENDING, null);
         if (version.equals(applied) || version.equals(pending)) {
-            return;
+            return null;
         }
 
         String resolved = zipUrl.startsWith("http") ? zipUrl : root + "/" + stripLeadingSlash(zipUrl);
         File zip = new File(app.getCacheDir(), "web-" + version + ".zip");
+        String staged = null;
         try {
             download(resolved, zip);
             if (!sha.isEmpty() && !sha.equalsIgnoreCase(sha256(zip))) {
@@ -170,7 +182,8 @@ final class WebUpdater {
                 throw new IOException("包内没有 index.html");
             }
             prefs().edit().putString(KEY_PENDING, version).apply();
-            Log.i(TAG, "新产物已暂存：" + version + "，下次启动生效");
+            Log.i(TAG, "新产物已暂存：" + version + "，重启后生效");
+            staged = version;
         } finally {
             // 下载失败的半成品不要留在缓存里
             if (zip.exists()) {
@@ -178,6 +191,7 @@ final class WebUpdater {
                 zip.delete();
             }
         }
+        return staged;
     }
 
     private static String stripLeadingSlash(String s) {
