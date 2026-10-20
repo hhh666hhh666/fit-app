@@ -59,6 +59,10 @@ mkdir -p "$ASSETS"
 cp -R "$DIST"/. "$ASSETS"/
 # 生成物不进仓库；也避免把上一轮的 web/ 目录自己套自己
 stash "$ASSETS/web"
+# 内置产物的版本号：壳据此判断「肚子里这份是多少版」，首次启动就不会把内容相同的
+# 线上包再下一遍（见 LocalWeb.bundledVersion / WebUpdater.seedAppliedIfEmpty）。
+# ⚠️ 必须与线上 version.json 的拼法一致，否则这个种子无效。
+printf '%s\n' "$TAG" > "$ASSETS/.version"
 [ -f "$ASSETS/index.html" ] || { echo "!! 复制后仍缺 index.html" >&2; exit 1; }
 
 echo "==> 生成自更新包与清单"

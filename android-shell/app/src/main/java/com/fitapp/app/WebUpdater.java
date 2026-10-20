@@ -59,6 +59,22 @@ final class WebUpdater {
     }
 
     /**
+     * 让 applied_version 有一个起点：首次启动时它为空，线上清单的任何版本都会被判成「比本地新」，
+     * 于是把与 apk 内置产物**内容完全相同**的包再下一遍。用内置产物的版本号播种，
+     * 版本一致就直接跳过（见 {@link LocalWeb#bundledVersion}）。
+     */
+    private void seedAppliedIfEmpty() {
+        if (prefs().getString(KEY_APPLIED, null) != null) {
+            return;
+        }
+        String builtin = LocalWeb.bundledVersion(app);
+        if (builtin != null) {
+            prefs().edit().putString(KEY_APPLIED, builtin).apply();
+            Log.i(TAG, "以内置产物版本播种：" + builtin);
+        }
+    }
+
+    /**
      * 把上次下好的暂存包切成正式目录。**必须在任何页面加载之前调用。**
      *
      * @return true 表示本次启动用的就是刚切过来的新版
@@ -116,6 +132,7 @@ final class WebUpdater {
     }
 
     private void check(String siteRootRaw) throws Exception {
+        seedAppliedIfEmpty();
         String root = siteRootRaw.endsWith("/")
                 ? siteRootRaw.substring(0, siteRootRaw.length() - 1)
                 : siteRootRaw;

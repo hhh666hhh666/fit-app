@@ -61,6 +61,35 @@ final class LocalWeb {
         return new File(downloadedDir(c), "index.html").isFile();
     }
 
+    /** apk 内置产物的版本号文件（由 `scripts/build-apk-web.sh` 写入，一行文本）。 */
+    static final String VERSION_FILE = ".version";
+
+    /**
+     * 读 apk 内置产物的版本号；没有（未内置产物或旧包）返回 null。
+     *
+     * 作用只有一个：让壳知道「我肚子里这份是多少版」，从而在**首次启动**时不会把
+     * 内容与内置版相同的线上包再下一遍。没有它的话 applied_version 初始为空，
+     * 线上清单任何版本都被判成「比本地新」。
+     */
+    @Nullable
+    static String bundledVersion(Context c) {
+        InputStream in = null;
+        try {
+            in = c.getAssets().open(ASSET_DIR + "/" + VERSION_FILE);
+            byte[] buf = new byte[128];
+            int n = in.read(buf);
+            if (n <= 0) {
+                return null;
+            }
+            String v = new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8).trim();
+            return v.isEmpty() ? null : v;
+        } catch (IOException e) {
+            return null;
+        } finally {
+            closeQuietly(in);
+        }
+    }
+
     static boolean hasBundled(Context c) {
         InputStream in = null;
         try {

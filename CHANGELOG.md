@@ -13,7 +13,7 @@
 
 ### Fixed
 
-- **App 冷启动白屏几秒、切页与点按要等**（[ADR 0034](./docs/adr/0034-shell-dual-track-local-and-auto-update.md)）：诊断先排除了后端（`/api` TTFB 67~96 ms）、压缩（主 JS gzip 后 98 KB）、静态缓存（`/assets/` 已 immutable）与 CSS 特效（`backdrop-filter` 0 处），真凶是纯客户端渲染的加载路径——每次冷启动都要等网络把 HTML 与主包拉完才出首帧，而 `<div id="app">` 是空的。壳改为**双轨**：本地产物优先（apk 内置 `assets/web`，经虚拟域 `https://appassets.androidplatform.net` 加载，启动零网络等待）＋ 后台探测 `/web/version.json` 自动更新（新版下次启动生效，仍保住「网站更新不必重发 apk」）。顺带修掉一个缓存配置 bug：`/index.html` 同时带 `no-cache` 与 `no-store` 两个 `Cache-Control`，`no-store` 让浏览器连 ETag 都不存，每次冷启动都全量重拉——现在只留 `no-cache`。⚠️ 升级后需**重新登录一次**（localStorage 按 origin 隔离），且后端必须配 `FITAPP_CORS_ALLOWED_ORIGINS=https://appassets.androidplatform.net`，漏配的症状是「页面能开、数据全是网络异常」。
+- **App 冷启动白屏几秒、切页与点按要等**（[ADR 0034](./docs/adr/0034-shell-dual-track-local-and-auto-update.md)）：诊断先排除了后端（`/api` TTFB 67~96 ms）、压缩（主 JS gzip 后 98 KB）、静态缓存（`/assets/` 已 immutable）与 CSS 特效（`backdrop-filter` 0 处），真凶是纯客户端渲染的加载路径——每次冷启动都要等网络把 HTML 与主包拉完才出首帧，而 `<div id="app">` 是空的。壳改为**双轨**：本地产物优先（apk 内置 `assets/web`，经虚拟域 `https://appassets.androidplatform.net` 加载，启动零网络等待）＋ 后台探测 `/web/version.json` 自动更新（新版下次启动生效，仍保住「网站更新不必重发 apk」）。顺带修掉一个缓存配置 bug：`/index.html` 同时带 `no-cache` 与 `no-store` 两个 `Cache-Control`，`no-store` 让浏览器连 ETag 都不存，每次冷启动都全量重拉——现在只留 `no-cache`。⚠️ 升级后需**重新登录一次**（localStorage 按 origin 隔离），且后端必须配 `FITAPP_CORS_ALLOWED_ORIGINS=https://appassets.androidplatform.net`，漏配的症状是「页面能开、数据全是网络异常」。内置产物带自身版本号（`assets/web/.version`），首次启动不会把内容相同的线上包再下一遍。
 - **备份不再产出「看着像成功」的半截文件，也不在内存余量不足时硬闯**：2026-10-19 一次部署前备份把 384MB 的 `quizzy-mysql` 顶到 OOM，留下 2.8K 的 `.sql.gz`（`-s` 判据照样通过）。现在 `scripts/backup-mysql.sh` ① 备份前先看容器内存余量，低于 32MB 直接失败并说明原因；② 先写 `.part`，`gzip -t` 与非空校验都过了才改名，失败用 `trap` 清掉临时文件。取数方式仍是 `docker exec`（宿主直连方案已按要求回滚）。
 
 ## [0.12.0] - 2026-10-19
