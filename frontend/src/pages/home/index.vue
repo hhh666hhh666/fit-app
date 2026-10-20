@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
-import { onHide, onShow } from '@dcloudio/uni-app'
+import {computed, onUnmounted, ref} from 'vue'
+import {onHide, onShow} from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import FtDietRings from '@/components/FtDietRings.vue'
 import MealSheet from '@/components/MealSheet.vue'
-import { useScheduleStore } from '@/stores/schedule'
-import { useDietStore } from '@/stores/diet'
-import { addWater, getDay, type DayOverview, type MealKey } from '@/api/nutrition'
-import { getMonthSummary, getWorkout, listWorkouts } from '@/api/workout'
-import { buildDietRings } from '@/utils/diet'
-import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
-import { ensureLogin } from '@/utils/guard'
-import { clearSession, loadSession, netElapsedSec, type Session } from '@/utils/session'
+import {useScheduleStore} from '@/stores/schedule'
+import {useDietStore} from '@/stores/diet'
+import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
+import {getMonthSummary, getWorkout, listWorkouts} from '@/api/workout'
+import {buildDietRings} from '@/utils/diet'
+import {formatClock, formatDateLabel, formatThousands} from '@/utils/format'
+import {ensureLogin} from '@/utils/guard'
+import {clearSession, loadSession, netElapsedSec, type Session} from '@/utils/session'
 
 const today = (() => {
   const d = new Date()
@@ -23,12 +23,12 @@ const today = (() => {
 const dietStore = useDietStore()
 const dietDay = ref<DayOverview | null>(null)
 const dietShortcuts = [
-  { key: 'breakfast', label: '早餐' },
-  { key: 'lunch', label: '午餐' },
-  { key: 'dinner', label: '晚餐' },
-  { key: 'snack', label: '加餐' },
-  { key: 'water', label: '饮水' },
-  { key: 'weight', label: '记体重' }
+  {key: 'breakfast', label: '早餐'},
+  {key: 'lunch', label: '午餐'},
+  {key: 'dinner', label: '晚餐'},
+  {key: 'snack', label: '加餐'},
+  {key: 'water', label: '饮水'},
+  {key: 'weight', label: '记体重'}
 ]
 const sheetMeal = ref<MealKey | null>(null)
 const todayKey = (() => {
@@ -53,14 +53,14 @@ const dietTargetText = computed(() => {
 const dietRings = computed(() => buildDietRings(dietDay.value))
 
 function goDiet() {
-  uni.navigateTo({ url: '/pages/diet/index' })
+  uni.navigateTo({url: '/pages/diet/index'})
 }
 
 function onDietShortcut(key: string) {
   if (key === 'water') {
     void bumpWater()
   } else if (key === 'weight') {
-    uni.navigateTo({ url: '/pages/body/index?record=1' })
+    uni.navigateTo({url: '/pages/body/index?record=1'})
   } else {
     sheetMeal.value = key as MealKey
   }
@@ -70,8 +70,8 @@ async function bumpWater() {
   const step = dietStore.settings?.waterStepMl ?? 250
   try {
     const ml = await addWater(todayKey, step)
-    if (dietDay.value) dietDay.value.water = { ...dietDay.value.water, ml }
-    uni.showToast({ title: `饮水 +${step} ml`, icon: 'none', duration: 800 })
+    if (dietDay.value) dietDay.value.water = {...dietDay.value.water, ml}
+    uni.showToast({title: `饮水 +${step} ml`, icon: 'none', duration: 800})
   } catch {
     // request 层已统一提示
   }
@@ -121,20 +121,20 @@ async function refreshLastWorkout() {
         return {
           name: b.name,
           value:
-            b.metric === 'floors'
-              ? floors != null
-                ? `${formatThousands(floors)} 层`
-                : '—'
-              : lastSet
-                ? `${lastSet.weight} kg × ${lastSet.reps}`
-                : '—',
+              b.metric === 'floors'
+                  ? floors != null
+                      ? `${formatThousands(floors)} 层`
+                      : '—'
+                  : lastSet
+                      ? `${lastSet.weight} kg × ${lastSet.reps}`
+                      : '—',
           pr: b.sets.some((s) => s.pr)
         }
       }),
       // 底部口径（2026-10-19 拍定）：消耗（手填，未填写「—」）＋ 时长，不再给总容量
       footer: `消耗 ${summary.calories != null ? `${summary.calories} 大卡` : '—'} · ${Math.max(
-        1,
-        Math.round(summary.durationSec / 60)
+          1,
+          Math.round(summary.durationSec / 60)
       )} 分钟`
     }
     lastLoaded.value = true
@@ -167,10 +167,10 @@ const nowMs = ref(Date.now())
 let sessionTimer: ReturnType<typeof setInterval> | undefined
 
 const sessionClock = computed(() =>
-  activeSession.value ? formatClock(netElapsedSec(activeSession.value, nowMs.value)) : ''
+    activeSession.value ? formatClock(netElapsedSec(activeSession.value, nowMs.value)) : ''
 )
 const sessionDoneCount = computed(() =>
-  (activeSession.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
+    (activeSession.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
 )
 
 function refreshActiveSession() {
@@ -230,7 +230,7 @@ const plansOrdered = computed(() => {
 })
 
 function goLibrary() {
-  uni.navigateTo({ url: '/pages/library/index' })
+  uni.navigateTo({url: '/pages/library/index'})
 }
 
 /**
@@ -245,7 +245,7 @@ function onStart() {
       content: `已记 ${sessionDoneCount.value} 组 · 已进行 ${sessionClock.value}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
       confirmText: '继续上次',
       cancelText: '开新的',
-      success: ({ confirm }) => {
+      success: ({confirm}) => {
         if (confirm) {
           resumeTraining()
           return
@@ -265,24 +265,24 @@ function onStart() {
 
 /** 回到进行中的会话页（不带参数＝接续本机存的那条会话）。 */
 function resumeTraining() {
-  uni.navigateTo({ url: '/pages/session/index' })
+  uni.navigateTo({url: '/pages/session/index'})
 }
 
 /** 新会话带 `fresh=1`：会话页据此放弃接续、重新开一场。 */
 function startPlan(id: number) {
   picker.value = false
-  uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
+  uni.navigateTo({url: `/pages/session/index?plan=${id}&fresh=1`})
 }
 
 function freeTrain() {
   picker.value = false
-  uni.navigateTo({ url: '/pages/session/index?fresh=1' })
+  uni.navigateTo({url: '/pages/session/index?fresh=1'})
 }
 
 /** 没有计划时的出口：去「我的 → 训练计划」新建（改计划只走那里）。 */
 function goPlans() {
   picker.value = false
-  uni.navigateTo({ url: '/pages/plans/index' })
+  uni.navigateTo({url: '/pages/plans/index'})
 }
 </script>
 
@@ -306,17 +306,17 @@ function goPlans() {
             <text class="diet__kcal-num ft-num">{{ dietKcal }}</text>
             <text class="diet__kcal-unit"> / {{ dietTargetText }} 大卡</text>
           </view>
-          <FtDietRings :rings="dietRings" />
+          <FtDietRings :rings="dietRings"/>
         </view>
 
         <view class="diet__shortcuts">
           <view
-            v-for="s in dietShortcuts"
-            :key="s.key"
-            class="diet__shortcut"
-            @click="onDietShortcut(s.key)"
+              v-for="s in dietShortcuts"
+              :key="s.key"
+              class="diet__shortcut"
+              @click="onDietShortcut(s.key)"
           >
-            <view class="diet__ico" :class="'diet__ico--' + s.key" />
+            <view class="diet__ico" :class="'diet__ico--' + s.key"/>
             <text class="diet__shortcut-label">{{ s.label }}</text>
           </view>
         </view>
@@ -326,13 +326,13 @@ function goPlans() {
       <view v-if="lastWorkout" class="ft-card last">
         <view class="last__head">
           <view class="last__head-left">
-            <view class="last__bar" />
+            <view class="last__bar"/>
             <text class="last__title">{{ lastWorkout.title }}</text>
           </view>
           <text class="last__date ft-num">{{ lastWorkout.date }}</text>
         </view>
         <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
-          <view class="last__dot" />
+          <view class="last__dot"/>
           <text class="last__name">{{ row.name }}</text>
           <text class="last__value ft-num" :class="{ 'ft-marker': row.pr }">{{ row.value }}</text>
         </view>
@@ -342,7 +342,7 @@ function goPlans() {
       <view v-else-if="lastLoaded" class="ft-card last last--empty">
         <view class="last__head">
           <view class="last__head-left">
-            <view class="last__bar" />
+            <view class="last__bar"/>
             <text class="last__title">上次训练</text>
           </view>
         </view>
@@ -357,7 +357,7 @@ function goPlans() {
             <text class="strip__num ft-num">{{ weekCount }}</text>
             <text class="strip__label">练</text>
           </view>
-          <view class="strip__divider" />
+          <view class="strip__divider"/>
           <view class="strip__item">
             <text class="strip__label">本月</text>
             <text class="strip__num ft-num">{{ monthCount }}</text>
@@ -366,7 +366,7 @@ function goPlans() {
         </view>
       </view>
 
-      <view class="home__pad" :class="{ 'home__pad--taller': activeSession }" />
+      <view class="home__pad" :class="{ 'home__pad--taller': activeSession }"/>
     </view>
 
     <!-- 底部固定区：进行中的训练横幅 + 开始训练 + tab 栏 -->
@@ -374,35 +374,42 @@ function goPlans() {
       <text class="home__bottom-link">{{ bottomHint }}</text>
 
       <!-- 训练进行中：返回＝最小化后的回程入口（ADR 0020） -->
+      <!-- 边框流光（照搬 Uiverse 霓虹搜索框的多层结构）：四层不同配色／模糊／相位的圆盘叠在卡片边缘 -->
       <view v-if="activeSession" class="resume" @click="resumeTraining">
-        <view class="resume__dot" />
-        <view class="resume__main">
-          <text class="resume__title">训练进行中</text>
-          <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
+        <view class="resume__glow"/>
+        <view class="resume__dark"/>
+        <view class="resume__white"/>
+        <view class="resume__border"/>
+        <view class="resume__inner">
+          <view class="resume__dot"/>
+          <view class="resume__main">
+            <text class="resume__title">训练进行中</text>
+            <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
+          </view>
+          <text class="resume__go">继续 ›</text>
         </view>
-        <text class="resume__go">继续 ›</text>
       </view>
 
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
-      <FtTabBar active="home" />
+      <FtTabBar active="home"/>
     </view>
 
     <!-- 训练计划选择器（点「开始训练」弹出） -->
-    <view v-if="picker" class="sheet-mask" @click="picker = false" />
+    <view v-if="picker" class="sheet-mask" @click="picker = false"/>
     <view v-if="picker" class="sheet">
-      <view class="sheet__handle" />
+      <view class="sheet__handle"/>
       <text class="sheet__title">选择训练计划</text>
       <text class="sheet__sub">{{ bottomHint }}</text>
 
       <scroll-view v-if="plansOrdered.length" scroll-y class="sheet__list">
         <view
-          v-for="p in plansOrdered"
-          :key="p.id"
-          class="prow"
-          :class="{ 'prow--today': p.id === schedule.todayPlan?.id }"
-          @click="startPlan(p.id)"
+            v-for="p in plansOrdered"
+            :key="p.id"
+            class="prow"
+            :class="{ 'prow--today': p.id === schedule.todayPlan?.id }"
+            @click="startPlan(p.id)"
         >
-          <view class="prow__bar" />
+          <view class="prow__bar"/>
           <view class="prow__main">
             <view class="prow__name-row">
               <text class="prow__name">{{ p.name }}</text>
@@ -433,11 +440,11 @@ function goPlans() {
 
     <!-- 饮食记录弹层 -->
     <MealSheet
-      v-if="sheetMeal"
-      :date="todayKey"
-      :meal="sheetMeal"
-      @close="sheetMeal = null"
-      @changed="refreshDiet"
+        v-if="sheetMeal"
+        :date="todayKey"
+        :meal="sheetMeal"
+        @close="sheetMeal = null"
+        @changed="refreshDiet"
     />
   </view>
 </template>
@@ -531,18 +538,23 @@ function goPlans() {
 .diet__ico--breakfast {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z'/%3E%3Cpath d='M16 10h1.5a2.3 2.3 0 0 1 0 4.6H16'/%3E%3Cpath d='M7.5 3v2.4M11.5 3v2.4'/%3E%3C/svg%3E");
 }
+
 .diet__ico--lunch {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11h16a8 8 0 0 1-16 0z'/%3E%3Cpath d='M9 4.5v3M15 4.5v3'/%3E%3C/svg%3E");
 }
+
 .diet__ico--dinner {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z'/%3E%3C/svg%3E");
 }
+
 .diet__ico--snack {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12.5h11l-1.2 7.5H7.7z'/%3E%3Cpath d='M9.5 12.5c0-2.2 1.1-3.4 2.5-3.4s2.5 1.2 2.5 3.4'/%3E%3Cpath d='M12 9V6.6'/%3E%3Ccircle cx='12' cy='5.4' r='1.2'/%3E%3C/svg%3E");
 }
+
 .diet__ico--water {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4c3 4 6 7 6 10a6 6 0 0 1-12 0c0-3 3-6 6-10z'/%3E%3C/svg%3E");
 }
+
 .diet__ico--weight {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='4.5'/%3E%3Cpath d='M12 12.2l2.6-3.1'/%3E%3C/svg%3E");
 }
@@ -692,14 +704,161 @@ function goPlans() {
 }
 
 /* ── 训练进行中横幅（在「开始训练」按钮正上方） ── */
+/* 边框流光：照搬 Uiverse「霓虹搜索框」（作者 Lakshay-art）的四层结构——每层是一张圆盘，
+   各配一种配色／模糊／起始相位，同步 4s 转一圈；被各自 overflow 裁掉后只在卡片边缘露一条。
+   配色仍是原示例的紫 #402fb5 / 品红 #cf30aa / 暗紫 #18116a / 淡紫 #a099d8。
+   ⚠️ 与原示例有两处刻意偏差，别改回去：
+   ① 原示例把 #000 当「无色」（它铺在黑底上），这里必须换 transparent——放到浅色页面上
+      会变成一片灰黑污渍，把上方「今天 · 计划名」和下方按钮一起压暗；
+   ② 原示例 glow 层外扩 26px 靠深色背景掩盖溢出，这里收到 3px、blur 压到 7px，
+      否则紫雾会糊住上下两个邻居。 */
 .resume {
+  position: relative;
+  margin: 12rpx 0 16rpx;
+  border-radius: $radius-md;
+}
+
+.resume__glow,
+.resume__dark,
+.resume__white,
+.resume__border {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 40rpx;
+}
+
+/* 四层的外扩量对应原示例里 354/312/307/303 相对 input 301 的差值 */
+.resume__glow {
+  left: -6rpx;
+  right: -6rpx;
+  top: -4rpx;
+  bottom: -4rpx;
+  border-radius: 32rpx;
+  filter: blur(7px);
+  opacity: 0.7;
+}
+
+.resume__dark {
+  left: -10rpx;
+  right: -10rpx;
+  top: -8rpx;
+  bottom: -8rpx;
+  filter: blur(3px);
+}
+
+.resume__white {
+  left: -6rpx;
+  right: -6rpx;
+  top: -5rpx;
+  bottom: -5rpx;
+  filter: blur(2px);
+}
+
+.resume__border {
+  left: -2rpx;
+  right: -2rpx;
+  top: -2rpx;
+  bottom: -2rpx;
+  filter: blur(0.5px);
+}
+
+/* 圆盘：直径 1000rpx 覆盖最大那层（约 700×110rpx）的对角线绰绰有余 */
+.resume__glow::before,
+.resume__dark::before,
+.resume__white::before,
+.resume__border::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1100rpx;
+  height: 1100rpx;
+  margin: -550rpx 0 0 -550rpx;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  animation: resume-spin 4s linear infinite;
+}
+
+/* 各层的起始相位：用负 delay 错开，跟原示例的 60°/82°/83°/70° 对应 */
+.resume__glow::before {
+  background-image: conic-gradient(
+      rgba(0, 0, 0, 0),
+      #402fb5 5%,
+      rgba(0, 0, 0, 0) 38%,
+      rgba(0, 0, 0, 0) 50%,
+      #cf30aa 60%,
+      rgba(0, 0, 0, 0) 87%
+  );
+  animation-delay: -0.67s;
+}
+
+.resume__dark::before {
+  background-image: conic-gradient(
+      rgba(0, 0, 0, 0),
+      #18116a,
+      rgba(0, 0, 0, 0) 10%,
+      rgba(0, 0, 0, 0) 50%,
+      #6e1b60,
+      rgba(0, 0, 0, 0) 60%
+  );
+  animation-delay: -0.91s;
+}
+
+.resume__white::before {
+  background-image: conic-gradient(
+      rgba(0, 0, 0, 0) 0%,
+      #a099d8,
+      rgba(0, 0, 0, 0) 8%,
+      rgba(0, 0, 0, 0) 50%,
+      #dfa2da,
+      rgba(0, 0, 0, 0) 58%
+  );
+  filter: brightness(1.4);
+  animation-delay: -0.92s;
+}
+
+.resume__border::before {
+  background-image: conic-gradient(
+      $app-ink,
+      #402fb5 5%,
+      $app-ink 14%,
+      $app-ink 50%,
+      #cf30aa 60%,
+      $app-ink 64%
+  );
+  filter: brightness(1.3);
+  animation-delay: -0.78s;
+}
+
+@keyframes resume-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 动效降级：系统开了「减少动态效果」就停转，四层停在各自的起始相位 */
+@media (prefers-reduced-motion: reduce) {
+  .resume__glow::before,
+  .resume__dark::before,
+  .resume__white::before,
+  .resume__border::before {
+    animation: none;
+  }
+}
+
+.resume__inner {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 20rpx;
-  margin-bottom: 16rpx;
   padding: 20rpx 24rpx;
   background: $app-surface;
-  border: 1rpx solid $app-ink;
   border-left: 8rpx solid $app-highlight;
   border-radius: $radius-md;
 }
