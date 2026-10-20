@@ -381,7 +381,6 @@ function goPlans() {
         <view class="resume__white"/>
         <view class="resume__border"/>
         <view class="resume__inner">
-          <view class="resume__dot"/>
           <view class="resume__main">
             <text class="resume__title">训练进行中</text>
             <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
@@ -706,15 +705,18 @@ function goPlans() {
 /* ── 训练进行中横幅（在「开始训练」按钮正上方） ── */
 /* 边框流光：照搬 Uiverse「霓虹搜索框」（作者 Lakshay-art）的四层结构——每层是一张圆盘，
    各配一种配色／模糊／起始相位，同步 4s 转一圈；被各自 overflow 裁掉后只在卡片边缘露一条。
-   配色仍是原示例的紫 #402fb5 / 品红 #cf30aa / 暗紫 #18116a / 淡紫 #a099d8。
-   ⚠️ 与原示例有两处刻意偏差，别改回去：
-   ① 原示例把 #000 当「无色」（它铺在黑底上），这里必须换 transparent——放到浅色页面上
-      会变成一片灰黑污渍，把上方「今天 · 计划名」和下方按钮一起压暗；
-   ② 原示例 glow 层外扩 26px 靠深色背景掩盖溢出，这里收到 3px、blur 压到 7px，
-      否则紫雾会糊住上下两个邻居。 */
+   结构与相位是原示例的，配色换成本项目的绿：草绿 #3b6d11 / 荧光绿 #97c459 /
+   深青 #0f6e56 / 浅青 #5dcaa5。
+   ⚠️ 三条别改回去（都踩过）：
+   ① 主色不能用荧光笔绿 #d9f24b——它在白底上几乎看不见，荧光只适合深色背景，
+      必须用中深色才看得出光在跑；
+   ② 不能留墨黑描边——原示例边框层底色是 #1c191c，配紫粉还能接受，配绿就是一圈黑框，
+      与纸感底完全不协调，所以最锐那层也改成透明；
+   ③ glow 外扩不能放大——原示例 26px 靠深色背景掩盖溢出，这里 5px + blur 6px，
+      再大绿雾会糊住上方「今天 · 计划名」和下方「开始训练」。 */
 .resume {
   position: relative;
-  margin: 12rpx 0 16rpx;
+  margin: 16rpx 0 28rpx;
   border-radius: $radius-md;
 }
 
@@ -730,13 +732,13 @@ function goPlans() {
 
 /* 四层的外扩量对应原示例里 354/312/307/303 相对 input 301 的差值 */
 .resume__glow {
-  left: -6rpx;
-  right: -6rpx;
-  top: -4rpx;
-  bottom: -4rpx;
-  border-radius: 32rpx;
-  filter: blur(7px);
-  opacity: 0.7;
+  left: -12rpx;
+  right: -12rpx;
+  top: -10rpx;
+  bottom: -10rpx;
+  border-radius: 36rpx;
+  filter: blur(6px);
+  opacity: 0.5;
 }
 
 .resume__dark {
@@ -752,14 +754,15 @@ function goPlans() {
   right: -6rpx;
   top: -5rpx;
   bottom: -5rpx;
-  filter: blur(2px);
+  filter: blur(1.5px);
 }
 
+/* 最锐的一层：2rpx≈1px，就是肉眼看到的那条扫过去的边 */
 .resume__border {
-  left: -2rpx;
-  right: -2rpx;
-  top: -2rpx;
-  bottom: -2rpx;
+  left: -3rpx;
+  right: -3rpx;
+  top: -3rpx;
+  bottom: -3rpx;
   filter: blur(0.5px);
 }
 
@@ -784,11 +787,11 @@ function goPlans() {
 .resume__glow::before {
   background-image: conic-gradient(
       rgba(0, 0, 0, 0),
-      #402fb5 5%,
-      rgba(0, 0, 0, 0) 38%,
+      #639922 5%,
+      rgba(0, 0, 0, 0) 40%,
       rgba(0, 0, 0, 0) 50%,
-      #cf30aa 60%,
-      rgba(0, 0, 0, 0) 87%
+      #1d9e75 58%,
+      rgba(0, 0, 0, 0) 92%
   );
   animation-delay: -0.67s;
 }
@@ -796,11 +799,11 @@ function goPlans() {
 .resume__dark::before {
   background-image: conic-gradient(
       rgba(0, 0, 0, 0),
-      #18116a,
-      rgba(0, 0, 0, 0) 10%,
+      rgba(59, 109, 17, 0.55),
+      rgba(0, 0, 0, 0) 13%,
       rgba(0, 0, 0, 0) 50%,
-      #6e1b60,
-      rgba(0, 0, 0, 0) 60%
+      rgba(15, 110, 86, 0.55),
+      rgba(0, 0, 0, 0) 63%
   );
   animation-delay: -0.91s;
 }
@@ -808,26 +811,26 @@ function goPlans() {
 .resume__white::before {
   background-image: conic-gradient(
       rgba(0, 0, 0, 0) 0%,
-      #a099d8,
-      rgba(0, 0, 0, 0) 8%,
+      #97c459,
+      rgba(0, 0, 0, 0) 11%,
       rgba(0, 0, 0, 0) 50%,
-      #dfa2da,
-      rgba(0, 0, 0, 0) 58%
+      #5dcaa5,
+      rgba(0, 0, 0, 0) 61%
   );
-  filter: brightness(1.4);
+  filter: brightness(1.25);
   animation-delay: -0.92s;
 }
 
 .resume__border::before {
   background-image: conic-gradient(
-      $app-ink,
-      #402fb5 5%,
-      $app-ink 14%,
-      $app-ink 50%,
-      #cf30aa 60%,
-      $app-ink 64%
+      rgba(0, 0, 0, 0),
+      #3b6d11 8%,
+      rgba(0, 0, 0, 0) 22%,
+      rgba(0, 0, 0, 0) 50%,
+      #0f6e56 58%,
+      rgba(0, 0, 0, 0) 72%
   );
-  filter: brightness(1.3);
+  filter: brightness(1.15);
   animation-delay: -0.78s;
 }
 
@@ -859,16 +862,7 @@ function goPlans() {
   gap: 20rpx;
   padding: 20rpx 24rpx;
   background: $app-surface;
-  border-left: 8rpx solid $app-highlight;
   border-radius: $radius-md;
-}
-
-.resume__dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: $app-ink;
-  flex-shrink: 0;
 }
 
 .resume__main {
