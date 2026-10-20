@@ -9,11 +9,14 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.core.content.FileProvider;
+import androidx.webkit.WebViewAssetLoader;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -21,10 +24,29 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * 壳应用：一个 WebView 加载线上站点（见 res/values/strings.xml 的 app_url）。
+ * 壳应用：WebView 加载 H5，走**双轨**——本地产物优先、线上地址兜底。
  *
- * 取舍（与 quizzy 壳同一路线）：不嵌 H5 产物、直接加载线上地址——
- * 网站更新时 App 无需重发；代价是首次打开需要网络（应用本身也依赖联网）。
+ * <h3>双轨怎么跑（2026-10-20 起）</h3>
+ * 1. 启动最早期先 {@link WebUpdater#applyPending()}，把上次下好的新版切成正式目录；
+ * 2. 若本地有产物（下载版或 apk 内置的 {@code assets/web}），经
+ *    {@link LocalWeb} 的虚拟域加载——**零网络等待**，这是消灭「点图标后白屏几秒」的关键；
+ * 3. 两侧都没有产物时才回落线上地址（{@code app_url}），保证壳永远是能用的容器；
+ * 4. 后台探测 {@code /web/version.json}，有新版就悄悄下好，**下次启动生效**。
+ *
+ * 这条路线替代了早先「只加载线上地址」的做法：原来的取舍是为了「网站更新 App 无需重发」，
+ * 代价是每次冷启动都要等网络把 HTML 与 JS 拉完。现在两者都要——本地有产物所以快，
+ * 后台自动更新所以仍然不用重发 apk。**例外**：若某次前端改动必须立刻在手机上看到，
+ * 仍以线上版为准（本地版要等下一次启动才换）。
+ *
+ * <h3>API 因此变成跨域</h3>
+ * 页面 origin 是 {@code https://appassets.androidplatform.net}，接口在线上域名，
+ * 后端必须放行该 origin（{@code FITAPP_CORS_ALLOWED_ORIGINS}）。漏配的表现是
+ * 「页面能开、数据全是网络异常」。
+ *
+ * <h3>登录态会因此重置一次</h3>
+ * localStorage 按 origin 隔离：换到虚拟域后，原先存在线上域名下的 token 读不到，
+ * 升级后需要重新登录一次——**只此一次**，之后都在虚拟域里。
+ *
  * H5 是 hash 路由（src/manifest.json 的 h5.router.mode），
  * 所以返回键的 canGoBack 语义天然贴合「页面内后退、到根页退出」。
  *
@@ -41,6 +63,12 @@ public class MainActivity extends Activity {
 
     private WebView webView;
 
+    /** 本地资源拦截器（虚拟域 → filesDir/web → assets/web）。 */
+    private WebViewAssetLoader assetLoader;
+
+    /** 后台更新器：只在 onCreate 里用来触发探测。 */
+    private WebUpdater updater;
+
     /** WebView 的文件选择回调：结果回来前必须一直持有，且只能回传一次。 */
     private ValueCallback<Uri[]> filePathCallback;
 
@@ -51,14 +79,28 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        updater = new WebUpdater(this);
+        // 必须在任何页面加载之前：切换靠 rename，此时还没人读 filesDir/web
+        updater.applyPending();
+
         webView = new WebView(this);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         // localStorage：登录 token 等存这里，必须开
         settings.setDomStorageEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        // 站点内的跳转留在 App 内，不抛去系统浏览器
-        webView.setWebViewClient(new WebViewClient());
+        // 本地产物 + 静态资源基本都是瞬时的，这一层只影响兜底时的线上加载
+        webView.setBackgroundColor(0xFFFFFFFF);
+
+        // 站点内的跳转留在 App 内，不抛去系统浏览器；虚拟域的请求交给 LocalWeb
+        assetLoader = LocalWeb.loader(this);
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                // 非虚拟域（线上地址、API）返回 null ＝ 不拦截，交回网络
+                return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+        });
 
         // 见类注释：不设这个，H5 里的 <input type="file"> 点击不会有任何反应
         webView.setWebChromeClient(new WebChromeClient() {
@@ -89,11 +131,35 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState == null) {
-            webView.loadUrl(getString(R.string.app_url));
+            // 本地优先、线上兜底——这一行就是「白屏几秒」与「即开即用」的分界
+            String localEntry = LocalWeb.entryUrl(this);
+            webView.loadUrl(localEntry != null ? localEntry : getString(R.string.app_url));
+            // 后台探测新版：下好了不立刻换，等下次启动（见 WebUpdater 的类注释）
+            updater.checkAsync(siteRoot());
         } else {
             webView.restoreState(savedInstanceState);
         }
         setContentView(webView);
+    }
+
+    /**
+     * 线上站点根（形如 {@code https://fit.11-2.cn}），由 {@code app_url} 推导。
+     * 换环境只改 strings.xml 一处，版本清单地址与兜底地址都跟着走。
+     */
+    private String siteRoot() {
+        try {
+            Uri u = Uri.parse(getString(R.string.app_url));
+            if (u.getScheme() == null || u.getHost() == null) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder(u.getScheme()).append("://").append(u.getHost());
+            if (u.getPort() > 0) {
+                sb.append(':').append(u.getPort());
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**

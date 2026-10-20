@@ -5,6 +5,10 @@ dist/
 dist-ssr/
 *.log
 
+# apk 内置的 H5 产物：由 scripts/build-apk-web.sh 生成，不入库
+android-shell/app/src/main/assets/web/
+android-shell/app/build/
+
 # 本机运行配置（含密码与 JWT 密钥），绝不入库
 .env
 .env.local

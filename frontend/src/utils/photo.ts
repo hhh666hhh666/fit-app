@@ -1,5 +1,7 @@
 // ── 餐照：选择 / 压缩（四档）/ 上传 / 取图（H5 原生通道；<img> 带不了鉴权头，一律 fetch→blob）──
 
+import { API_BASE } from '@/api/base'
+
 export type PhotoQuality = 'lossless' | 'high' | 'medium' | 'low'
 
 /** 压缩长边上限（px）；无损档例外——原图直传。 */
@@ -114,7 +116,7 @@ export async function pickAndUploadPhoto(
     const fd = new FormData()
     fd.append('file', blob, blob.type === 'image/png' ? 'photo.png' : 'photo.jpg')
     const res = await fetch(
-      `/api/diet/photos?date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`,
+      `${API_BASE}/diet/photos?date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`,
       { method: 'POST', headers: authHeader(), body: fd }
     )
     let body: { code?: number; message?: string } | null = null
@@ -136,7 +138,7 @@ export async function pickAndUploadPhoto(
 export async function fetchPhotoUrl(date: string, meal: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `/api/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
+      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
       { headers: authHeader() }
     )
     if (!res.ok) return null
@@ -158,7 +160,7 @@ export function releasePhotoUrl(url: string | null) {
 export async function fetchPhotoThumbUrl(date: string, meal: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `/api/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
+      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
       { headers: authHeader() }
     )
     if (!res.ok) return null
@@ -173,7 +175,7 @@ export async function fetchPhotoThumbUrl(date: string, meal: string): Promise<st
 export async function deletePhoto(date: string, meal: string): Promise<boolean> {
   try {
     const res = await fetch(
-      `/api/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
+      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
       { method: 'DELETE', headers: authHeader() }
     )
     let body: { code?: number; message?: string } | null = null

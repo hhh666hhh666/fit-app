@@ -18,12 +18,13 @@ android {
         applicationId "com.fitapp.app"
         minSdk 26
         targetSdk 34
-        // 与线上版本对齐：git tag v0.1.2 → versionName 0.1.2；
+        // 与线上版本对齐：git tag v0.1.3 → versionName 0.1.3；
         // versionCode 是单调递增的整数（同一 keystore 下覆盖安装才认它），
-        // 每次发版都要 +1——这里 3 对应 v0.1.2（2 是 v0.1.1，1 是 v0.1.0）。
-        // v0.1.2 的内容：补 WebChromeClient.onShowFileChooser，修 App 内「拍照记录这一餐」没反应。
-        versionCode 3
-        versionName "0.1.2"
+        // 每次发版都要 +1——这里 4 对应 v0.1.3（3 是 v0.1.2，2 是 v0.1.1）。
+        // v0.1.3 的内容：双轨加载（本地产物优先 ＋ 后台自动更新，ADR 0034），
+        // 解决「点图标后白屏几秒、切页要等」。
+        versionCode 4
+        versionName "0.1.3"
     }
 
     signingConfigs {
@@ -52,4 +53,7 @@ android {
 dependencies {
     // 仅为了 FileProvider（拍照输出 URI 的授权）——壳自身不引其它 androidx 组件
     implementation 'androidx.core:core:1.13.1'
+    // WebViewAssetLoader：把本地产物映射成虚拟 https 域（见 LocalWeb 的类注释）。
+    // 不用它就得走 file://，那会同时丢同源策略、绝对路径与 Secure Context。
+    implementation 'androidx.webkit:webkit:1.11.0'
 }

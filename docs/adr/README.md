@@ -57,6 +57,7 @@ Status: accepted
 - [ADR 0031](./0031-plan-set-floors.md)：计划目标支持逐组层数——`plan_exercise_set.floors` 与录制侧同构，服务端按动作口径只留一套值。
 - [ADR 0032](./0032-plan-card-preview-before-start.md)：计划卡点击＝先弹预览再开练，编辑入口仍只在卡片右上。
 - [ADR 0033](./0033-home-last-workout-metric.md)：首页「上次训练」卡的爬楼行给块合计层数、底部改成「消耗 · 时长」。
+- [ADR 0034](./0034-shell-dual-track-local-and-auto-update.md)：壳改为双轨加载——本地产物优先（启动零网络等待）＋ 后台探测版本自动更新（下次启动生效）；收窄 ADR 0002 的「只加载线上地址」。
 
 ## 与其他文档的分工
 

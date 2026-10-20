@@ -1,9 +1,8 @@
 import type { Result } from '@/types'
+import { API_BASE } from './base'
 
-// 分平台 base 地址。
-// 本轮只跑 H5：与后端同源（dev 由 vite 代理 /api，上线走同域），所以用相对路径。
-// ⚠️ 将来若接微信小程序，必须改成绝对地址（如 https://<域名>/api），届时在此切换。
-const BASE_URL = '/api'
+// 基址统一在 ./base.ts：网页同源用 `/api`，apk 内置版由 VITE_API_BASE 注入绝对地址。
+const BASE_URL = API_BASE
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
 

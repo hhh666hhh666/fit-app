@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import { API_BASE } from './base'
 import type { EnergyInfo } from './profile'
 import type { PhotoQuality } from '@/utils/photo'
 
@@ -217,7 +218,7 @@ export async function recognizeFood(blob: Blob): Promise<FoodDraft> {
   const token = (uni.getStorageSync('fitapp_token') as string) || ''
   const fd = new FormData()
   fd.append('file', blob, blob.type === 'image/png' ? 'label.png' : 'label.jpg')
-  const res = await fetch('/api/food-recognition', {
+  const res = await fetch(`${API_BASE}/food-recognition`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd

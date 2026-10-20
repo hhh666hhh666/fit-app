@@ -32,3 +32,13 @@ Status: accepted
 > FileProvider 授权应用私有目录，因此**无需申请相机/存储权限**。
 > 口径：**壳的能力清单随用随补**——凡是 H5 依赖「浏览器接管」的行为（文件选择、下载、分享等），
 > 都要先确认壳有没有对应实现，不能默认 H5 能跑就等于 App 能跑。
+>
+> ⚠️ **后续（2026-10-20）**：**「壳只加载线上地址」这一条被 [ADR 0034](./0034-shell-dual-track-local-and-auto-update.md) 收窄**。
+> 起因是主人反馈「点图标后白屏几秒、切页要等」——实测后端、压缩、静态缓存、CSS 特效全部健康，
+> 真凶是每次冷启动都要等网络把 HTML 与主包拉完才出首帧。壳改为**双轨**：本地产物优先
+> （`filesDir/web` 或 apk 内置 `assets/web`，经虚拟域 `https://appassets.androidplatform.net` 加载）
+> ＋ 后台探测 `/web/version.json` 自动更新（**下次启动生效**）。
+> 本卡选的「网站更新、App 无需重发」**仍然成立**，只是新版要等下一次启动；
+> 客户端形态本身（uni-app 网页 ＋ 自写 WebView 壳）不变。代价是 API 变跨域，
+> 后端须配 `FITAPP_CORS_ALLOWED_ORIGINS`（漏配的症状是「页面能开、数据全网络异常」）。
+

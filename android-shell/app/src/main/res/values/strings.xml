@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">fit-app</string>
-    <!-- 壳加载的线上地址。写进这里（而不是 Java 常量）方便替换环境。 -->
+    <!-- 线上站点地址。两个用途：
+         1) 本地没有 H5 产物时的**兜底**加载地址（壳永远是能用的容器）；
+         2) 推导站点根，拼出 /web/version.json 与 /web/web-<版本>.zip 的地址。
+         换环境只改这一处。 -->
     <string name="app_url">https://fit.11-2.cn/</string>
 </resources>
