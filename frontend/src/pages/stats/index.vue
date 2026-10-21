@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
+import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 
@@ -32,6 +33,13 @@ async function load() {
 onShow(() => {
   if (!ensureLogin()) return
   load()
+})
+
+/** 下拉＝清缓存后重取当前周期（ADR 0035 的逃生门）。 */
+onPullDownRefresh(async () => {
+  clearAll()
+  await load()
+  uni.stopPullDownRefresh()
 })
 
 function switchPeriod(p: StatsPeriod) {

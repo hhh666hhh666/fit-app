@@ -8,7 +8,7 @@
   "pages": [
     {
       "path": "pages/home/index",
-      "style": { "navigationBarTitleText": "fit-app" }
+      "style": { "navigationBarTitleText": "fit-app", "enablePullDownRefresh": true }
     },
     {
       "path": "pages/login/index",
@@ -24,7 +24,7 @@
     },
     {
       "path": "pages/log/index",
-      "style": { "navigationBarTitleText": "训练日志" }
+      "style": { "navigationBarTitleText": "训练日志", "enablePullDownRefresh": true }
     },
     {
       "path": "pages/detail/index",
@@ -32,7 +32,7 @@
     },
     {
       "path": "pages/stats/index",
-      "style": { "navigationBarTitleText": "统计" }
+      "style": { "navigationBarTitleText": "统计", "enablePullDownRefresh": true }
     },
     {
       "path": "pages/body/index",
@@ -76,7 +76,7 @@
     },
     {
       "path": "pages/profile/index",
-      "style": { "navigationBarTitleText": "我的" }
+      "style": { "navigationBarTitleText": "我的", "enablePullDownRefresh": true }
     },
     {
       "path": "pages/album/index",

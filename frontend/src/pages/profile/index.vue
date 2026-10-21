@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { getWorkoutTotals } from '@/api/workout'
+import { clearAll, resetCaches } from '@/api/cache'
 import { getBodyOverview } from '@/api/body'
 import { formatWeight, getWeightUnit } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
@@ -35,6 +36,14 @@ onShow(() => {
   void loadBody()
   void loadStorage()
   void loadRecognitionUsage()
+})
+
+/** 下拉＝清缓存后重取本页全部数字（ADR 0035 的逃生门）。 */
+onPullDownRefresh(async () => {
+  clearAll()
+  schedule.load()
+  await Promise.all([loadStats(), loadBody(), loadStorage(), loadRecognitionUsage()])
+  uni.stopPullDownRefresh()
 })
 
 async function loadStats() {
@@ -175,6 +184,8 @@ function logout() {
       if (!confirm) return
       uni.removeStorageSync('fitapp_token')
       uni.removeStorageSync('fitapp_username')
+      // 换人就用：数据缓存与照片缓存一并清掉（ADR 0035），别把上一个人的东西留在内存里
+      resetCaches()
       uni.reLaunch({ url: '/pages/login/index' })
     }
   })

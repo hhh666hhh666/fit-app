@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
+import { clearAll } from '@/api/cache'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
@@ -108,6 +109,13 @@ async function load(reset = false) {
 onShow(() => {
   if (!ensureLogin()) return
   void load(true)
+})
+
+/** 下拉＝清缓存后重取当月第一页（ADR 0035 的逃生门；切页本身不会再发请求）。 */
+onPullDownRefresh(async () => {
+  clearAll()
+  await load(true)
+  uni.stopPullDownRefresh()
 })
 
 /** 触底加载当月的下一页（本月条目多于 50 条时才用得上）。 */

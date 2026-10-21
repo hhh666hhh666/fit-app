@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { login, register } from '@/api/auth'
+import { resetCaches } from '@/api/cache'
 
 const mode = ref<'login' | 'register'>('login')
 const username = ref('')
@@ -28,6 +29,8 @@ async function submit() {
     const res = await doAuth(u, password.value)
     uni.setStorageSync('fitapp_token', res.token)
     uni.setStorageSync('fitapp_username', res.username)
+    // 换人就用：登录成功即清掉上一个人留下的数据/照片缓存（ADR 0035）
+    resetCaches()
     uni.reLaunch({ url: '/pages/home/index' })
   } catch {
     // request 层已统一弹出错误提示（用户名已存在 / 用户名或密码不正确 等）

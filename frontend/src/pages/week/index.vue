@@ -9,7 +9,8 @@ const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', 
 
 onShow(() => {
   if (!ensureLogin()) return
-  schedule.load(true)
+  // 走缓存即可：改某天后 setScheduleDay 已按「计划」域作废（ADR 0035），这里再强刷等于白请求
+  schedule.load()
 })
 
 const rows = computed(() =>

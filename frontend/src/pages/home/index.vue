@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed, onUnmounted, ref} from 'vue'
-import {onHide, onShow} from '@dcloudio/uni-app'
+import {onHide, onPullDownRefresh, onShow} from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import FtDietRings from '@/components/FtDietRings.vue'
 import MealSheet from '@/components/MealSheet.vue'
@@ -8,6 +8,7 @@ import {useScheduleStore} from '@/stores/schedule'
 import {useDietStore} from '@/stores/diet'
 import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
 import {getMonthSummary, getWorkout, listWorkouts} from '@/api/workout'
+import {clearAll} from '@/api/cache'
 import {buildDietRings} from '@/utils/diet'
 import {formatClock, formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
@@ -203,6 +204,19 @@ onShow(() => {
   void refreshDiet()
   refreshActiveSession()
   startSessionClock()
+})
+
+/**
+ * 下拉刷新＝「就要最新」的逃生门（ADR 0035）：先清掉数据缓存再整套重取。
+ * 日常切页不会走这里——命中缓存时干脆不发请求。
+ */
+onPullDownRefresh(async () => {
+  clearAll()
+  schedule.load()
+  refreshLastWorkout()
+  refreshCounts()
+  await refreshDiet()
+  uni.stopPullDownRefresh()
 })
 
 onHide(() => {
