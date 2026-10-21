@@ -115,4 +115,72 @@ page {
   text-align: center;
   color: $app-ink-muted;
 }
+
+/* ── 主 tab 切换：内容层按方向入场（ADR 0037）──
+   只动各页的 __body 一层，绝不动页面根元素：四个页面的底部栏是根元素的 fixed
+   子元素，根元素一旦有 transform 就会成为它的包含块，底栏会跟着位移、并在位移
+   里露出画布底色。底栏钉住不动，正是「整屏在横向翻页」该有的样子。
+   方向由 utils/nav.ts 在跳转前记下；无方向（刷新、从下级页回来）走淡入。 */
+
+@keyframes tab-in-right {
+  from {
+    opacity: 0.6;
+    transform: translateX(18vw);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-in-left {
+  from {
+    opacity: 0.6;
+    transform: translateX(-18vw);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-in-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-in-right,
+.tab-in-left,
+.tab-in-fade {
+  animation-duration: $dur-base;
+  animation-timing-function: $ease-out;
+  animation-fill-mode: both;
+}
+
+.tab-in-right {
+  animation-name: tab-in-right;
+}
+
+.tab-in-left {
+  animation-name: tab-in-left;
+}
+
+.tab-in-fade {
+  animation-name: tab-in-fade;
+}
+
+/* 系统开了「减少动态效果」：一律直接到位（首页流光卡另有单独降级） */
+@media (prefers-reduced-motion: reduce) {
+  .tab-in-right,
+  .tab-in-left,
+  .tab-in-fade {
+    animation: none;
+  }
+}
 </style>

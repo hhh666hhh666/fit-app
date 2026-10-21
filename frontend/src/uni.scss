@@ -38,6 +38,13 @@ $radius-xl: 40rpx; // 20px
 $shadow-sm: 0 4rpx 10rpx -4rpx rgba(20, 22, 28, 0.08);
 $shadow-md: 0 16rpx 36rpx -14rpx rgba(20, 22, 28, 0.12);
 
+// ── 动效（两档时长 ＋ 一条缓动；ADR 0037）──
+// 全站只有这两档：快档给「状态回应」（指示条、色变），标准档给「位置变化」（切页位移）。
+// 缓动是 iOS 式快出缓收——起步立刻有反馈、尾巴收得住，避免线性动画的机械感。
+$dur-fast: 150ms;
+$dur-base: 220ms;
+$ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
 // ── 字阶（rpx：750rpx = 375px，即 1px = 2rpx）──
 $text-xs: 22rpx; // 11px
 $text-sm: 24rpx; // 12px

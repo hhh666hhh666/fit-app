@@ -6,6 +6,11 @@ import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
 import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import { takeTabEnter } from '@/utils/nav'
+
+// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
+const tabEnterDir = takeTabEnter('stats')
+const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
 
 // ── 统计（设计稿：.workbuddy/stitch/screen/stats.png）──
 
@@ -86,7 +91,7 @@ function goProfile() {
 
 <template>
   <view class="stats">
-    <view class="stats__body">
+    <view class="stats__body" :class="tabEnterClass">
       <!-- 标题行 -->
       <view class="stats__head">
         <text class="stats__title">统计</text>
@@ -175,7 +180,7 @@ function goProfile() {
     </view>
 
     <view class="stats__bottom">
-      <FtTabBar active="stats" />
+      <FtTabBar active="stats" :enter-dir="tabEnterDir" />
     </view>
   </view>
 </template>

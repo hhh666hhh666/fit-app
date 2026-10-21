@@ -12,7 +12,12 @@ import {clearAll} from '@/api/cache'
 import {buildDietRings} from '@/utils/diet'
 import {formatClock, formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
+import {takeTabEnter} from '@/utils/nav'
 import {clearSession, loadSession, netElapsedSec, type Session} from '@/utils/session'
+
+// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
+const tabEnterDir = takeTabEnter('home')
+const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
 
 const today = (() => {
   const d = new Date()
@@ -302,7 +307,7 @@ function goPlans() {
 
 <template>
   <view class="home">
-    <view class="home__body">
+    <view class="home__body" :class="tabEnterClass">
       <!-- 顶部行 -->
       <view class="home__head">
         <text class="home__date ft-num">{{ today }}</text>
@@ -404,7 +409,7 @@ function goPlans() {
       </view>
 
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
-      <FtTabBar active="home"/>
+      <FtTabBar active="home" :enter-dir="tabEnterDir"/>
     </view>
 
     <!-- 训练计划选择器（点「开始训练」弹出） -->

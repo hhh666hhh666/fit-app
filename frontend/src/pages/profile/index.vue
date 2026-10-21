@@ -11,6 +11,11 @@ import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, t
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import { takeTabEnter } from '@/utils/nav'
+
+// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
+const tabEnterDir = takeTabEnter('profile')
+const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
 
 // ── 我的（设计稿：.workbuddy/stitch/screen/profile.png）──
 
@@ -194,7 +199,7 @@ function logout() {
 
 <template>
   <view class="prof">
-    <view class="prof__body">
+    <view class="prof__body" :class="tabEnterClass">
       <!-- 顶部 meta 行 -->
       <view class="prof__meta">
         <text class="ft-num">FIT-APP LEDGER</text>
@@ -299,7 +304,7 @@ function logout() {
     </view>
 
     <view class="prof__bottom">
-      <FtTabBar active="profile" />
+      <FtTabBar active="profile" :enter-dir="tabEnterDir" />
     </view>
   </view>
 </template>
