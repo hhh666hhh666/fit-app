@@ -49,8 +49,18 @@ const request = {
 }
 
 /**
+ * 登录态失效时的清理钩子（缓存层注册：清数据缓存 ＋ 照片缓存）。
+ * 做成注册表是为了避免 request ↔ cache 互相 import 成环。
+ */
+const authFailHooks: (() => void)[] = []
+
+export function onAuthFail(fn: () => void): void {
+  authFailHooks.push(fn)
+}
+
+/**
  * 后端是「HTTP 200 + 业务码」封装：成功码 0，401 也在 body 里。
- * 401 时清 token 并回登录页；其余非 0 码 toast 后 reject。
+ * 401 时清 token、清缓存并回登录页；其余非 0 码 toast 后 reject。
  */
 export async function unwrap<T>(promise: Promise<{ data: Result<T> }>): Promise<T> {
   const response = await promise
@@ -60,6 +70,7 @@ export async function unwrap<T>(promise: Promise<{ data: Result<T> }>): Promise<
   }
   if (body.code === 401) {
     uni.removeStorageSync('fitapp_token')
+    for (const fn of authFailHooks) fn()
     uni.reLaunch({ url: '/pages/login/index' })
   }
   const message = body.message || '请求失败'

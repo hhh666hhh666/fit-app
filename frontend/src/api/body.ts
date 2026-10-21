@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import { mutating, read } from './cache'
 
 // ── 身体档案（体重／四围定期记录；一条＝一次测定，ADR 0017）──
 
@@ -82,27 +83,28 @@ export interface BodySavePayload {
 }
 
 export function getBodyOverview() {
-  return unwrap(request.get<BodyOverview>('/body'))
+  return read<BodyOverview>('/body', undefined, 'body')
 }
 
+/** 明细只缓存首屏（`offset = 0`）：续页不缓存，免得被删改后与前面的页对不齐。 */
 export function getBodyRecords(limit = 20, offset = 0) {
-  return unwrap(request.get<BodyRecordRow[]>('/body/records', { limit, offset }))
+  return read<BodyRecordRow[]>('/body/records', { limit, offset }, 'body', offset === 0)
 }
 
 export function createBodyRecord(payload: BodySavePayload) {
-  return unwrap(request.post<BodyRecordRow>('/body', payload))
+  return mutating('body', () => unwrap(request.post<BodyRecordRow>('/body', payload)))
 }
 
 /** 修改一次测定（点明细行进编辑弹层）：时刻与五项数值整体覆盖。 */
 export function updateBodyRecord(id: number, payload: BodySavePayload) {
-  return unwrap(request.put<BodyRecordRow>(`/body/${id}`, payload))
+  return mutating('body', () => unwrap(request.put<BodyRecordRow>(`/body/${id}`, payload)))
 }
 
 export function deleteBodyRecord(id: number) {
-  return unwrap(request.delete<void>(`/body/${id}`))
+  return mutating('body', () => unwrap(request.delete<void>(`/body/${id}`)))
 }
 
 /** 批量删除（长按多选）：一次事务删多条，任一条不归属则整批不动。 */
 export function batchDeleteBodyRecords(ids: number[]) {
-  return unwrap(request.post<void>('/body/batch-delete', { ids }))
+  return mutating('body', () => unwrap(request.post<void>('/body/batch-delete', { ids })))
 }

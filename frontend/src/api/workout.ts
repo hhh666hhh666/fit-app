@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import { mutating, read } from './cache'
 
 export interface WorkoutSetItem {
   weight: number
@@ -90,35 +91,36 @@ export interface UpdateWorkoutPayload {
 }
 
 export function createWorkout(payload: CreateWorkoutPayload) {
-  return unwrap(request.post<WorkoutDetail>('/workouts', payload))
+  return mutating('workout', () => unwrap(request.post<WorkoutDetail>('/workouts', payload)))
 }
 
 /** 修改整条记录（详情页「编辑 → ✓」）：标题/备注/动作组次整体覆盖，返回更新后的详情。 */
 export function updateWorkout(id: number, payload: UpdateWorkoutPayload) {
-  return unwrap(request.put<WorkoutDetail>(`/workouts/${id}`, payload))
+  return mutating('workout', () => unwrap(request.put<WorkoutDetail>(`/workouts/${id}`, payload)))
 }
 
 /** 删除单条训练记录。 */
 export function deleteWorkout(id: number) {
-  return unwrap(request.delete<void>(`/workouts/${id}`))
+  return mutating('workout', () => unwrap(request.delete<void>(`/workouts/${id}`)))
 }
 
 /** 批量删除（日志页长按多选删除）：一次事务，任一条不归属则整批不动。 */
 export function batchDeleteWorkouts(ids: number[]) {
-  return unwrap(request.post<void>('/workouts/batch-delete', { ids }))
+  return mutating('workout', () => unwrap(request.post<void>('/workouts/batch-delete', { ids })))
 }
 
 /**
  * 日志列表：`month = 'YYYY-MM'` 按月过滤（不传＝不过滤，首页「上次训练」用它取最近一条）；
  * `offset` 供触底分页。
+ *
+ * 只缓存首屏（`offset === 0`）：续页缓存下来，第 3 页被删过一条就会与前面的页对不齐。
  */
 export function listWorkouts(limit = 50, offset = 0, month?: string) {
-  return unwrap(
-    request.get<WorkoutListItem[]>('/workouts', {
-      limit,
-      offset,
-      ...(month ? { month } : {})
-    })
+  return read<WorkoutListItem[]>(
+    '/workouts',
+    { limit, offset, ...(month ? { month } : {}) },
+    'workout',
+    offset === 0
   )
 }
 
@@ -137,8 +139,10 @@ export interface MonthSummary {
 
 /** 不传 month ＝ 当月（首页取本周／本月次数就是这么调的）。 */
 export function getMonthSummary(month?: string) {
-  return unwrap(
-    request.get<MonthSummary>('/workouts/month-summary', month ? { month } : {})
+  return read<MonthSummary>(
+    '/workouts/month-summary',
+    month ? { month } : undefined,
+    'workout'
   )
 }
 
@@ -149,17 +153,17 @@ export interface WorkoutTotals {
 }
 
 export function getWorkoutTotals() {
-  return unwrap(request.get<WorkoutTotals>('/workouts/totals'))
+  return read<WorkoutTotals>('/workouts/totals', undefined, 'workout')
 }
 
 export function getWorkout(id: number) {
-  return unwrap(request.get<WorkoutDetail>(`/workouts/${id}`))
+  return read<WorkoutDetail>(`/workouts/${id}`, undefined, 'workout')
 }
 
 export function getLastRecord(exerciseId: number) {
-  return unwrap(request.get<LastRecord | null>('/workouts/last-record', { exerciseId }))
+  return read<LastRecord | null>('/workouts/last-record', { exerciseId }, 'workout')
 }
 
 export function updateWorkoutNote(id: number, note: string) {
-  return unwrap(request.put<void>(`/workouts/${id}/note`, { note }))
+  return mutating('workout', () => unwrap(request.put<void>(`/workouts/${id}/note`, { note })))
 }

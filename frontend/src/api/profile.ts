@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import { mutating, read } from './cache'
 
 // ── 个人档案与每日消耗（ADR 0029／0030）──
 // 个人档案＝身高／性别／出生日期／生活活动档，基本不变；体重仍取身体档案最新一条。
@@ -49,9 +50,9 @@ export interface ProfileSavePayload {
 }
 
 export function getProfile() {
-  return unwrap(request.get<ProfileInfo>('/profile'))
+  return read<ProfileInfo>('/profile', undefined, 'body')
 }
 
 export function saveProfile(payload: ProfileSavePayload) {
-  return unwrap(request.put<ProfileInfo>('/profile', payload))
+  return mutating('body', () => unwrap(request.put<ProfileInfo>('/profile', payload)))
 }

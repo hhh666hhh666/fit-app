@@ -1,4 +1,7 @@
 import request, { unwrap } from './request'
+import { mutating, read } from './cache'
+
+// ── 动作库（预设只读 ＋ 自定义可增删；归「计划」域——它与计划编辑、动作库页同源）──
 
 export interface ExerciseItem {
   id: number
@@ -10,15 +13,15 @@ export interface ExerciseItem {
 }
 
 export function listExercises(params?: { muscle?: string; keyword?: string }) {
-  return unwrap(request.get<ExerciseItem[]>('/exercises', params))
+  return read<ExerciseItem[]>('/exercises', params, 'plan')
 }
 
 /** 新增自定义动作（预设不可改；删除 = 下架，走 DELETE /exercises/{id}）。 */
 export function createExercise(payload: { name: string; muscle: string }) {
-  return unwrap(request.post<ExerciseItem>('/exercises', payload))
+  return mutating('plan', () => unwrap(request.post<ExerciseItem>('/exercises', payload)))
 }
 
 /** 批量下架自定义动作；预设动作由后端拒绝。 */
 export function batchDeleteExercises(ids: number[]) {
-  return unwrap(request.post<void>('/exercises/batch-delete', { ids }))
+  return mutating('plan', () => unwrap(request.post<void>('/exercises/batch-delete', { ids })))
 }

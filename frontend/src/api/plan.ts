@@ -1,4 +1,5 @@
 import request, { unwrap } from './request'
+import { mutating, read } from './cache'
 
 // ── 训练计划与周安排（后端第二期）──
 
@@ -68,30 +69,30 @@ export interface ScheduleDay {
 }
 
 export function listPlans() {
-  return unwrap(request.get<PlanListItem[]>('/plans'))
+  return read<PlanListItem[]>('/plans', undefined, 'plan')
 }
 
 export function getPlan(id: number) {
-  return unwrap(request.get<PlanDetail>(`/plans/${id}`))
+  return read<PlanDetail>(`/plans/${id}`, undefined, 'plan')
 }
 
 export function createPlan(payload: PlanSavePayload) {
-  return unwrap(request.post<PlanDetail>('/plans', payload))
+  return mutating('plan', () => unwrap(request.post<PlanDetail>('/plans', payload)))
 }
 
 export function updatePlan(id: number, payload: PlanSavePayload) {
-  return unwrap(request.put<PlanDetail>(`/plans/${id}`, payload))
+  return mutating('plan', () => unwrap(request.put<PlanDetail>(`/plans/${id}`, payload)))
 }
 
 export function deletePlan(id: number) {
-  return unwrap(request.delete<void>(`/plans/${id}`))
+  return mutating('plan', () => unwrap(request.delete<void>(`/plans/${id}`)))
 }
 
 export function getSchedule() {
-  return unwrap(request.get<ScheduleDay[]>('/schedule'))
+  return read<ScheduleDay[]>('/schedule', undefined, 'plan')
 }
 
 /** 设置某天：{isRest:true} 休息；{planId} 练计划；{} 清空为未安排。 */
 export function setScheduleDay(day: number, body: { planId?: number; isRest?: boolean }) {
-  return unwrap(request.put<void>(`/schedule/${day}`, body))
+  return mutating('plan', () => unwrap(request.put<void>(`/schedule/${day}`, body)))
 }

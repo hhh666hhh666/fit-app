@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { getSchedule, listPlans, setScheduleDay, type PlanListItem } from '@/api/plan'
+import { invalidate } from '@/api/cache'
 
 // ── 计划与周安排（真接口；ADR 0004 周安排驱动「开始训练」）──
 
@@ -13,7 +14,6 @@ export const useScheduleStore = defineStore('schedule', {
     plans: [] as PlanListItem[],
     /** 0=周一 … 6=周日 */
     week: [...EMPTY_WEEK] as DaySlot[],
-    loaded: false,
     loading: false
   }),
   getters: {
@@ -38,19 +38,19 @@ export const useScheduleStore = defineStore('schedule', {
   },
   actions: {
     /**
-     * 拉取计划列表 + 周表。页面 onShow 调用（默认强制刷新——
-     * 数据轻、自用工具优先保正确；传 false 才用缓存）。失败保持旧数据不抛出。
+     * 拉取计划列表 + 周表。页面 `onShow` 调用即可——**重复调不会发请求**：
+     * 取数走 `api/cache.ts` 的按域缓存（ADR 0035），命中时返回同一份数据，赋值也不触发重渲染。
+     * `force = true` 先作废「计划」域（下拉刷新那种「就要最新」的场合）。
      */
-    async load(force = true) {
+    async load(force = false) {
       if (this.loading) return
-      if (this.loaded && !force) return
+      if (force) invalidate('plan')
       this.loading = true
       try {
         const [plans, days] = await Promise.all([listPlans(), getSchedule()])
         this.plans = plans
         // 归一化：后端 Jackson 省略 null 字段（planId 可能 undefined）
         this.week = days.map((d) => (d.isRest ? 'rest' : d.planId ?? null)) as DaySlot[]
-        this.loaded = true
       } catch {
         // request 层已统一提示；保留旧数据
       } finally {
