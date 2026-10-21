@@ -58,6 +58,7 @@ Status: accepted
 - [ADR 0032](./0032-plan-card-preview-before-start.md)：计划卡点击＝先弹预览再开练，编辑入口仍只在卡片右上。
 - [ADR 0033](./0033-home-last-workout-metric.md)：首页「上次训练」卡的爬楼行给块合计层数、底部改成「消耗 · 时长」。
 - [ADR 0034](./0034-shell-dual-track-local-and-auto-update.md)：壳改为双轨加载——本地产物优先（启动零网络等待）＋ 后台探测版本自动更新（下次启动生效）；收窄 ADR 0002 的「只加载线上地址」。
+- [ADR 0035](./0035-client-cache-and-invalidation.md)：客户端数据缓存——写后失效、按域作废、不设 TTL（时间类按自然日分区）；照片走按字节 LRU 的 blob 缓存。
 
 ## 与其他文档的分工
 
