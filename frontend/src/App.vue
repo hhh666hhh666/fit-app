@@ -146,7 +146,7 @@ page {
    `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
    只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
    旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
-   ⚠️ 位移是 ±100% 屏宽、300ms——比「单页 8vw 微移」慢得多也连续得多；
+   ⚠️ 位移是 ±100% 屏宽、240ms——比「单页 8vw 微移」慢得多也连续得多；
    想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
 @keyframes tab-slide-out-left {
   from {
@@ -185,19 +185,19 @@ page {
 }
 
 :root[data-tab-slide='left']::view-transition-old(root) {
-  animation: tab-slide-out-left 300ms $ease-out both;
+  animation: tab-slide-out-left 240ms $ease-out both;
 }
 
 :root[data-tab-slide='left']::view-transition-new(root) {
-  animation: tab-slide-in-right 300ms $ease-out both;
+  animation: tab-slide-in-right 240ms $ease-out both;
 }
 
 :root[data-tab-slide='right']::view-transition-old(root) {
-  animation: tab-slide-out-right 300ms $ease-out both;
+  animation: tab-slide-out-right 240ms $ease-out both;
 }
 
 :root[data-tab-slide='right']::view-transition-new(root) {
-  animation: tab-slide-in-left 300ms $ease-out both;
+  animation: tab-slide-in-left 240ms $ease-out both;
 }
 
 /* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。
@@ -226,7 +226,7 @@ page {
    `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
    只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
    旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
-   ⚠️ 位移是 ±100% 屏宽、300ms——比「单页 8vw 微移」慢得多也连续得多；
+   ⚠️ 位移是 ±100% 屏宽、240ms——比「单页 8vw 微移」慢得多也连续得多；
    想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
 @keyframes tab-slide-out-left {
   from {
@@ -265,19 +265,19 @@ page {
 }
 
 :root[data-tab-slide='left']::view-transition-old(root) {
-  animation: tab-slide-out-left 300ms $ease-out both;
+  animation: tab-slide-out-left 240ms $ease-out both;
 }
 
 :root[data-tab-slide='left']::view-transition-new(root) {
-  animation: tab-slide-in-right 300ms $ease-out both;
+  animation: tab-slide-in-right 240ms $ease-out both;
 }
 
 :root[data-tab-slide='right']::view-transition-old(root) {
-  animation: tab-slide-out-right 300ms $ease-out both;
+  animation: tab-slide-out-right 240ms $ease-out both;
 }
 
 :root[data-tab-slide='right']::view-transition-new(root) {
-  animation: tab-slide-in-left 300ms $ease-out both;
+  animation: tab-slide-in-left 240ms $ease-out both;
 }
 
 /* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。

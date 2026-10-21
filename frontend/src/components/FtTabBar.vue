@@ -10,7 +10,7 @@
  */
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { animateWhenConnected, markTabNav, startSlide, type TabKey } from '@/utils/nav'
+import { animateWhenConnected, markTabNav, startSlide, tabEnterSuppressed, type TabKey } from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
@@ -37,10 +37,8 @@ const indOffset = ref(activeIdx.value)
 
 function slideIndicator(dir: 'left' | 'right' | null) {
   indOffset.value = activeIdx.value
-  // 有 View Transition 时整页快照负责动，指示条只要在对的位置上
-  if (typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function') {
-    return
-  }
+  // 转场里整页快照负责动，指示条只要在对的位置上
+  if (tabEnterSuppressed()) return
   const el = indRef.value
   if (!dir || !el || typeof el.animate !== 'function') return
   if (typeof window !== 'undefined' && window.matchMedia

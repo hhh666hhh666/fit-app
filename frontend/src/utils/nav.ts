@@ -92,6 +92,17 @@ export function markTabShown(key: TabKey) {
 }
 
 /**
+ * 是否正处在快照转场里。转场自己会做出位移，这时候再叠一段单页入场就是二次位移。
+ * 硬切（首次进某页、连点、环境不支持）时它为 false，目标页 onShow 会照常播微移入场。
+ */
+let vtInProgress = false
+
+/** 页面 onShow 里判一下：正在转场就别再播单页入场 */
+export function tabEnterSuppressed() {
+  return vtInProgress
+}
+
+/**
  * 起一次「旧页滑出、新页滑入」的连续转场——底栏单独成组、钉住不动，只有内容翻页。
  *
  * 为什么用 View Transitions：`switchTab` 之后框架只让一页在文档里，两页从来没有
@@ -109,13 +120,21 @@ export function startSlide(
   const doc = document as Document & {
     startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void> }
   }
-  if (typeof doc.startViewTransition !== 'function' || prefersReducedMotion() || !shownTabs.has(to)) {
+  const supportsVt = typeof doc.startViewTransition === 'function' && !prefersReducedMotion()
+  // 三种情况直接切、不做转场，但**保留单页微移入场**（首次也要有动画）：
+  // · 目标页还没挂载过——快照期间不能等渲染，新快照必是白板
+  // · 上一次转场还在跑——排队等只会让连点更卡
+  // · 环境不支持
+  if (!supportsVt || vtInProgress || !shownTabs.has(to)) {
+    vtInProgress = false
     navigate()
     return
   }
   const root = document.documentElement
   // dir 是「旧页往哪边滑出」：去右边的 tab → 旧页左滑、新页从右进
   root.dataset.tabSlide = dir
+  vtInProgress = true
+  vtInProgress = true
   const vt = doc.startViewTransition(async () => {
     navigate()
     // 让 Vue 把 DOM 更新队列跑完（微任务），新快照才拍得到新页面
@@ -125,6 +144,7 @@ export function startSlide(
     .catch(() => {})
     .then(() => {
       delete root.dataset.tabSlide
+      vtInProgress = false
     })
 }
 
@@ -134,10 +154,8 @@ export function startSlide(
  */
 export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
   if (!dir || prefersReducedMotion()) return
-  // 有 View Transition 时由整页快照做转场，单页入场会变成二次位移
-  if (typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function') {
-    return
-  }
+  // 正在快照转场：位移由转场负责，别再叠一段
+  if (tabEnterSuppressed()) return
   whenInDom(selector, (el, waited) => {
     if (typeof el.animate !== 'function') return
     // 等太久才挂上（首次进某个 tab 的慢路径）：这时候用户已经盯着空白等了上百毫秒，
