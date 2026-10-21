@@ -116,6 +116,21 @@ page {
   color: $app-ink-muted;
 }
 
+/* 四个主 tab 的页面根：横向裁掉切页位移期间的溢出。
+   位移（translateX ±18vw）会让内容短暂超出页面宽度；不裁的话，移动端 WebView 会把
+   它当成可横向滚动的容器，在视口底部画一条横向滚动条——全宽、约 3dp 的灰色长条，
+   压在 tabbar 下缘（2026-10-21 真机反馈的「底部出现长条」就是它）。
+   用 clip 而不是 hidden：hidden 会把页面根变成滚动容器，clip 只裁不滚。两者都不影响
+   内部 fixed 底栏（fixed 的包含块是视口，不受祖先 overflow 裁剪）。
+   ⚠️ 新增主 tab 页面时，类名要一起加进这里。 */
+.home,
+.log,
+.stats,
+.prof {
+  overflow-x: hidden; /* 老 WebView 兜底 */
+  overflow-x: clip;
+}
+
 /* ── 主 tab 切换：内容层按方向入场（ADR 0037）──
    只动各页的 __body 一层，绝不动页面根元素：四个页面的底部栏是根元素的 fixed
    子元素，根元素一旦有 transform 就会成为它的包含块，底栏会跟着位移、并在位移
