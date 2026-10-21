@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+## [0.18.0] - 2026-10-21
+
 ### Changed
 
 - **切页不再白屏：主 tab 改成保活导航**（[ADR 0038](./docs/adr/0038-tabbar-switchtab-keepalive.md)）：四个主页面注册为 `pages.json` 的 tabBar 页、互跳改用 `uni.switchTab`，框架把它们按 `type: "tabBar"` 缓存住、永不 prune——**切页不再销毁页面**，于是「切一页闪一下白」、滚动位置回到顶部、日志页月份回到当月三件事一起消失（后两者不需要任何「存了再复原」的代码）。难点在 H5 **不认 `custom: true`**：它照样渲染一条内置 `uni-tabbar` 并给 `uni-page-wrapper` 扣掉 50px 高度，所以在 `App.vue` 里把内置栏 `display: none`、wrapper 高度复位、`::after` 占位去掉（刻意不用 `uni.hideTabBar()`：异步会晚一拍、先闪一条内置栏）。切页横移也随导航形态改了实现——页面不再重建，「挂载时带 class」只能播一次，改用 WAAPI 在每次 `onShow` 重放。⚠️ 边界变了：`navigateTo` / `redirectTo` 不能再指向这四个页面，跳它们只能 `switchTab`（不带参数）。本地 headless 冒烟已验：切走再回来是**同一个 DOM 节点**、内置栏 `display: none`、无报错。
