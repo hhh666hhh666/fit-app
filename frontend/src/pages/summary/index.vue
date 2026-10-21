@@ -60,7 +60,8 @@ async function close() {
       // 备注更新失败不拦退出
     }
   }
-  uni.reLaunch({ url: '/pages/home/index' })
+  // 首页是 tabBar 页（ADR 0038）：切回 tab 用 switchTab，顺带清掉下级页整条栈
+  uni.switchTab({ url: '/pages/home/index' })
 }
 </script>
 

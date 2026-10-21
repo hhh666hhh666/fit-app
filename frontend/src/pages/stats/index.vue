@@ -6,11 +6,11 @@ import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
 import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
-import { takeTabEnter } from '@/utils/nav'
+import { playTabEnter, takeTabEnter } from '@/utils/nav'
 
-// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
-const tabEnterDir = takeTabEnter('stats')
-const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
+// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
+const tabDir = ref<'left' | 'right' | null>(null)
+const tabSeq = ref(0)
 
 // ── 统计（设计稿：.workbuddy/stitch/screen/stats.png）──
 
@@ -37,6 +37,10 @@ async function load() {
 
 onShow(() => {
   if (!ensureLogin()) return
+  const dir = takeTabEnter('stats')
+  playTabEnter('.stats__body', dir)
+  tabDir.value = dir
+  tabSeq.value++
   load()
 })
 
@@ -76,22 +80,11 @@ function barHeight(count: number): string {
   return `${Math.max(4, Math.round((count / maxBarCount.value) * 150))}rpx`
 }
 
-function goHome() {
-  uni.reLaunch({ url: '/pages/home/index' })
-}
-
-function goLog() {
-  uni.reLaunch({ url: '/pages/log/index' })
-}
-
-function goProfile() {
-  uni.reLaunch({ url: '/pages/profile/index' })
-}
 </script>
 
 <template>
   <view class="stats">
-    <view class="stats__body" :class="tabEnterClass">
+    <view class="stats__body">
       <!-- 标题行 -->
       <view class="stats__head">
         <text class="stats__title">统计</text>
@@ -180,7 +173,7 @@ function goProfile() {
     </view>
 
     <view class="stats__bottom">
-      <FtTabBar active="stats" :enter-dir="tabEnterDir" />
+      <FtTabBar active="stats" :enter-dir="tabDir" :enter-seq="tabSeq" />
     </view>
   </view>
 </template>

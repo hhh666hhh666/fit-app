@@ -61,6 +61,7 @@ Status: accepted
 - [ADR 0035](./0035-client-cache-and-invalidation.md)：客户端数据缓存——写后失效、按域作废、不设 TTL（时间类按自然日分区）；照片走按字节 LRU 的 blob 缓存。
 - [ADR 0036](./0036-cold-start-cache-persistence.md)：冷启动也读缓存——数据快照（白名单小接口）落 localStorage、餐照落 IndexedDB（128MB），启动不校验；收窄 ADR 0035 的「不落 storage」。
 - [ADR 0037](./0037-tab-switch-transition.md)：主 tab 切换改为方向感知的内容层横移（只动 `__body`、底栏钉住），方向信号一次性传递，动效首次落 token。
+- [ADR 0038](./0038-tabbar-switchtab-keepalive.md)：主 tab 导航改为 `tabBar` ＋ `switchTab` 保活——切页不再销毁页面，白屏／滚动位置／月份一次解决；H5 内置 tabbar 必须自己压掉。
 
 ## 与其他文档的分工
 

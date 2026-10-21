@@ -36,3 +36,39 @@ export function takeTabEnter(to: TabKey): 'left' | 'right' | null {
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null
   return toIdx > fromIdx ? 'right' : 'left'
 }
+
+/**
+ * 播放一次切页入场。只动页面正文那一层（`__body`），**绝不动页面根元素**——
+ * 底栏是根元素的 fixed 子元素，根元素一有 transform 就成了它的包含块，会跟着位移。
+ *
+ * 为什么用 Web Animations API 而不是 CSS 动画类：页面现在被保活（`switchTab`），
+ * 不再重建，「挂载时带 class」只能播一次；WAAPI 可以在每次 `onShow` 直接重放，
+ * 也不必为了重播去读 `offsetWidth` 强制重排。
+ *
+ * 时长与缓动对齐 `uni.scss` 的 `$dur-base` / `$ease-out`（JS 读不到 SCSS 变量，
+ * 这两个数是唯一的手抄点，改 token 时记得同步这里）。
+ */
+export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
+  if (!dir || typeof document === 'undefined') return
+  if (typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return
+  }
+  const el = document.querySelector(selector) as HTMLElement | null
+  if (!el || typeof el.animate !== 'function') return
+  // 连点时把上一次没播完的取消，免得两段位移叠在一起
+  el.getAnimations().forEach((a) => a.cancel())
+  el.animate(
+    [
+      { transform: `translateX(${dir === 'right' ? 18 : -18}vw)`, opacity: 0.6 },
+      { transform: 'translateX(0)', opacity: 1 }
+    ],
+    {
+      duration: 220,
+      easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+      // backwards：结束后不残留 transform（0.17.3 的教训：残留 transform 会让正文常驻一个合成层）
+      fill: 'backwards'
+    }
+  )
+}
+

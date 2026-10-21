@@ -12,12 +12,12 @@ import {clearAll} from '@/api/cache'
 import {buildDietRings} from '@/utils/diet'
 import {formatClock, formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
-import {takeTabEnter} from '@/utils/nav'
+import {playTabEnter, takeTabEnter} from '@/utils/nav'
 import {clearSession, loadSession, netElapsedSec, type Session} from '@/utils/session'
 
-// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
-const tabEnterDir = takeTabEnter('home')
-const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
+// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
+const tabDir = ref<'left' | 'right' | null>(null)
+const tabSeq = ref(0)
 
 const today = (() => {
   const d = new Date()
@@ -203,6 +203,10 @@ const picker = ref(false)
 
 onShow(() => {
   if (!ensureLogin()) return
+  const dir = takeTabEnter('home')
+  playTabEnter('.home__body', dir)
+  tabDir.value = dir
+  tabSeq.value++
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
@@ -307,7 +311,7 @@ function goPlans() {
 
 <template>
   <view class="home">
-    <view class="home__body" :class="tabEnterClass">
+    <view class="home__body">
       <!-- 顶部行 -->
       <view class="home__head">
         <text class="home__date ft-num">{{ today }}</text>
@@ -409,7 +413,7 @@ function goPlans() {
       </view>
 
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
-      <FtTabBar active="home" :enter-dir="tabEnterDir" class="home__tab"/>
+      <FtTabBar active="home" :enter-dir="tabDir" :enter-seq="tabSeq" class="home__tab"/>
     </view>
 
     <!-- 训练计划选择器（点「开始训练」弹出） -->

@@ -10,11 +10,10 @@ onLaunch(() => {
   // 同步是对的——异步就要在 read() 里加「等就绪」的闸门，忘了 await 就是「偶尔多拉一轮」。
   hydrateCache()
 
-  // 主 tab 的页面 chunk 是按页懒加载的（各页产物 `pages-*-index.js`）。第一次切过去要等
-  // 一个 RTT，而 reLaunch 已经把旧页拆掉了——这段空档里整页连底栏都不存在，真机上就是
-  // 「导航栏闪一下」（2026-10-21 录屏里能抓到两帧整页空白，正好是首次进日志与统计）。
-  // 这里只是把模块取回来，不注册路由、不挂载组件；取回后首次切页不再等 chunk。
-  // 延后一拍，别和首屏的关键资源抢带宽。
+  // 主 tab 的页面 chunk 按页懒加载（各页产物 `pages-*-index.js`）。页面虽然保活了
+  // （`switchTab`，ADR 0038），但**第一次**切过去仍要现拉 chunk，那一拍里页面还挂不上，
+  // 真机上就是「闪一下」（0.17.3 之前更糟：`reLaunch` 连旧页一起拆，整页空白）。
+  // 这里只把模块取回来，不注册路由、不挂载组件；延后一拍，别和首屏关键资源抢带宽。
   setTimeout(() => {
     void import('@/pages/log/index.vue')
     void import('@/pages/stats/index.vue')
@@ -142,75 +141,23 @@ page {
   overflow-x: clip;
 }
 
-/* ── 主 tab 切换：内容层按方向入场（ADR 0037）──
-   只动各页的 __body 一层，绝不动页面根元素：四个页面的底部栏是根元素的 fixed
-   子元素，根元素一旦有 transform 就会成为它的包含块，底栏会跟着位移、并在位移
-   里露出画布底色。底栏钉住不动，正是「整屏在横向翻页」该有的样子。
-   方向由 utils/nav.ts 在跳转前记下；无方向（刷新、从下级页回来）走淡入。 */
-
-@keyframes tab-in-right {
-  from {
-    opacity: 0.6;
-    transform: translateX(18vw);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+/* ── 内置 tabBar 必须自己压掉（ADR 0038）──
+   四个主页面已在 pages.json 注册成 tabBar 页（为的是 switchTab 的保活），但 H5 运行期
+   **不认 `custom: true`**：只要 `route.meta.isTabBar` 为真且 `tabBar.shown` 为真，它就会
+   自己渲染一条 `uni-tabbar`，并给 `uni-page-wrapper` 扣掉 --tab-bar-height 的高度。
+   我们用的是自绘的 FtTabBar，所以这两件事都得压掉——用 CSS 而不是 `uni.hideTabBar()`，
+   是因为要保证**首帧**就生效，异步 API 会晚一拍、先闪一条内置栏。 */
+uni-tabbar {
+  display: none !important;
 }
 
-@keyframes tab-in-left {
-  from {
-    opacity: 0.6;
-    transform: translateX(-18vw);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+uni-app.uni-app--showtabbar uni-page-wrapper {
+  height: 100% !important;
 }
 
-@keyframes tab-in-fade {
-  from {
-    opacity: 0;
-    transform: translateY(8rpx);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+uni-app.uni-app--showtabbar uni-page-wrapper::after,
+uni-app.uni-app--showtabbar uni-page-body::after {
+  display: none !important;
 }
 
-.tab-in-right,
-.tab-in-left,
-.tab-in-fade {
-  animation-duration: $dur-base;
-  animation-timing-function: $ease-out;
-  /* backwards 而不是 both：both 会把最后一帧的 transform 一直留在元素上，
-     等于让每个页面正文永久占一个合成层、还成了 fixed 后代的包含块候选；
-     既没必要，也会让切换时的层重建更容易闪。backwards 结束即回到常态，
-     而末帧本来就等于常态，看不出差别。 */
-  animation-fill-mode: backwards;
-}
-
-.tab-in-right {
-  animation-name: tab-in-right;
-}
-
-.tab-in-left {
-  animation-name: tab-in-left;
-}
-
-.tab-in-fade {
-  animation-name: tab-in-fade;
-}
-
-/* 系统开了「减少动态效果」：一律直接到位（首页流光卡另有单独降级） */
-@media (prefers-reduced-motion: reduce) {
-  .tab-in-right,
-  .tab-in-left,
-  .tab-in-fade {
-    animation: none;
-  }
-}
 </style>

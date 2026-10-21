@@ -1,17 +1,23 @@
 /**
  * 底部主 tab 栏。四页各渲染一份（uni-app 没有共享 layout），页内位置由页面决定。
  *
- * 切换走 uni.reLaunch：页面会被销毁重建，所以这里既是「发起方」也是「方向信号的
- * 唯一来源」——跳转前记下从哪来，目标页 setup 时取用（见 utils/nav.ts）。
+ * 切换走 `uni.switchTab`：四个主页面在 `pages.json` 里注册成 tabBar 页，框架用
+ * KeepAlive 把它们按 `type: "tabBar"` 缓存住、永不 prune——所以切页**不再销毁页面**，
+ * `reLaunch` 那段「旧页已拆、新页未建」的白屏空档随之消失（ADR 0038）。
+ *
+ * 框架会在 H5 上另渲染一条内置 `uni-tabbar`（它不认 `custom: true`），已在 App.vue
+ * 里用样式压掉；这里这份才是真正显示的。
  */
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { markTabNav, type TabKey } from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
-  /** 本页的入场方向：由页面从 utils/nav 取到后透传，用来让指示条从同侧滑入 */
+  /** 本页这次显示的入场方向；页面在 onShow 里取到后透传，用来让指示条从上一格滑过来 */
   enterDir?: 'left' | 'right' | null
+  /** 每次 onShow 自增一次，用来触发指示条重放（页面保活，不能用挂载时机） */
+  enterSeq?: number
 }>()
 
 const tabs = [
@@ -23,29 +29,46 @@ const tabs = [
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
 
-// 指示条：先落在「上一页那一格」，挂载后下一帧过渡到当前格。
-// tabbar 随页面一起重建、旧页已销毁，做不到从上一格的真实位置滑过来——
-// 这段位移是伪连续，但方向必须对：内容从右侧进场是因为整个容器在往左移，
-// 而指示条标的是「选中哪一格」，所以它和内容位移**反向**——首页→日志是
-// 从左往右走一格（起点＝上一页那边，即 dir=right 时取 activeIdx - 1）。
-const indIdx = ref(
-  props.enterDir ? activeIdx.value + (props.enterDir === 'right' ? -1 : 1) : activeIdx.value
-)
+// 指示条：静止位置永远是当前格；「上一页那一格」只是动画的起点。
+// 方向与内容位移相反——内容从右进场是因为整个容器在往左移，而指示条标的是
+// 「选中哪一格」，所以首页→日志它从左往右走一格。
+const indRef = ref<HTMLElement | null>(null)
+const indOffset = ref(activeIdx.value)
 
+function slideIndicator(dir: 'left' | 'right' | null) {
+  const el = indRef.value
+  indOffset.value = activeIdx.value
+  if (!dir || !el || typeof el.animate !== 'function') return
+  if (typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return
+  }
+  const from = activeIdx.value + (dir === 'right' ? -1 : 1)
+  el.getAnimations().forEach((a) => a.cancel())
+  el.animate(
+    [
+      { transform: `translateX(${from * 100}%)` },
+      { transform: `translateX(${activeIdx.value * 100}%)` }
+    ],
+    { duration: 220, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' }
+  )
+}
+
+// 首次挂载（冷启动）没有方向信号，指示条直接落在当前格，不要滑
 onMounted(() => {
-  if (indIdx.value === activeIdx.value) return
-  // 双 rAF：等首帧（已在偏侧位置）画上去，再改目标值，transition 才会真的跑
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      indIdx.value = activeIdx.value
-    })
-  })
+  indOffset.value = activeIdx.value
 })
+
+// 之后每次页面被显示，页面把 enterSeq 加一，这里据此重放
+watch(
+  () => props.enterSeq,
+  () => slideIndicator(props.enterDir ?? null)
+)
 
 function go(t: (typeof tabs)[number]) {
   if (t.key === props.active) return
   markTabNav(props.active)
-  uni.reLaunch({ url: t.url })
+  uni.switchTab({ url: t.url })
 }
 </script>
 
@@ -66,7 +89,11 @@ function go(t: (typeof tabs)[number]) {
 
     <!-- 当前项短横：用墨黑而不是荧光笔——`$app-highlight` 在白底上对比度约 1.1:1，
          细线放上去基本看不见（首页流光第①条同款教训），荧光仍留给内容级高亮 -->
-    <view class="ft-tabbar__ind" :style="{ transform: `translateX(${indIdx * 100}%)` }" />
+    <view
+      ref="indRef"
+      class="ft-tabbar__ind"
+      :style="{ transform: `translateX(${indOffset * 100}%)` }"
+    />
   </view>
 </template>
 
@@ -108,7 +135,6 @@ function go(t: (typeof tabs)[number]) {
   display: flex;
   justify-content: center;
   pointer-events: none;
-  transition: transform $dur-base $ease-out;
 }
 
 .ft-tabbar__ind::before {
@@ -120,8 +146,7 @@ function go(t: (typeof tabs)[number]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ft-tabbar__item,
-  .ft-tabbar__ind {
+  .ft-tabbar__item {
     transition: none;
   }
 }

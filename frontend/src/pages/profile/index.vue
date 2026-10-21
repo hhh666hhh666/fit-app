@@ -11,11 +11,11 @@ import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, t
 import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
-import { takeTabEnter } from '@/utils/nav'
+import { playTabEnter, takeTabEnter } from '@/utils/nav'
 
-// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
-const tabEnterDir = takeTabEnter('profile')
-const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
+// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
+const tabDir = ref<'left' | 'right' | null>(null)
+const tabSeq = ref(0)
 
 // ── 我的（设计稿：.workbuddy/stitch/screen/profile.png）──
 
@@ -34,6 +34,10 @@ const schedule = useScheduleStore()
 
 onShow(() => {
   if (!ensureLogin()) return
+  const dir = takeTabEnter('profile')
+  playTabEnter('.prof__body', dir)
+  tabDir.value = dir
+  tabSeq.value++
   username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
   schedule.load()
   loadStats()
@@ -199,7 +203,7 @@ function logout() {
 
 <template>
   <view class="prof">
-    <view class="prof__body" :class="tabEnterClass">
+    <view class="prof__body">
       <!-- 顶部 meta 行 -->
       <view class="prof__meta">
         <text class="ft-num">FIT-APP LEDGER</text>
@@ -304,7 +308,7 @@ function logout() {
     </view>
 
     <view class="prof__bottom">
-      <FtTabBar active="profile" :enter-dir="tabEnterDir" />
+      <FtTabBar active="profile" :enter-dir="tabDir" :enter-seq="tabSeq" />
     </view>
   </view>
 </template>

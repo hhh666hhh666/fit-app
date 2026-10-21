@@ -521,7 +521,7 @@ function setValueText(x: SessionSet): string {
  *  已结束的会话不落——否则刚 `clearSession()` 的会在这一步被原样写回。 */
 function leaveSession() {
   if (session.value && !ended) saveSession(session.value)
-  uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
+  uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })
 }
 
 async function finish() {

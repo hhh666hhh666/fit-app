@@ -31,7 +31,9 @@ async function submit() {
     uni.setStorageSync('fitapp_username', res.username)
     // 换人就用：登录成功即清掉上一个人留下的数据/照片缓存（ADR 0035）
     resetCaches()
-    uni.reLaunch({ url: '/pages/home/index' })
+    // switchTab 而不是 reLaunch：首页现在是 tabBar 页（ADR 0038），switchTab 正好
+    // 关掉登录页所在的整条非 tab 栈并落到 tab 上
+    uni.switchTab({ url: '/pages/home/index' })
   } catch {
     // request 层已统一弹出错误提示（用户名已存在 / 用户名或密码不正确 等）
   } finally {

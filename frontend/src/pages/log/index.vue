@@ -8,11 +8,11 @@ import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
-import { takeTabEnter } from '@/utils/nav'
+import { playTabEnter, takeTabEnter } from '@/utils/nav'
 
-// 切页入场方向（ADR 0037）：reLaunch 会重建本页，setup 只跑一次，正好取一次信号。
-const tabEnterDir = takeTabEnter('log')
-const tabEnterClass = tabEnterDir ? `tab-in-${tabEnterDir}` : 'tab-in-fade'
+// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
+const tabDir = ref<'left' | 'right' | null>(null)
+const tabSeq = ref(0)
 
 const PAGE_SIZE = 50
 
@@ -113,6 +113,10 @@ async function load(reset = false) {
 
 onShow(() => {
   if (!ensureLogin()) return
+  const dir = takeTabEnter('log')
+  playTabEnter('.log__body', dir)
+  tabDir.value = dir
+  tabSeq.value++
   void load(true)
 })
 
@@ -220,7 +224,7 @@ function doDelete() {
 
 <template>
   <view class="log">
-    <view class="log__body" :class="tabEnterClass">
+    <view class="log__body">
       <!-- 顶栏：常规＝标题＋月份；多选态＝取消＋已选＋全选/删除 -->
       <view class="log__head">
         <template v-if="!selectMode">
@@ -309,7 +313,7 @@ function doDelete() {
     </view>
 
     <view class="log__bottom">
-      <FtTabBar active="log" :enter-dir="tabEnterDir" />
+      <FtTabBar active="log" :enter-dir="tabDir" :enter-seq="tabSeq" />
     </view>
   </view>
 </template>

@@ -87,6 +87,19 @@
       "style": { "navigationBarTitleText": "识别明细" }
     }
   ],
+  "tabBar": {
+    "custom": true,
+    "color": "#9a9ea3",
+    "selectedColor": "#17191d",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/log/index", "text": "日志" },
+      { "pagePath": "pages/stats/index", "text": "统计" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
