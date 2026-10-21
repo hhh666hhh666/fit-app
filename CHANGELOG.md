@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+## [0.17.2] - 2026-10-21
+
 ### Fixed
 
 - **切页时底部冒出一条全宽的灰色长条**：切页动画把各页 `.xx__body` 用 `translateX(±18vw)` 位移，位移期间内容横向超出页面宽度。`body` 上的 `overflow-x: hidden` 管不到 `uni-page-wrapper`，于是移动端 WebView 把页面当成可横向滚动的容器，在视口底部画出一条**横向滚动条**——全宽、约 3dp、灰色，正好压在 tabbar 下缘。现在四个页面根（`.home` / `.log` / `.stats` / `.prof`）加 `overflow-x: clip`（`hidden` 兜底老 WebView）：只裁不滚，也不影响内部 fixed 的底栏（fixed 的包含块是视口，不受祖先 overflow 裁剪）。
