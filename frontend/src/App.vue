@@ -142,164 +142,21 @@ page {
   overflow-x: clip;
 }
 
-/* ── 切页：整页快照的连续推拉（ADR 0039）──
-   `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
-   只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
-   旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
-   ⚠️ 位移是 ±100% 屏宽、240ms——比「单页 8vw 微移」慢得多也连续得多；
-   想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
-@keyframes tab-slide-out-left {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes tab-slide-in-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes tab-slide-out-right {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes tab-slide-in-left {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-:root[data-tab-slide='left']::view-transition-old(root) {
-  animation: tab-slide-out-left 240ms $ease-out both;
-}
-
-:root[data-tab-slide='left']::view-transition-new(root) {
-  animation: tab-slide-in-right 240ms $ease-out both;
-}
-
-:root[data-tab-slide='right']::view-transition-old(root) {
-  animation: tab-slide-out-right 240ms $ease-out both;
-}
-
-:root[data-tab-slide='right']::view-transition-new(root) {
-  animation: tab-slide-in-left 240ms $ease-out both;
-}
-
-/* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。
-   root 组滑动时它不会跟着走——这就是「只有内容翻页」。 */
-::view-transition-group(app-tabbar) {
-  animation: none;
-}
-
-::view-transition-old(app-tabbar),
-::view-transition-new(app-tabbar) {
-  animation: none;
-}
-
-/* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。
-   root 组滑动时它不会跟着走——这就是「只有内容翻页」。 */
-::view-transition-group(app-tabbar) {
-  animation: none;
-}
-
-::view-transition-old(app-tabbar),
-::view-transition-new(app-tabbar) {
-  animation: none;
-}
-
-/* ── 切页：整页快照的连续推拉（ADR 0039）──
-   `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
-   只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
-   旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
-   ⚠️ 位移是 ±100% 屏宽、240ms——比「单页 8vw 微移」慢得多也连续得多；
-   想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
-@keyframes tab-slide-out-left {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes tab-slide-in-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes tab-slide-out-right {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes tab-slide-in-left {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-:root[data-tab-slide='left']::view-transition-old(root) {
-  animation: tab-slide-out-left 240ms $ease-out both;
-}
-
-:root[data-tab-slide='left']::view-transition-new(root) {
-  animation: tab-slide-in-right 240ms $ease-out both;
-}
-
-:root[data-tab-slide='right']::view-transition-old(root) {
-  animation: tab-slide-out-right 240ms $ease-out both;
-}
-
-:root[data-tab-slide='right']::view-transition-new(root) {
-  animation: tab-slide-in-left 240ms $ease-out both;
-}
-
-/* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。
-   root 组滑动时它不会跟着走——这就是「只有内容翻页」。 */
-::view-transition-group(app-tabbar) {
-  animation: none;
-}
-
-::view-transition-old(app-tabbar),
-::view-transition-new(app-tabbar) {
-  animation: none;
-}
-
-/* 底栏自己是一组，钉住不动：前后两张快照都停在原位、不加任何动画。
-   root 组滑动时它不会跟着走——这就是「只有内容翻页」。 */
-::view-transition-group(app-tabbar) {
-  animation: none;
-}
-
-::view-transition-old(app-tabbar),
-::view-transition-new(app-tabbar) {
-  animation: none;
+/* ── 切页转场：旧页克隆层滑出（ADR 0040）──
+   utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层，切换后整层滑出；
+   新页同时从另一侧滑入。底栏不在正文里，且 `__bottom` 都是 z-index: 20，
+   所以这一层（10）压不到底栏——底栏钉住不动。
+   ⚠️ 别把 View Transitions 那套（::view-transition-*）加回来：主人设备的 WebView
+   不支持（要 Chrome 111+），当时一直走兜底硬切，表现为「中间一帧整页空白」。 */
+.tab-slide-layer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
+  will-change: transform;
+  /* 克隆体可能比视口高，滑出时不能让它撑出滚动条 */
+  contain: paint;
 }
 
 /* ── 内置 tabBar 必须自己压掉（ADR 0038）──

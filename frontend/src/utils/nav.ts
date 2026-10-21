@@ -1,13 +1,10 @@
-import { nextTick } from 'vue'
-
-// 四个主 tab 的切换方向信号（ADR 0037 / 0038）。
+// 四个主 tab 的切换方向信号（ADR 0037 / 0038 / 0040）。
 //
 // 为什么需要它：四页之间走 `uni.switchTab`（页面保活，不再重建），但「从哪一页来」
 // 只有发起方知道，只能在跳转前留下来。
 //
 // 为什么不落 Pinia／storage：这是一次性的过场信号，不是业务状态。开关是 SPA 内跳转、
 // 不重载 JS，模块级变量足够存活；消费即清，也不需要「什么时候忘掉」的规则。
-// 刷新页面时信号为空 → 退化为无方向（不播动画），天然安全。
 
 export type TabKey = 'home' | 'log' | 'stats' | 'profile'
 
@@ -38,143 +35,106 @@ export function takeTabEnter(to: TabKey): 'left' | 'right' | null {
   return toIdx > fromIdx ? 'right' : 'left'
 }
 
-/**
- * 入场动效的参数。位移和起始透明度都刻意压得很轻：
- * 位移 18vw＋opacity 0.6 那版，动画期间内容被推出视口、整体发白，
- * 真机上读起来就是「切页白屏」（2026-10-21 的截图里只剩左缘一圈残影）。
- * 现在 8vw ＋ 0.95：位移只够表达方向，内容始终清晰可辨。
- * 时长与缓动对齐 `uni.scss` 的 `$dur-base` / `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步）。
- */
-const ENTER_MS = 200
-const ENTER_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
-
-/** 超过这个等待时长就不播入场动效——那是首次挂载的慢路径，补动画反而更乱 */
-const SLOW_MOUNT_MS = 120
+/** 时长与缓动对齐 `uni.scss` 的 `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步） */
+const SLIDE_MS = 260
+const EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/**
- * 等选择器真的能在文档里找到元素再回调。上限 250ms——超时就放弃，
- * 宁可这一帧没动画，也不能把调用方卡住。
- *
- * ⚠️ 为什么不用 `ref`：uni-app H5 里 `<view ref="x">` 拿到的是**组件实例**
- * （`[object Object]`，没有 `tagName` / `animate`），拿它调 `el.animate` 会静默失败。
- * 为什么不在 `onShow` 里直接 `querySelector`：那一刻页面组件已建好，但 KeepAlive
- * 把它挂回 DOM 是之后的事，查不到就是 null——2026-10-21 真机「动效没了」两个坑都踩过。
- */
-function whenInDom(selector: string, cb: (el: HTMLElement, waited: number) => void) {
-  const started = performance.now()
-  const tick = () => {
-    const el = document.querySelector(selector) as HTMLElement | null
-    if (el && el.isConnected) {
-      cb(el, performance.now() - started)
-      return
-    }
-    if (performance.now() - started > 600) return
-    requestAnimationFrame(tick)
+/** 页面滚动发生在外层容器上，克隆体要从顶部整体上移同样的距离才对得上当前视口 */
+function scrollTopOf(el: HTMLElement) {
+  let node: HTMLElement | null = el.parentElement
+  while (node) {
+    if (node.scrollTop > 0) return node.scrollTop
+    node = node.parentElement
   }
-  requestAnimationFrame(tick)
+  return document.scrollingElement?.scrollTop ?? window.scrollY ?? 0
 }
 
 /**
- * 哪些主 tab 已经挂载过。首次进某页要现挂载（chunk ／ 首渲染），而转场回调里
- * **不能等渲染帧**（快照期间浏览器暂停出帧），新快照就会拍到一块白板——所以首次
- * 直接切、不转场；挂过之后再切才有快照转场。
- */
-const shownTabs = new Set<TabKey>()
-
-/** 页面 `onShow` 时登记一次（在 takeTabEnter 旁边调） */
-export function markTabShown(key: TabKey) {
-  shownTabs.add(key)
-}
-
-/**
- * 是否正处在快照转场里。转场自己会做出位移，这时候再叠一段单页入场就是二次位移。
- * 硬切（首次进某页、连点、环境不支持）时它为 false，目标页 onShow 会照常播微移入场。
- */
-let vtInProgress = false
-
-/** 页面 onShow 里判一下：正在转场就别再播单页入场 */
-export function tabEnterSuppressed() {
-  return vtInProgress
-}
-
-/**
- * 起一次「旧页滑出、新页滑入」的连续转场——底栏单独成组、钉住不动，只有内容翻页。
+ * 切页转场：**把当前页正文克隆一层盖上去滑出**，紧接着新页从另一侧滑入。
  *
- * 为什么用 View Transitions：`switchTab` 之后框架只让一页在文档里，两页从来没有
- * 同时可见的时刻，「旧页往左走、新页从右来」只能靠切换前后各拍一张整页快照再并排滑动。
+ * 为什么不用 View Transitions：2026-10-21 上线后发现主人设备的 WebView 不支持
+ * （该特性要 Chrome 111+），`startViewTransition` 不存在 → 一直走兜底硬切，于是
+ * 「中间一帧整页空白、连底栏都没有」。依赖运行时新特性的路子赌不起。
  *
- * ⚠️ 回调里**只等微任务，绝不等 rAF**：快照期间浏览器不出帧，`requestAnimationFrame`
- * 不会回调，用 rAF 等 Dom 会让 Promise 永不 resolve、整个转场卡住（2026-10-21 真机
- * 「卡几秒才切」就是这么来的）。`nextTick()` 是微任务，快照期间照常执行。
+ * 克隆层还有个白捡的好处：新页挂载要几十到几百毫秒，这段时间**屏幕上是旧页在挡着**，
+ * 白屏被遮住了——这正是之前所有版本都没解决的。
+ *
+ * `dir` 是旧页滑出的方向；`fromSelector` 是当前页正文的选择器（`.log__body` 等）。
+ * 底栏不在正文里，且四个页面的 `__bottom` 都有 `z-index: 20`，克隆层（z-index 10）
+ * 压不到它——底栏钉住不动。
  */
 export function startSlide(
   dir: 'left' | 'right',
   navigate: () => void,
-  to: TabKey
+  fromSelector: string
 ) {
-  const doc = document as Document & {
-    startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void> }
-  }
-  const supportsVt = typeof doc.startViewTransition === 'function' && !prefersReducedMotion()
-  // 三种情况直接切、不做转场，但**保留单页微移入场**（首次也要有动画）：
-  // · 目标页还没挂载过——快照期间不能等渲染，新快照必是白板
-  // · 上一次转场还在跑——排队等只会让连点更卡
-  // · 环境不支持
-  if (!supportsVt || vtInProgress || !shownTabs.has(to)) {
-    vtInProgress = false
+  const src = document.querySelector(fromSelector) as HTMLElement | null
+  if (!src || typeof src.cloneNode !== 'function' || prefersReducedMotion()) {
     navigate()
     return
   }
-  const root = document.documentElement
-  // dir 是「旧页往哪边滑出」：去右边的 tab → 旧页左滑、新页从右进
-  root.dataset.tabSlide = dir
-  vtInProgress = true
-  vtInProgress = true
-  const vt = doc.startViewTransition(async () => {
-    navigate()
-    // 让 Vue 把 DOM 更新队列跑完（微任务），新快照才拍得到新页面
-    await nextTick()
-  })
-  void Promise.resolve(vt.finished)
-    .catch(() => {})
-    .then(() => {
-      delete root.dataset.tabSlide
-      vtInProgress = false
-    })
+
+  const layer = document.createElement('div')
+  layer.className = 'tab-slide-layer'
+  const clone = src.cloneNode(true) as HTMLElement
+  clone.style.transform = `translateY(${-scrollTopOf(src)}px)`
+  layer.appendChild(clone)
+  document.body.appendChild(layer)
+
+  // 先把层铺上去，再切换：新页挂载期间由旧页克隆层顶着，不是白屏
+  navigate()
+
+  const dx = dir === 'left' ? -100 : 100
+  const anim = layer.animate(
+    [{ transform: 'translateX(0)' }, { transform: `translateX(${dx}%)` }],
+    { duration: SLIDE_MS, easing: EASE, fill: 'forwards' }
+  )
+  let removed = false
+  const drop = () => {
+    if (removed) return
+    removed = true
+    layer.remove()
+  }
+  void Promise.resolve(anim.finished).catch(() => {}).then(drop)
+  // 兜底：动画被跳过（某些省电模式）也要把层摘掉，否则它一直盖在页面上
+  setTimeout(drop, SLIDE_MS + 250)
 }
 
 /**
- * 播放一次切页入场。只动页面正文那一层（`__body`），**绝不动页面根元素**——
- * 底栏是根元素的 fixed 子元素，根元素一有 transform 就成了它的包含块，会跟着位移。
+ * 新页入场：从另一侧整屏滑进来。
+ *
+ * 传选择器而不是元素：`onShow` 触发时新页的 DOM 未必已经在文档里（首次挂载尤其慢），
+ * 而 uni-app H5 的 `<view ref>` 拿到的是**组件实例**（没有 `tagName` / `animate`）。
+ * 所以这里轮询到元素真的连进文档再播——**不设短上限**，晚到也要滑进来，
+ * 因为那时候旧页克隆层多半已经滑走，正是它该出现的时刻。
  */
 export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
   if (!dir || prefersReducedMotion()) return
-  // 正在快照转场：位移由转场负责，别再叠一段
-  if (tabEnterSuppressed()) return
-  whenInDom(selector, (el, waited) => {
-    if (typeof el.animate !== 'function') return
-    // 等太久才挂上（首次进某个 tab 的慢路径）：这时候用户已经盯着空白等了上百毫秒，
-    // 再补一段位移只会把「卡了一下」演成「闪了一下」。让它直接出现。
-    if (waited > SLOW_MOUNT_MS) return
-    el.getAnimations().forEach((a) => a.cancel())
-    el.animate(
-      [
-        { transform: `translateX(${dir === 'right' ? 8 : -8}vw)`, opacity: 0.95 },
-        { transform: 'translateX(0)', opacity: 1 }
-      ],
-      {
-        duration: ENTER_MS,
-        easing: ENTER_EASE,
-        // backwards：结束后不残留 transform（残留 transform 会让正文常驻一个合成层）
-        fill: 'backwards'
-      }
-    )
-  })
+  const started = performance.now()
+  const tick = () => {
+    const el = document.querySelector(selector) as HTMLElement | null
+    if (el && el.isConnected) {
+      if (typeof el.animate !== 'function') return
+      el.getAnimations().forEach((a) => a.cancel())
+      el.animate(
+        [
+          { transform: `translateX(${dir === 'right' ? 100 : -100}%)` },
+          { transform: 'translateX(0)' }
+        ],
+        { duration: SLIDE_MS, easing: EASE, fill: 'backwards' }
+      )
+      return
+    }
+    // 两秒还没出来就别等了：页面根本没挂上，动画也没有意义
+    if (performance.now() - started > 2000) return
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
 }
 
 /**
@@ -196,7 +156,7 @@ export function animateWhenConnected(
       el.animate(keyframes, options)
       return
     }
-    if (performance.now() - started > 250) return
+    if (performance.now() - started > 2000) return
     requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)

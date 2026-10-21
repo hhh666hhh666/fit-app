@@ -6,7 +6,7 @@ import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
 import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
-import { markTabShown, playTabEnter, takeTabEnter } from '@/utils/nav'
+import { playTabEnter, takeTabEnter } from '@/utils/nav'
 
 // 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
 const tabDir = ref<'left' | 'right' | null>(null)
@@ -37,7 +37,6 @@ async function load() {
 
 onShow(() => {
   if (!ensureLogin()) return
-  markTabShown('stats')
   const dir = takeTabEnter('stats')
   tabDir.value = dir
   tabSeq.value++
@@ -425,5 +424,7 @@ function barHeight(count: number): string {
   left: 0;
   right: 0;
   bottom: 0;
+  /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
+  z-index: 20;
 }
 </style>

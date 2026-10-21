@@ -10,7 +10,7 @@
  */
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { animateWhenConnected, markTabNav, startSlide, tabEnterSuppressed, type TabKey } from '@/utils/nav'
+import { animateWhenConnected, markTabNav, startSlide, type TabKey } from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
@@ -20,11 +20,12 @@ const props = defineProps<{
   enterSeq?: number
 }>()
 
+// body：该页正文的选择器，切页时用来克隆「旧页」那一层
 const tabs = [
-  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index' },
-  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index' },
-  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index' },
-  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index' }
+  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', body: '.home__body' },
+  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', body: '.log__body' },
+  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', body: '.stats__body' },
+  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', body: '.prof__body' }
 ] as const
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
@@ -37,8 +38,6 @@ const indOffset = ref(activeIdx.value)
 
 function slideIndicator(dir: 'left' | 'right' | null) {
   indOffset.value = activeIdx.value
-  // 转场里整页快照负责动，指示条只要在对的位置上
-  if (tabEnterSuppressed()) return
   const el = indRef.value
   if (!dir || !el || typeof el.animate !== 'function') return
   if (typeof window !== 'undefined' && window.matchMedia
@@ -73,7 +72,7 @@ function go(t: (typeof tabs)[number]) {
   // 去右边的 tab：旧页往左滑出、新页从右进来（反过来同理）
   const toIdx = tabs.findIndex((x) => x.key === t.key)
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
-  startSlide(dir, () => uni.switchTab({ url: t.url }), t.key)
+  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].body)
 }
 </script>
 
@@ -104,10 +103,8 @@ function go(t: (typeof tabs)[number]) {
 
 <style lang="scss" scoped>
 .ft-tabbar {
-  /* 切页快照转场时单独成组（ADR 0039）：配合 App.vue 里把这一组的动画关掉，
-     底栏就钉在原地，只有上面的内容在翻页。同一时刻文档里只有一份底栏
-     （非激活页被 KeepAlive 移出文档），所以名字不会撞。 */
-  view-transition-name: app-tabbar;
+  /* 切页时底栏要钉住：靠 App.vue 里 __bottom 的 z-index（20）压住克隆层（10），
+     这里不需要额外的东西。 */
   position: relative;
   overflow: hidden;
   background: $app-surface;
