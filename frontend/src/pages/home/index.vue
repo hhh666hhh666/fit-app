@@ -409,7 +409,7 @@ function goPlans() {
       </view>
 
       <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
-      <FtTabBar active="home" :enter-dir="tabEnterDir"/>
+      <FtTabBar active="home" :enter-dir="tabEnterDir" class="home__tab"/>
     </view>
 
     <!-- 训练计划选择器（点「开始训练」弹出） -->
@@ -711,6 +711,12 @@ function goPlans() {
   bottom: 0;
   background: $app-canvas;
   padding: 16rpx 32rpx 0;
+}
+
+/* tabbar 必须和其余三页一样通栏贴边：抵掉 .home__bottom 的左右内边距。
+   不抵的话它的上边线比别的页短 64rpx，切到首页会看出「线变窄了」。 */
+.home__tab {
+  margin: 0 -32rpx;
 }
 
 .home__bottom-link {
