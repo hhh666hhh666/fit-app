@@ -20,12 +20,11 @@ const props = defineProps<{
   enterSeq?: number
 }>()
 
-// body 是目标页正文的选择器：转场要等它真的进 DOM 再拍「新页快照」
 const tabs = [
-  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', body: '.home__body' },
-  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', body: '.log__body' },
-  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', body: '.stats__body' },
-  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', body: '.prof__body' }
+  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index' },
+  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index' },
+  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index' },
+  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index' }
 ] as const
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
@@ -76,7 +75,7 @@ function go(t: (typeof tabs)[number]) {
   // 去右边的 tab：旧页往左滑出、新页从右进来（反过来同理）
   const toIdx = tabs.findIndex((x) => x.key === t.key)
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
-  startSlide(dir, () => uni.switchTab({ url: t.url }), t.body)
+  startSlide(dir, () => uni.switchTab({ url: t.url }), t.key)
 }
 </script>
 
@@ -107,6 +106,10 @@ function go(t: (typeof tabs)[number]) {
 
 <style lang="scss" scoped>
 .ft-tabbar {
+  /* 切页快照转场时单独成组（ADR 0039）：配合 App.vue 里把这一组的动画关掉，
+     底栏就钉在原地，只有上面的内容在翻页。同一时刻文档里只有一份底栏
+     （非激活页被 KeepAlive 移出文档），所以名字不会撞。 */
+  view-transition-name: app-tabbar;
   position: relative;
   overflow: hidden;
   background: $app-surface;

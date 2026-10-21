@@ -1,3 +1,5 @@
+import { nextTick } from 'vue'
+
 // 四个主 tab 的切换方向信号（ADR 0037 / 0038）。
 //
 // 为什么需要它：四页之间走 `uni.switchTab`（页面保活，不再重建），但「从哪一页来」
@@ -78,67 +80,52 @@ function whenInDom(selector: string, cb: (el: HTMLElement, waited: number) => vo
 }
 
 /**
- * 起一次「旧页滑出、新页滑入」的连续转场。
+ * 哪些主 tab 已经挂载过。首次进某页要现挂载（chunk ／ 首渲染），而转场回调里
+ * **不能等渲染帧**（快照期间浏览器暂停出帧），新快照就会拍到一块白板——所以首次
+ * 直接切、不转场；挂过之后再切才有快照转场。
+ */
+const shownTabs = new Set<TabKey>()
+
+/** 页面 `onShow` 时登记一次（在 takeTabEnter 旁边调） */
+export function markTabShown(key: TabKey) {
+  shownTabs.add(key)
+}
+
+/**
+ * 起一次「旧页滑出、新页滑入」的连续转场——底栏单独成组、钉住不动，只有内容翻页。
  *
- * 为什么必须用 View Transitions：`switchTab` 之后框架只让一页在文档里，两页从来没有
- * 同时可见的时刻，所以「旧页往左移、新页从右进」这种连续推拉，只能靠浏览器在切换前后
- * 各拍一张整页快照、再让两张快照并排滑动。`startViewTransition` 的回调返回 Promise 时
- * 会等它 resolve 再拍新快照，所以这里可以等目标页真的进 DOM。
+ * 为什么用 View Transitions：`switchTab` 之后框架只让一页在文档里，两页从来没有
+ * 同时可见的时刻，「旧页往左走、新页从右来」只能靠切换前后各拍一张整页快照再并排滑动。
  *
- * 环境不支持（老 WebView）或系统开了减少动效 → 直接切，不留痕迹。
+ * ⚠️ 回调里**只等微任务，绝不等 rAF**：快照期间浏览器不出帧，`requestAnimationFrame`
+ * 不会回调，用 rAF 等 Dom 会让 Promise 永不 resolve、整个转场卡住（2026-10-21 真机
+ * 「卡几秒才切」就是这么来的）。`nextTick()` 是微任务，快照期间照常执行。
  */
 export function startSlide(
   dir: 'left' | 'right',
   navigate: () => void,
-  waitSelector: string
+  to: TabKey
 ) {
   const doc = document as Document & {
     startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void> }
   }
-  if (typeof doc.startViewTransition !== 'function' || prefersReducedMotion()) {
+  if (typeof doc.startViewTransition !== 'function' || prefersReducedMotion() || !shownTabs.has(to)) {
     navigate()
     return
   }
   const root = document.documentElement
   // dir 是「旧页往哪边滑出」：去右边的 tab → 旧页左滑、新页从右进
   root.dataset.tabSlide = dir
-  let navigated = false
-  const goNav = () => {
-    if (navigated) return
-    navigated = true
-    navigate()
-  }
-  // 兜底：万一回调没被调用（极端情况），不能让点击变成「没反应」
-  setTimeout(goNav, 300)
   const vt = doc.startViewTransition(async () => {
-    goNav()
-    // 只等 150ms：转场期间屏幕上是**冻结的旧页快照**，
-    // 等太久就成「卡住」而不是「滑动」；等不到就让新快照是空的那一帧，直接滑过去。
-    await waitForSelector(waitSelector, 150)
+    navigate()
+    // 让 Vue 把 DOM 更新队列跑完（微任务），新快照才拍得到新页面
+    await nextTick()
   })
   void Promise.resolve(vt.finished)
     .catch(() => {})
     .then(() => {
       delete root.dataset.tabSlide
     })
-}
-
-function waitForSelector(selector: string, timeout: number) {
-  return new Promise<void>((resolve) => {
-    const started = performance.now()
-    const tick = () => {
-      const el = document.querySelector(selector)
-      const found = el && el.isConnected
-      if (found || performance.now() - started > timeout) {
-        // 连上不等于画出来了：再等一帧，让新快照拍到的不是白板
-        if (found) requestAnimationFrame(() => resolve())
-        else resolve()
-        return
-      }
-      requestAnimationFrame(tick)
-    }
-    requestAnimationFrame(tick)
-  })
 }
 
 /**

@@ -8,7 +8,7 @@ import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
-import { playTabEnter, takeTabEnter } from '@/utils/nav'
+import { markTabShown, playTabEnter, takeTabEnter } from '@/utils/nav'
 
 // 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
 const tabDir = ref<'left' | 'right' | null>(null)
@@ -113,6 +113,7 @@ async function load(reset = false) {
 
 onShow(() => {
   if (!ensureLogin()) return
+  markTabShown('log')
   const dir = takeTabEnter('log')
   tabDir.value = dir
   tabSeq.value++
