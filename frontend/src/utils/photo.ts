@@ -1,6 +1,9 @@
 // ── 餐照：选择 / 压缩（四档）/ 上传 / 取图（H5 原生通道；<img> 带不了鉴权头，一律 fetch→blob）──
+//    取图结果进 blob 缓存（ADR 0035）：页面卸载不释放，重复打开同一张不发请求。
 
 import { API_BASE } from '@/api/base'
+import { invalidate } from '@/api/cache'
+import { cachePhoto, invalidatePhoto, isPhotoEmpty, markPhotoEmpty, peekPhoto, photoKey, thumbKey } from './photo-cache'
 
 export type PhotoQuality = 'lossless' | 'high' | 'medium' | 'low'
 
@@ -125,7 +128,12 @@ export async function pickAndUploadPhoto(
     } catch {
       /* 非 JSON（如 nginx 错误页） */
     }
-    if (res.ok && body && body.code === 0) return true
+    if (res.ok && body && body.code === 0) {
+      // 换过图：这张的缓存立刻作废，存储占用也跟着变（ADR 0035）
+      invalidatePhoto(date, meal)
+      invalidate('diet')
+      return true
+    }
     uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
     return false
   } catch {
@@ -134,41 +142,44 @@ export async function pickAndUploadPhoto(
   }
 }
 
-/** 取某餐照片的临时地址（fetch → objectURL）；无照片返回 null。调用方在替换/卸载时 revoke。 */
-export async function fetchPhotoUrl(date: string, meal: string): Promise<string | null> {
+/** 取一张图：命中缓存直接给地址（零请求），否则 fetch 后放进缓存。 */
+async function fetchCached(url: string, key: string): Promise<string | null> {
+  const hit = peekPhoto(key)
+  if (hit) return hit
+  // 已知这餐没照片：不再为它跑一次 404（大多数餐次都没拍照）
+  if (isPhotoEmpty(key)) return null
   try {
-    const res = await fetch(
-      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
-      { headers: authHeader() }
-    )
+    const res = await fetch(url, { headers: authHeader() })
+    if (res.status === 404) {
+      markPhotoEmpty(key)
+      return null
+    }
     if (!res.ok) return null
     const blob = await res.blob()
-    return blob.size ? URL.createObjectURL(blob) : null
+    return blob.size ? cachePhoto(key, blob) : null
   } catch {
     return null
   }
 }
 
-/** 用完即弃地释放 objectURL。 */
-export function releasePhotoUrl(url: string | null) {
-  if (url && url.startsWith('blob:')) {
-    URL.revokeObjectURL(url)
-  }
+/**
+ * 取某餐照片的临时地址（缓存里的 objectURL）；无照片返回 null。
+ * ⚠️ 调用方**不许 revoke**——地址归缓存所有（ADR 0035）；换图／删图走 `invalidatePhoto`，
+ * 缓存自己按 LRU 淘汰。撤销一个正在 `<img>` 上显示的地址会当场变裂图。
+ */
+export function fetchPhotoUrl(date: string, meal: string): Promise<string | null> {
+  return fetchCached(
+    `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
+    photoKey(date, meal)
+  )
 }
 
-/** 取某餐照片的**缩略图**临时地址（相册与列表用）；无照片返回 null。老数据无缩略图时后端回退原图。 */
-export async function fetchPhotoThumbUrl(date: string, meal: string): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
-      { headers: authHeader() }
-    )
-    if (!res.ok) return null
-    const blob = await res.blob()
-    return blob.size ? URL.createObjectURL(blob) : null
-  } catch {
-    return null
-  }
+/** 取某餐照片的**缩略图**地址（相册与列表用）；无照片返回 null。老数据无缩略图时后端回退原图。 */
+export function fetchPhotoThumbUrl(date: string, meal: string): Promise<string | null> {
+  return fetchCached(
+    `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
+    thumbKey(date, meal)
+  )
 }
 
 /** 删除某餐照片（不可恢复）。成功返回 true；失败已 toast。 */
@@ -184,7 +195,11 @@ export async function deletePhoto(date: string, meal: string): Promise<boolean> 
     } catch {
       /* 非 JSON（如 nginx 错误页） */
     }
-    if (res.ok && body && body.code === 0) return true
+    if (res.ok && body && body.code === 0) {
+      invalidatePhoto(date, meal)
+      invalidate('diet')
+      return true
+    }
     uni.showToast({ title: (body && body.message) || '删除失败', icon: 'none' })
     return false
   } catch {

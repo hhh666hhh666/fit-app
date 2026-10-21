@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import { listAlbum, type AlbumPhoto, type MealKey } from '@/api/nutrition'
-import { deletePhoto, fetchPhotoThumbUrl, fetchPhotoUrl, releasePhotoUrl } from '@/utils/photo'
+import { deletePhoto, fetchPhotoThumbUrl, fetchPhotoUrl } from '@/utils/photo'
+import { invalidatePhoto } from '@/utils/photo-cache'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 相册（ADR 0014）：全部餐照按日期倒序的网格（每行 3 张、日期分组、触底加载）──
 //    列表只加载**缩略图**；点开看大图时才按需拉原图（走 PhotoViewer，可左右翻、可就地删）。
+//    ⚠️ 图片地址归 utils/photo-cache.ts 的 LRU 所有（ADR 0035）：这里不 revoke，换/删图走 invalidatePhoto。
 
 const PAGE_SIZE = 60
 
@@ -34,17 +36,12 @@ onShow(() => {
   void reload()
 })
 
-onUnmounted(() => {
-  clearThumbs()
-  for (const u of viewer.value.urls) releasePhotoUrl(u)
-})
-
 function keyOf(r: AlbumPhoto) {
   return `${r.logDate}|${r.meal}`
 }
 
+/** 只清本地索引，不释放地址——地址仍归照片缓存，下次进页还能直接命中。 */
 function clearThumbs() {
-  for (const u of Object.values(thumbs.value)) releasePhotoUrl(u || null)
   thumbs.value = {}
 }
 
@@ -126,7 +123,6 @@ function onViewerChange(i: number) {
 
 function closeViewer() {
   viewer.value.show = false
-  for (const u of viewer.value.urls) releasePhotoUrl(u)
   viewer.value.urls = []
 }
 
@@ -148,10 +144,10 @@ function removeCurrent() {
       if (!confirm) return
       const ok = await deletePhoto(r.logDate, r.meal)
       if (!ok) return
+      // 照片已删：这张的原图与缩略图一起失效（缓存自己 revoke），本地索引同步去掉
+      invalidatePhoto(r.logDate, r.meal)
       const k = keyOf(r)
-      releasePhotoUrl(thumbs.value[k] || null)
       delete thumbs.value[k]
-      releasePhotoUrl(viewer.value.urls[viewer.value.index])
       rows.value = rows.value.filter((x) => x.id !== r.id)
       closeViewer()
       uni.showToast({ title: '已删除', icon: 'none' })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   addMeal,
   addMealsBatch,
@@ -14,7 +14,7 @@ import {
   type MealItem,
   type MealKey
 } from '@/api/nutrition'
-import { deletePhoto, fetchPhotoUrl, pickAndUploadPhoto, releasePhotoUrl } from '@/utils/photo'
+import { deletePhoto, fetchPhotoUrl, pickAndUploadPhoto } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
@@ -65,9 +65,8 @@ onMounted(() => {
   void init()
 })
 
-onUnmounted(() => {
-  releasePhotoUrl(photoUrl.value)
-})
+// ⚠️ 卸载时不释放照片地址：objectURL 归 utils/photo-cache.ts 的 LRU 管（ADR 0035），
+//    在这里 revoke 会让缓存里那条地址失效，下次打开又得重拉——正是要消掉的那个「重新加载一下」。
 
 async function init() {
   loading.value = true
@@ -105,7 +104,6 @@ async function searchFoods() {
 // ── 照片 ──
 
 async function loadPhoto() {
-  releasePhotoUrl(photoUrl.value)
   photoUrl.value = await fetchPhotoUrl(props.date, props.meal)
 }
 
@@ -134,7 +132,6 @@ function removePhoto() {
       if (!confirm) return
       const ok = await deletePhoto(props.date, props.meal)
       if (!ok) return
-      releasePhotoUrl(photoUrl.value)
       photoUrl.value = null
       uni.showToast({ title: '已删除', icon: 'none' })
       emit('changed')
