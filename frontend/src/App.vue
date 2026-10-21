@@ -9,6 +9,17 @@ onLaunch(() => {
   // 冷启动同步灌回上个进程的数据快照（ADR 0036）：页面 onShow 里的取数直接命中，零请求。
   // 同步是对的——异步就要在 read() 里加「等就绪」的闸门，忘了 await 就是「偶尔多拉一轮」。
   hydrateCache()
+
+  // 主 tab 的页面 chunk 是按页懒加载的（各页产物 `pages-*-index.js`）。第一次切过去要等
+  // 一个 RTT，而 reLaunch 已经把旧页拆掉了——这段空档里整页连底栏都不存在，真机上就是
+  // 「导航栏闪一下」（2026-10-21 录屏里能抓到两帧整页空白，正好是首次进日志与统计）。
+  // 这里只是把模块取回来，不注册路由、不挂载组件；取回后首次切页不再等 chunk。
+  // 延后一拍，别和首屏的关键资源抢带宽。
+  setTimeout(() => {
+    void import('@/pages/log/index.vue')
+    void import('@/pages/stats/index.vue')
+    void import('@/pages/profile/index.vue')
+  }, 1200)
 })
 </script>
 
@@ -175,7 +186,11 @@ page {
 .tab-in-fade {
   animation-duration: $dur-base;
   animation-timing-function: $ease-out;
-  animation-fill-mode: both;
+  /* backwards 而不是 both：both 会把最后一帧的 transform 一直留在元素上，
+     等于让每个页面正文永久占一个合成层、还成了 fixed 后代的包含块候选；
+     既没必要，也会让切换时的层重建更容易闪。backwards 结束即回到常态，
+     而末帧本来就等于常态，看不出差别。 */
+  animation-fill-mode: backwards;
 }
 
 .tab-in-right {
