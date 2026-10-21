@@ -7,6 +7,11 @@
 
 ## [未发布]
 
+### Fixed
+
+- **切页动效回来了**：0.18.0 把动效改成 `onShow` 驱动后它彻底不播了——两个坑叠在一起：① `onShow` 触发时页面组件已建好、但 KeepAlive 还没把它挂回 DOM，`querySelector` 查不到元素；② uni-app H5 里 `<view ref="x">` 拿到的是**组件实例**（`[object Object]`，没有 `animate`），用它调动画静默失败。现在 `playTabEnter` 收选择器、在 `requestAnimationFrame` 里轮询到元素**真的连进文档**再播（上限 250ms，超时就放弃而不是卡住），指示条同样等挂上再滑。
+
+
 ## [0.18.0] - 2026-10-21
 
 ### Changed

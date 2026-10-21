@@ -38,9 +38,9 @@ async function load() {
 onShow(() => {
   if (!ensureLogin()) return
   const dir = takeTabEnter('stats')
-  playTabEnter('.stats__body', dir)
   tabDir.value = dir
   tabSeq.value++
+  playTabEnter('.stats__body', dir)
   load()
 })
 

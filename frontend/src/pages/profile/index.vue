@@ -35,9 +35,9 @@ const schedule = useScheduleStore()
 onShow(() => {
   if (!ensureLogin()) return
   const dir = takeTabEnter('profile')
-  playTabEnter('.prof__body', dir)
   tabDir.value = dir
   tabSeq.value++
+  playTabEnter('.prof__body', dir)
   username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
   schedule.load()
   loadStats()

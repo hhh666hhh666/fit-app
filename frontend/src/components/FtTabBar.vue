@@ -10,7 +10,7 @@
  */
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { markTabNav, type TabKey } from '@/utils/nav'
+import { animateWhenConnected, markTabNav, type TabKey } from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
@@ -44,8 +44,8 @@ function slideIndicator(dir: 'left' | 'right' | null) {
     return
   }
   const from = activeIdx.value + (dir === 'right' ? -1 : 1)
-  el.getAnimations().forEach((a) => a.cancel())
-  el.animate(
+  animateWhenConnected(
+    el,
     [
       { transform: `translateX(${from * 100}%)` },
       { transform: `translateX(${activeIdx.value * 100}%)` }

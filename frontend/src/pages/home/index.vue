@@ -204,9 +204,9 @@ const picker = ref(false)
 onShow(() => {
   if (!ensureLogin()) return
   const dir = takeTabEnter('home')
-  playTabEnter('.home__body', dir)
   tabDir.value = dir
   tabSeq.value++
+  playTabEnter('.home__body', dir)
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
