@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app'
+import { hydrateCache } from '@/api/cache'
 
 // 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
 // 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
 // ⚠️ 守卫是**逐页**的：新建页面记得加 `if (!ensureLogin()) return`，uni-app 没有全局页面钩子。
-onLaunch(() => {})
+onLaunch(() => {
+  // 冷启动同步灌回上个进程的数据快照（ADR 0036）：页面 onShow 里的取数直接命中，零请求。
+  // 同步是对的——异步就要在 read() 里加「等就绪」的闸门，忘了 await 就是「偶尔多拉一轮」。
+  hydrateCache()
+})
 </script>
 
 <style lang="scss">

@@ -3,7 +3,17 @@
 
 import { API_BASE } from '@/api/base'
 import { invalidate } from '@/api/cache'
-import { cachePhoto, invalidatePhoto, isPhotoEmpty, markPhotoEmpty, peekPhoto, photoKey, thumbKey } from './photo-cache'
+import {
+  cachePhoto,
+  invalidatePhoto,
+  isPhotoEmpty,
+  markPhotoEmpty,
+  peekPhoto,
+  photoKey,
+  readPhotoFromDisk,
+  savePhotoToDisk,
+  thumbKey
+} from './photo-cache'
 
 export type PhotoQuality = 'lossless' | 'high' | 'medium' | 'low'
 
@@ -142,12 +152,15 @@ export async function pickAndUploadPhoto(
   }
 }
 
-/** 取一张图：命中缓存直接给地址（零请求），否则 fetch 后放进缓存。 */
+/** 取一张图：内存 → 磁盘 → 网络，命中前两层都零请求（ADR 0036）。 */
 async function fetchCached(url: string, key: string): Promise<string | null> {
   const hit = peekPhoto(key)
   if (hit) return hit
   // 已知这餐没照片：不再为它跑一次 404（大多数餐次都没拍照）
   if (isPhotoEmpty(key)) return null
+  // 磁盘里可能有上个进程留下的那张
+  const fromDisk = await readPhotoFromDisk(key)
+  if (fromDisk && fromDisk.size) return cachePhoto(key, fromDisk)
   try {
     const res = await fetch(url, { headers: authHeader() })
     if (res.status === 404) {
@@ -156,7 +169,9 @@ async function fetchCached(url: string, key: string): Promise<string | null> {
     }
     if (!res.ok) return null
     const blob = await res.blob()
-    return blob.size ? cachePhoto(key, blob) : null
+    if (!blob.size) return null
+    savePhotoToDisk(key, blob)
+    return cachePhoto(key, blob)
   } catch {
     return null
   }

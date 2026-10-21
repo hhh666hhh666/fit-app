@@ -11,3 +11,6 @@ declare module '*.vue' {
   const component: DefineComponent<{}, {}, any>
   export default component
 }
+
+/** 构建期注入的应用版本（`vite.config.ts` 的 define，取自 package.json）；缓存快照的版本闸用它。 */
+declare const __APP_VERSION__: string

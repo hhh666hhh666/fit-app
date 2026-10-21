@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite'
 import uniPlugin from '@dcloudio/vite-plugin-uni'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
+
+// 构建期版本号：缓存快照靠它判断「这份数据是不是上个版本写的」（ADR 0036）。
+// 直接读 package.json，不引 JSON 导入断言——那条路径在不同 ESM 加载器上行为不一致。
+const PKG = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8')
+) as { version: string }
 
 // ⚠️ @dcloudio/vite-plugin-uni 是 CJS 包，工厂函数挂在 exports.default 上（带 __esModule）。
 // 本项目 package.json 有 "type": "module"，配置文件以原生 ESM 加载，此时默认导入拿到的是
@@ -13,6 +20,10 @@ const uni = (typeof uniPlugin === 'function'
 
 export default defineConfig({
   plugins: [uni()],
+  define: {
+    // 只给 `api/cache.ts` 用；读取处用 typeof 兜底，构建期没注入也不会抛 ReferenceError
+    __APP_VERSION__: JSON.stringify(PKG.version)
+  },
   css: {
     preprocessorOptions: {
       scss: {
