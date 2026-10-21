@@ -36,9 +36,18 @@ export function takeTabEnter(to: TabKey): 'left' | 'right' | null {
   return toIdx > fromIdx ? 'right' : 'left'
 }
 
-/** 时长与缓动对齐 `uni.scss` 的 `$dur-base` / `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步） */
-const ENTER_MS = 220
+/**
+ * 入场动效的参数。位移和起始透明度都刻意压得很轻：
+ * 位移 18vw＋opacity 0.6 那版，动画期间内容被推出视口、整体发白，
+ * 真机上读起来就是「切页白屏」（2026-10-21 的截图里只剩左缘一圈残影）。
+ * 现在 8vw ＋ 0.95：位移只够表达方向，内容始终清晰可辨。
+ * 时长与缓动对齐 `uni.scss` 的 `$dur-base` / `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步）。
+ */
+const ENTER_MS = 200
 const ENTER_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
+
+/** 超过这个等待时长就不播入场动效——那是首次挂载的慢路径，补动画反而更乱 */
+const SLOW_MOUNT_MS = 120
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia
@@ -54,15 +63,15 @@ function prefersReducedMotion() {
  * 为什么不在 `onShow` 里直接 `querySelector`：那一刻页面组件已建好，但 KeepAlive
  * 把它挂回 DOM 是之后的事，查不到就是 null——2026-10-21 真机「动效没了」两个坑都踩过。
  */
-function whenInDom(selector: string, cb: (el: HTMLElement) => void) {
+function whenInDom(selector: string, cb: (el: HTMLElement, waited: number) => void) {
   const started = performance.now()
   const tick = () => {
     const el = document.querySelector(selector) as HTMLElement | null
     if (el && el.isConnected) {
-      cb(el)
+      cb(el, performance.now() - started)
       return
     }
-    if (performance.now() - started > 250) return
+    if (performance.now() - started > 600) return
     requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)
@@ -74,12 +83,15 @@ function whenInDom(selector: string, cb: (el: HTMLElement) => void) {
  */
 export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
   if (!dir || prefersReducedMotion()) return
-  whenInDom(selector, (el) => {
+  whenInDom(selector, (el, waited) => {
     if (typeof el.animate !== 'function') return
+    // 等太久才挂上（首次进某个 tab 的慢路径）：这时候用户已经盯着空白等了上百毫秒，
+    // 再补一段位移只会把「卡了一下」演成「闪了一下」。让它直接出现。
+    if (waited > SLOW_MOUNT_MS) return
     el.getAnimations().forEach((a) => a.cancel())
     el.animate(
       [
-        { transform: `translateX(${dir === 'right' ? 18 : -18}vw)`, opacity: 0.6 },
+        { transform: `translateX(${dir === 'right' ? 8 : -8}vw)`, opacity: 0.95 },
         { transform: 'translateX(0)', opacity: 1 }
       ],
       {

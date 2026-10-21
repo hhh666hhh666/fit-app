@@ -13,12 +13,13 @@ onLaunch(() => {
   // 主 tab 的页面 chunk 按页懒加载（各页产物 `pages-*-index.js`）。页面虽然保活了
   // （`switchTab`，ADR 0038），但**第一次**切过去仍要现拉 chunk，那一拍里页面还挂不上，
   // 真机上就是「闪一下」（0.17.3 之前更糟：`reLaunch` 连旧页一起拆，整页空白）。
-  // 这里只把模块取回来，不注册路由、不挂载组件；延后一拍，别和首屏关键资源抢带宽。
+  // 这里只把模块取回来，不注册路由、不挂载组件。等首屏那口气松下来就预热：
+  // 太晚会赶不上「冷启动后第一次切页」，那一次正是白屏最长的。
   setTimeout(() => {
     void import('@/pages/log/index.vue')
     void import('@/pages/stats/index.vue')
     void import('@/pages/profile/index.vue')
-  }, 1200)
+  }, 200)
 })
 </script>
 
