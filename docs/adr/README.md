@@ -62,6 +62,7 @@ Status: accepted
 - [ADR 0036](./0036-cold-start-cache-persistence.md)：冷启动也读缓存——数据快照（白名单小接口）落 localStorage、餐照落 IndexedDB（128MB），启动不校验；收窄 ADR 0035 的「不落 storage」。
 - [ADR 0037](./0037-tab-switch-transition.md)：主 tab 切换改为方向感知的内容层横移（只动 `__body`、底栏钉住），方向信号一次性传递，动效首次落 token。
 - [ADR 0038](./0038-tabbar-switchtab-keepalive.md)：主 tab 导航改为 `tabBar` ＋ `switchTab` 保活——切页不再销毁页面，白屏／滚动位置／月份一次解决；H5 内置 tabbar 必须自己压掉。
+- [ADR 0039](./0039-view-transition-tab-slide.md)：切页转场改用 View Transitions 的整页快照——旧页左出、新页右入，真连续推拉；单页入场动效退役。
 
 ## 与其他文档的分工
 

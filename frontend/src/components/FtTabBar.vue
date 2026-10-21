@@ -10,7 +10,7 @@
  */
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { animateWhenConnected, markTabNav, type TabKey } from '@/utils/nav'
+import { animateWhenConnected, markTabNav, startSlide, type TabKey } from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
@@ -20,11 +20,12 @@ const props = defineProps<{
   enterSeq?: number
 }>()
 
+// body 是目标页正文的选择器：转场要等它真的进 DOM 再拍「新页快照」
 const tabs = [
-  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index' },
-  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index' },
-  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index' },
-  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index' }
+  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', body: '.home__body' },
+  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', body: '.log__body' },
+  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', body: '.stats__body' },
+  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', body: '.prof__body' }
 ] as const
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
@@ -36,8 +37,12 @@ const indRef = ref<HTMLElement | null>(null)
 const indOffset = ref(activeIdx.value)
 
 function slideIndicator(dir: 'left' | 'right' | null) {
-  const el = indRef.value
   indOffset.value = activeIdx.value
+  // 有 View Transition 时整页快照负责动，指示条只要在对的位置上
+  if (typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function') {
+    return
+  }
+  const el = indRef.value
   if (!dir || !el || typeof el.animate !== 'function') return
   if (typeof window !== 'undefined' && window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -68,7 +73,10 @@ watch(
 function go(t: (typeof tabs)[number]) {
   if (t.key === props.active) return
   markTabNav(props.active)
-  uni.switchTab({ url: t.url })
+  // 去右边的 tab：旧页往左滑出、新页从右进来（反过来同理）
+  const toIdx = tabs.findIndex((x) => x.key === t.key)
+  const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
+  startSlide(dir, () => uni.switchTab({ url: t.url }), t.body)
 }
 </script>
 

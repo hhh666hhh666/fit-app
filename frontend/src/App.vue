@@ -142,6 +142,122 @@ page {
   overflow-x: clip;
 }
 
+/* ── 切页：整页快照的连续推拉（ADR 0039）──
+   `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
+   只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
+   旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
+   ⚠️ 位移是 ±100% 屏宽、300ms——比「单页 8vw 微移」慢得多也连续得多；
+   想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
+@keyframes tab-slide-out-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes tab-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-slide-out-right {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes tab-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+:root[data-tab-slide='left']::view-transition-old(root) {
+  animation: tab-slide-out-left 300ms $ease-out both;
+}
+
+:root[data-tab-slide='left']::view-transition-new(root) {
+  animation: tab-slide-in-right 300ms $ease-out both;
+}
+
+:root[data-tab-slide='right']::view-transition-old(root) {
+  animation: tab-slide-out-right 300ms $ease-out both;
+}
+
+:root[data-tab-slide='right']::view-transition-new(root) {
+  animation: tab-slide-in-left 300ms $ease-out both;
+}
+
+/* ── 切页：整页快照的连续推拉（ADR 0039）──
+   `switchTab` 之后框架只让一页在文档里，两页从不同时可见，所以「旧页往左走、新页从右来」
+   只能靠 View Transitions：切换前拍旧页、切换后拍新页，两张整页快照并排滑动。
+   旧/新快照的选择器依据根上的 `data-tab-slide`（= 旧页滑出的方向，由 utils/nav.ts 设）。
+   ⚠️ 位移是 ±100% 屏宽、300ms——比「单页 8vw 微移」慢得多也连续得多；
+   想调手感就改这里的 duration，`data-tab-slide` 的语义别改反。 */
+@keyframes tab-slide-out-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes tab-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-slide-out-right {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes tab-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+:root[data-tab-slide='left']::view-transition-old(root) {
+  animation: tab-slide-out-left 300ms $ease-out both;
+}
+
+:root[data-tab-slide='left']::view-transition-new(root) {
+  animation: tab-slide-in-right 300ms $ease-out both;
+}
+
+:root[data-tab-slide='right']::view-transition-old(root) {
+  animation: tab-slide-out-right 300ms $ease-out both;
+}
+
+:root[data-tab-slide='right']::view-transition-new(root) {
+  animation: tab-slide-in-left 300ms $ease-out both;
+}
+
 /* ── 内置 tabBar 必须自己压掉（ADR 0038）──
    四个主页面已在 pages.json 注册成 tabBar 页（为的是 switchTab 的保活），但 H5 运行期
    **不认 `custom: true`**：只要 `route.meta.isTabBar` 为真且 `tabBar.shown` 为真，它就会

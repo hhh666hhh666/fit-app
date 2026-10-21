@@ -52,6 +52,7 @@
 | 33 | 冷启动也读缓存：数据快照（白名单小接口，不含全量趋势／身体序列）落 `localStorage`、按用户与构建版本隔离，餐照落 IndexedDB（128 MB、按最近访问淘汰）；启动**不做静默校验**，靠写后失效与下拉刷新兜底；构建版本变即整份丢弃。这一步只消除「数据到达前的空窗」，**不消除 WebView 解析主包的白屏**（那属 ADR 0034 与流畅度待办） | 2026-10-21 → [ADR 0036](../adr/0036-cold-start-cache-persistence.md) |
 | 34 | 主 tab 切换动效：**方向感知的内容层横移**——新页按 `from→to` 下标差从右／从左入场（`18vw` ＋ 轻微淡入，220ms），**底栏钉住不动**、只加一条从**上一页那一格**滑向当前格的墨黑短横（**不用荧光笔**：白底上不可见；方向与内容位移相反）；不动导航形态（仍是 `reLaunch`）。⚠️ **只动各页 `__body`，不许动页面根元素**（底栏是根元素的 fixed 子元素，根元素一有 `transform` 就成了它的包含块）；**页面根必须 `overflow-x: clip`** 裁掉位移期间的横向溢出（否则移动端 WebView 会在底部画一条横向滚动条）；无方向信号时退化为淡入；`prefers-reduced-motion` 一律直接到位 | 2026-10-21 → [ADR 0037](../adr/0037-tab-switch-transition.md) |
 | 35 | 主 tab 导航：四个主页面注册为 **tabBar 页**、切页一律 `uni.switchTab`（页面保活、不再销毁）——切页白屏／滚动位置／日志页月份三件事同时解决；`navigateTo`／`redirectTo` **不能**指向这四个页面。⚠️ H5 不认 `custom: true`，内置 `uni-tabbar` 必须在 `App.vue` 里用样式压掉（含 wrapper 高度复位），**不要改用异步的 `uni.hideTabBar`**（会先闪一拍）；切页动效改 `onShow` 驱动（WAAPI），`reLaunch` 只留给非 tab 页 | 2026-10-21 → [ADR 0038](../adr/0038-tabbar-switchtab-keepalive.md) |
+| 36 | 主 tab 切页转场＝**整页快照的连续推拉**：旧页往左滑出、新页从右滑入（反向切页同理），±100% 屏宽 / 300ms；用 View Transitions API 实现——`switchTab` 后框架只让一页在文档里，两页从不共存，只有快照能同时呈现。等新页进 DOM 后**再等一帧**才拍新快照；等待上限 150ms（再久就成「卡住」）。⚠️ 底栏在快照里，会跟着一起滑；不支持 View Transition 的 WebView 退回单页微移入场。⚠️ 页面不可见时浏览器会跳过该特性，**本地 headless 验不了，只能真机看** | 2026-10-21 → [ADR 0039](../adr/0039-view-transition-tab-slide.md) |
 
 ## 明确不做
 

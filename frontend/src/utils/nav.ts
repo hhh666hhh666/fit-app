@@ -78,11 +78,79 @@ function whenInDom(selector: string, cb: (el: HTMLElement, waited: number) => vo
 }
 
 /**
+ * 起一次「旧页滑出、新页滑入」的连续转场。
+ *
+ * 为什么必须用 View Transitions：`switchTab` 之后框架只让一页在文档里，两页从来没有
+ * 同时可见的时刻，所以「旧页往左移、新页从右进」这种连续推拉，只能靠浏览器在切换前后
+ * 各拍一张整页快照、再让两张快照并排滑动。`startViewTransition` 的回调返回 Promise 时
+ * 会等它 resolve 再拍新快照，所以这里可以等目标页真的进 DOM。
+ *
+ * 环境不支持（老 WebView）或系统开了减少动效 → 直接切，不留痕迹。
+ */
+export function startSlide(
+  dir: 'left' | 'right',
+  navigate: () => void,
+  waitSelector: string
+) {
+  const doc = document as Document & {
+    startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void> }
+  }
+  if (typeof doc.startViewTransition !== 'function' || prefersReducedMotion()) {
+    navigate()
+    return
+  }
+  const root = document.documentElement
+  // dir 是「旧页往哪边滑出」：去右边的 tab → 旧页左滑、新页从右进
+  root.dataset.tabSlide = dir
+  let navigated = false
+  const goNav = () => {
+    if (navigated) return
+    navigated = true
+    navigate()
+  }
+  // 兜底：万一回调没被调用（极端情况），不能让点击变成「没反应」
+  setTimeout(goNav, 300)
+  const vt = doc.startViewTransition(async () => {
+    goNav()
+    // 只等 150ms：转场期间屏幕上是**冻结的旧页快照**，
+    // 等太久就成「卡住」而不是「滑动」；等不到就让新快照是空的那一帧，直接滑过去。
+    await waitForSelector(waitSelector, 150)
+  })
+  void Promise.resolve(vt.finished)
+    .catch(() => {})
+    .then(() => {
+      delete root.dataset.tabSlide
+    })
+}
+
+function waitForSelector(selector: string, timeout: number) {
+  return new Promise<void>((resolve) => {
+    const started = performance.now()
+    const tick = () => {
+      const el = document.querySelector(selector)
+      const found = el && el.isConnected
+      if (found || performance.now() - started > timeout) {
+        // 连上不等于画出来了：再等一帧，让新快照拍到的不是白板
+        if (found) requestAnimationFrame(() => resolve())
+        else resolve()
+        return
+      }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+}
+
+/**
  * 播放一次切页入场。只动页面正文那一层（`__body`），**绝不动页面根元素**——
  * 底栏是根元素的 fixed 子元素，根元素一有 transform 就成了它的包含块，会跟着位移。
  */
 export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
   if (!dir || prefersReducedMotion()) return
+  // 有 View Transition 时由整页快照做转场，单页入场会变成二次位移
+  if (typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function') {
+    return
+  }
   whenInDom(selector, (el, waited) => {
     if (typeof el.animate !== 'function') return
     // 等太久才挂上（首次进某个 tab 的慢路径）：这时候用户已经盯着空白等了上百毫秒，
