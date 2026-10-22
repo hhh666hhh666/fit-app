@@ -1,4 +1,4 @@
-# 设计 skill 清单（外部工具，装在用户级）
+# 设计 skill 清单（外部工具，装在项目级、不入库）
 
 **目的**：存档**为什么只用这些、装到哪一步、哪部分被舍弃**——回答「当初为什么这么装」，避免以后重新纠结或误判成遗漏。
 
@@ -21,7 +21,30 @@
 ## 共同约定（适用的都写在这里，不逐行重复）
 
 - **都不设 `alwaysApply`**：不常驻注入上下文。
-- **都装在用户级目录、不在仓库里**：换机器不跟着走；**按描述命中、非自动加载**，开工时**点名（或 @ 提及）最稳**。
+- **都装在项目的 `.claude/skills/<名字>/`、不入库**（`.gitignore` 已忽略）：只对本项目生效，换机器不跟着走，按下面「来源」重装；**按描述命中、非自动加载**，开工时**点名（或 @ 提及）最稳**。
+
+## 来源
+
+都是作者本人或官方组织的仓库。**只取下表那一个目录**，整个复制成 `.claude/skills/<名字>/`；不要装同名的第三方转载版（市面上有不少镜像 / 改版）。
+
+| Skill | 仓库 | 默认分支 | 仓库内目录 |
+|---|---|---|---|
+| impeccable | `pbakaus/impeccable` | `main` | `.claude/skills/impeccable/` |
+| make-interfaces-feel-better | `jakubkrehel/make-interfaces-feel-better` | `main` | `skills/make-interfaces-feel-better/` |
+| web-design-guidelines | `vercel-labs/agent-skills` | `main` | `skills/web-design-guidelines/` |
+| ui-ux-pro-max | `nextlevelbuilder/ui-ux-pro-max-skill` | `main` | `.claude/skills/ui-ux-pro-max/` |
+| shadcn-vue | `unovue/shadcn-vue`（shadcn-vue 官方仓库） | `dev` | `skills/shadcn-vue/` |
+
+**取法**：对每一行做一次稀疏克隆，再把那个目录复制进来（在临时目录里做，别克隆进仓库）——
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse -b <分支> https://github.com/<仓库>.git <临时目录>
+git -C <临时目录> sparse-checkout set --no-cone '/<仓库内目录>'
+cp -r <临时目录>/<仓库内目录> .claude/skills/
+```
+
+⚠️ Windows 的 Git Bash 会把 `'/<仓库内目录>'` 这种以 `/` 开头的参数改写成 Windows 路径，结果什么都检不出来；先 `export MSYS_NO_PATHCONV=1` 再跑。
+各仓库 README 里的 `npx skills add …` 也能装，但默认装到用户级，不合本项目口径。
 
 ## 逐项细节
 
@@ -46,3 +69,5 @@
 ## 本项目的调整记录
 
 <!-- 增删 skill、改安装范围时在这里追加一行：改动 + 理由。别改上面的历史条目。 -->
+
+- 2026-10-22：安装范围从用户级改为项目级 `.claude/skills/`、仍不入库；补「来源」一节。理由：只给本项目用，不污染其他项目；来源此前没记，换机器时只能重新搜，且容易装到同名的第三方转载版。代价：`.claude/skills/` 是 Claude Code 的约定，CodeBuddy 等其他工具读不到（按「没装就跳过」处理）。

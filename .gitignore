@@ -26,6 +26,8 @@ Thumbs.db
 
 # AI 工具的本地状态与本机设置（不入库）
 .workbuddy/
+# 外部设计 skill 装在项目级、但不入库，换机器按 docs/design/设计skill清单.md 的来源重装
+.claude/skills/
 
 # ui-ux-pro-max 的 --persist 会往仓库根写这个目录（本项目禁用该行为，此处兜底防手滑）
 design-system/
