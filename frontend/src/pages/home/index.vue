@@ -4,6 +4,7 @@ import {onHide, onPullDownRefresh, onShow} from '@dcloudio/uni-app'
 import FtTabBar from '@/components/FtTabBar.vue'
 import FtDietRings from '@/components/FtDietRings.vue'
 import MealSheet from '@/components/MealSheet.vue'
+import FtMeteorTrace from '@/components/FtMeteorTrace.vue'
 import {useScheduleStore} from '@/stores/schedule'
 import {useDietStore} from '@/stores/diet'
 import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
@@ -14,10 +15,14 @@ import {formatClock, formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
 import {playTabEnter, takeTabEnter} from '@/utils/nav'
 import {clearSession, loadSession, netElapsedSec, type Session} from '@/utils/session'
+import {getResumeFx, type ResumeFx} from '@/utils/resume-fx'
 
 // 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
 const tabDir = ref<'left' | 'right' | null>(null)
 const tabSeq = ref(0)
+
+// 训练横幅的边框动效（设置页可切，本机存储）；每次显示重读，从设置页回来即生效
+const resumeFx = ref<ResumeFx>(getResumeFx())
 
 const today = (() => {
   const d = new Date()
@@ -207,6 +212,7 @@ onShow(() => {
   tabDir.value = dir
   tabSeq.value++
   playTabEnter(['.home__body', '.home__dock'], dir)
+  resumeFx.value = getResumeFx()
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
@@ -399,12 +405,21 @@ function goPlans() {
         <text class="home__bottom-link">{{ bottomHint }}</text>
 
         <!-- 训练进行中：返回＝最小化后的回程入口（ADR 0020） -->
-        <!-- 边框流光（照搬 Uiverse 霓虹搜索框的多层结构）：四层不同配色／模糊／相位的圆盘叠在卡片边缘 -->
-        <view v-if="activeSession" class="resume" @click="resumeTraining">
-          <view class="resume__glow"/>
-          <view class="resume__dark"/>
-          <view class="resume__white"/>
-          <view class="resume__border"/>
+        <!-- 边框动效三选一（设置页切，见 utils/resume-fx.ts）：
+             meteor＝Canvas 双流星（默认）；glow＝旧版四层旋转圆盘；off＝静态细边 -->
+        <view
+          v-if="activeSession"
+          class="resume"
+          :class="{ 'resume--plain': resumeFx === 'off' }"
+          @click="resumeTraining"
+        >
+          <FtMeteorTrace v-if="resumeFx === 'meteor'"/>
+          <template v-else-if="resumeFx === 'glow'">
+            <view class="resume__glow"/>
+            <view class="resume__dark"/>
+            <view class="resume__white"/>
+            <view class="resume__border"/>
+          </template>
           <view class="resume__inner">
             <view class="resume__main">
               <text class="resume__title">训练进行中</text>
@@ -735,6 +750,7 @@ function goPlans() {
 }
 
 /* ── 训练进行中横幅（在「开始训练」按钮正上方） ── */
+/* 默认动效是 FtMeteorTrace（Canvas 双流星）；下面这套四层圆盘是设置里可选的「流光（旧版）」。 */
 /* 边框流光：照搬 Uiverse「霓虹搜索框」（作者 Lakshay-art）的四层结构——每层是一张圆盘，
    各配一种配色／模糊／起始相位，同步 4s 转一圈；被各自 overflow 裁掉后只在卡片边缘露一条。
    结构与相位是原示例的，配色换成本项目的绿：草绿 #3b6d11 / 荧光绿 #97c459 /
@@ -895,6 +911,11 @@ function goPlans() {
   padding: 20rpx 24rpx;
   background: $app-surface;
   border-radius: $radius-md;
+}
+
+/* 动效关闭：没有光层勾边，白卡片落在纸色底上要一条细边才看得出轮廓 */
+.resume--plain .resume__inner {
+  border: 1rpx solid $app-line;
 }
 
 .resume__main {
