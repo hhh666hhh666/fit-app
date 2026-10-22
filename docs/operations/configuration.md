@@ -61,7 +61,7 @@ Get-Content .env -Encoding UTF8 | ForEach-Object {
     Set-Item -Path "Env:\$($matches[1])" -Value $matches[2]
   }
 }
-& "E:\develop\apache-maven-3.9.9\bin\mvn.cmd" -B -ntp spring-boot:run
+mvn -B -ntp spring-boot:run
 ```
 
 ⚠️ 读 `.env` 必须显式 `-Encoding UTF8`（PowerShell 5.1 默认按 ANSI 读、遇中文注释会静默丢行——丢的正好可能是要用的那行）。
