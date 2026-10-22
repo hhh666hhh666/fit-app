@@ -49,7 +49,13 @@ export default defineConfig({
         // 本机 dev 后端端口 8083（见 backend application.yml 的注释：
         // 避开 8080=quizzy dev、8081/8082=容器 web）。
         target: 'http://127.0.0.1:8083',
-        changeOrigin: true
+        changeOrigin: true,
+        // changeOrigin 只改 Host，浏览器的 Origin 会原样转发。后端一旦配了 CORS 白名单
+        // （.env 里给 apk 用的 FITAPP_CORS_ALLOWED_ORIGINS），带 dev 源的请求就被判跨域 403。
+        // 经代理本来就是同源，去掉 Origin 让后端按非跨域请求处理（真机预览的局域网源同理）。
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'))
+        }
       }
     }
   }

@@ -97,3 +97,7 @@ mvn -B -ntp spring-boot:run
 `fitapp.cors.allowed-origins` 默认为空（= 完全不注册），因为 web 容器与 `/api` 同域。
 只有出现**跨域消费者**（独立的移动端域名、第三方页面）时才需要填。
 同源却配了 `*` 属于把门拆了，没必要。
+
+本机开发即使把 `.env` 里给 apk 的白名单一起注入后端，也不影响浏览器经 Vite 访问：
+`frontend/vite.config.ts` 的 `/api` 代理会去掉 `Origin` 头，让后端按同源请求处理。
+⚠️ 绕过代理、从浏览器直连 `:8083` 仍会被判跨域 `403 Invalid CORS request`——那是白名单在正常工作，不是故障。
