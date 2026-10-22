@@ -55,6 +55,43 @@ export const SLIDE_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
 /** 旧页克隆层最多等新页多久；超时就自己先滑，免得卡在旧页上 */
 const HOLD_MAX_MS = 400
 
+/**
+ * 克隆体挂在 `body` 下，脱离了页面容器，**继承来的文字样式全丢**——全局的
+ * `page { font-size; line-height: 1.6 }` 落在 `uni-page-body` 上，克隆体拿不到，
+ * 行高退回 normal，每行变矮、整页看起来往上一蹦（2026-10-22 真机两帧对比）。
+ * 所以克隆时把原位置父级上算好的这些值抄到克隆体上。
+ */
+const INHERITED = [
+  'color',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'letter-spacing',
+  'text-align',
+  'word-break',
+  '-webkit-text-size-adjust'
+] as const
+
+function copyInherited(from: Element | null, to: HTMLElement) {
+  if (!from) return
+  const cs = getComputedStyle(from)
+  for (const p of INHERITED) {
+    const v = cs.getPropertyValue(p)
+    if (v) to.style.setProperty(p, v)
+  }
+  // 行高单独处理：全局写的是无单位的 1.6（每个元素按自己的字号算），getComputedStyle
+  // 却只给算好的 px。原样抄 px 会把所有子元素钉成同一个行高，大字号那几行照样变矮——
+  // 所以折回成相对字号的倍数再抄。
+  const lh = parseFloat(cs.lineHeight)
+  const fs = parseFloat(cs.fontSize)
+  if (lh > 0 && fs > 0) to.style.lineHeight = String(Math.round((lh / fs) * 1000) / 1000)
+  // CSS 变量也是继承的（组件库主题变量等），一并带上
+  for (let i = 0; i < cs.length; i++) {
+    const p = cs[i]
+    if (p.startsWith('--')) to.style.setProperty(p, cs.getPropertyValue(p))
+  }
+}
+
 /** 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行 */
 let heldOut: (() => void) | null = null
 
@@ -107,6 +144,7 @@ export function startSlide(
   for (const src of srcs) {
     const r = src.getBoundingClientRect()
     const clone = src.cloneNode(true) as HTMLElement
+    copyInherited(src.parentElement, clone)
     Object.assign(clone.style, {
       position: 'absolute',
       left: `${r.left}px`,
