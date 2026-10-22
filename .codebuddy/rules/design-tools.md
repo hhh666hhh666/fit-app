@@ -1,5 +1,5 @@
 ---
-description: 外部设计 skill 的使用纪律——什么时候用哪个，以及「只查不写」的硬禁区。
+description: 外部设计 skill 的使用纪律——什么时候用哪个，以及设计真相源不许另立。
 alwaysApply: true
 ---
 
@@ -12,22 +12,17 @@ alwaysApply: true
 
 | 什么时候 | 用哪个 | 备注 |
 |---|---|---|
-| 定方向 / 整体重设计 / 抽设计系统 | `impeccable` | 引擎首次调用会从远端拉平台二进制 |
-| 细节工艺：圆角、阴影、悬停态、图标、动效克制 | `make-interfaces-feel-better` | |
+| 定方向 / 整体重设计 / 抽设计系统，及 critique / audit / polish | `impeccable` | 引擎首次调用会从远端拉平台二进制 |
 | 无障碍与规范审查：键盘、对比度、i18n、深色、网址状态 | `web-design-guidelines` | 每次从远端拉最新规则，**需联网** |
-| 查色板 / 字体搭配 / 风格资料 | `ui-ux-pro-max` | 见下方禁区 |
-| 用 shadcn-vue 组件（`add` / `search` / preset） | `shadcn-vue`（官方） | ⚠️ `user-invocable: false`，**只能 AI 自己用，@ 不到** |
 
 **一个都不设 `alwaysApply`**（不常驻注入）；`impeccable` 不装 hooks（探测器只在被主动调用时跑）。
 **本机没装某个 skill 就跳过它**，别为此停下来等安装。
+只留这两个、其余为什么删掉，见设计 skill 清单的调整记录——**别凭印象再装回来**。
 
-## ⚠️ 唯一硬约束：`ui-ux-pro-max` 只查不写
+## ⚠️ 硬约束：设计真相源只有一份
 
-**禁用 `--persist` 与 `--force`。** 这个 skill 只当**查询台**（`--domain …`、以及不带 `--persist` 的 `--design-system` 都只打印、不写盘）。
-
-`--persist` 会在**仓库根**落 `design-system/<slug>/MASTER.md`——它自称 "Global Source of Truth"，等于塞进**第二份设计真相**，与本仓铁律正面冲突：设计系统唯一真相源是本项目的 `frontend/src/styles/tokens.css`（人类可读快照是根 `DESIGN.md`，**从实现派生**）。它不知道本项目定的口味，只会按关键词从自带语料里推一套行业惯例。
-
-`.gitignore` 已加 `design-system/` 兜底，防止手滑后被提交。
+设计系统唯一真相源是 `frontend/src/styles/tokens.css`（人类可读快照是根 `DESIGN.md`，**从实现派生**）。
+任何 skill 想在仓库里另写一份「设计规范 / 设计系统」文件，都不接受——它不知道本项目定的口味，只会推一套通用惯例，等于塞进**第二份设计真相**。
 
 ## 屏幕 / 工作流工具
 

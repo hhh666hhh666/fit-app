@@ -11,10 +11,9 @@
 | # | Skill | 角色 | 什么时候用 | 备注 |
 |---|---|---|---|---|
 | 1 | **impeccable** | 方向 + 确定性门禁（设计总导演） | 定方向 / 整体重设计 / 抽设计系统（`init` / `document` / `extract`），及 `critique` / `audit` / `polish` | 引擎首次调用会从远端拉平台二进制；本项目**不装 hooks**（探测器只在被主动调用时跑） |
-| 2 | **make-interfaces-feel-better** | 细节工艺 + 审查格式 | 圆角、阴影 / 描边取舍、悬停 / 按下态、图标描边、动效克制、字体平滑 | |
-| 3 | **web-design-guidelines** | 无障碍 / 合规审查 | `review my UI` / `check accessibility` / `audit design` | 每次从远端拉最新规则（**需联网**） |
-| 4 | **shadcn-vue** | 组件用法（官方） | 用 shadcn-vue 组件：`add` / `search` / `docs` / preset / 调试 | ⚠️ `user-invocable: false`，**只能 AI 自己用，@ 不到** |
-| 5 | **ui-ux-pro-max** | 检索型资料库（查询台） | 查色板 / 字体搭配 / 风格 / UX 规则 / 图标 / 图表 / 栈实现 | ⚠️ **只查不写 —— 禁用 `--persist` / `--force`** |
+| 2 | **web-design-guidelines** | 无障碍 / 合规审查 | `review my UI` / `check accessibility` / `audit design` | 每次从远端拉最新规则（**需联网**） |
+
+曾经还装过 `make-interfaces-feel-better`、`shadcn-vue`、`ui-ux-pro-max`，已删，原因见文末调整记录。
 
 **本机没装某个 skill 就跳过它**，并在这里补一行说明（避免下次误判成「漏了」）。
 
@@ -30,10 +29,7 @@
 | Skill | 仓库 | 默认分支 | 仓库内目录 |
 |---|---|---|---|
 | impeccable | `pbakaus/impeccable` | `main` | `.claude/skills/impeccable/` |
-| make-interfaces-feel-better | `jakubkrehel/make-interfaces-feel-better` | `main` | `skills/make-interfaces-feel-better/` |
 | web-design-guidelines | `vercel-labs/agent-skills` | `main` | `skills/web-design-guidelines/` |
-| ui-ux-pro-max | `nextlevelbuilder/ui-ux-pro-max-skill` | `main` | `.claude/skills/ui-ux-pro-max/` |
-| shadcn-vue | `unovue/shadcn-vue`（shadcn-vue 官方仓库） | `dev` | `skills/shadcn-vue/` |
 
 **取法**：对每一行做一次稀疏克隆，再把那个目录复制进来（在临时目录里做，别克隆进仓库）——
 
@@ -60,14 +56,12 @@ cp -r <临时目录>/<仓库内目录> .claude/skills/
 
 **回退方式**：删掉 skill 下的 `scripts/` 与引擎缓存目录，即回到「只用 guidance」。
 
-### 5. ui-ux-pro-max
-
-**⚠️ 唯一硬约束**：`--persist` 会往**仓库根**写 `design-system/<slug>/MASTER.md`（自称 "Global Source of Truth"）→ 与本项目「设计真相源 = `frontend/src/styles/tokens.css`」冲突。**禁用 `--persist` / `--force`**；`.gitignore` 已加 `design-system/` 兜底。注意：**不带 `--persist` 的 `--design-system` 只打印、可用**，被砍的只是「写盘副作用」。
-
-**环境前提**：搜索脚本需 **Python 3.x**（`python` / `python3` / `py -3` 任一）。
-
 ## 本项目的调整记录
 
 <!-- 增删 skill、改安装范围时在这里追加一行：改动 + 理由。别改上面的历史条目。 -->
 
 - 2026-10-22：安装范围从用户级改为项目级 `.claude/skills/`、仍不入库；补「来源」一节。理由：只给本项目用，不污染其他项目；来源此前没记，换机器时只能重新搜，且容易装到同名的第三方转载版。代价：`.claude/skills/` 是 Claude Code 的约定，CodeBuddy 等其他工具读不到（按「没装就跳过」处理）。
+- 2026-10-22：删掉三个，只留 `impeccable` 与 `web-design-guidelines`。判据：**补模型能力的通用建议型 skill，模型越强越多余，还占上下文、可能盖过本项目自己的设计决定；带确定性脚本 / 外部会更新的规则 / 成型工作流的才留**。
+  - `shadcn-vue`：前端是 uni-app ＋ wot-design-uni，根本没用 shadcn-vue（ADR 0002 已退役那套栈），留着只会在做 UI 时误触发。
+  - `ui-ux-pro-max`：触发描述极宽、每次塞入大段内容；给的是按关键词推的行业惯例，不懂本项目口味；`--persist` 还会写出第二份设计真相，要靠规则硬拦；搜索脚本另需 Python。删掉后 `.gitignore` 里为它兜底的 `design-system/` 一并撤掉。
+  - `make-interfaces-feel-better`：内容质量不错，但对当前模型新增信息很少，价值只剩一份审查清单，不值得常驻在可触发列表里。
