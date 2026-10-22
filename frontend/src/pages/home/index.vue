@@ -206,7 +206,7 @@ onShow(() => {
   const dir = takeTabEnter('home')
   tabDir.value = dir
   tabSeq.value++
-  playTabEnter('.home__body', dir)
+  playTabEnter(['.home__body', '.home__dock'], dir)
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
@@ -394,26 +394,29 @@ function goPlans() {
 
     <!-- 底部固定区：进行中的训练横幅 + 开始训练 + tab 栏 -->
     <view class="home__bottom">
-      <text class="home__bottom-link">{{ bottomHint }}</text>
+      <!-- dock：页面内容，切页时随正文一起滑；tabbar 在它外面，钉住不动 -->
+      <view class="home__dock">
+        <text class="home__bottom-link">{{ bottomHint }}</text>
 
-      <!-- 训练进行中：返回＝最小化后的回程入口（ADR 0020） -->
-      <!-- 边框流光（照搬 Uiverse 霓虹搜索框的多层结构）：四层不同配色／模糊／相位的圆盘叠在卡片边缘 -->
-      <view v-if="activeSession" class="resume" @click="resumeTraining">
-        <view class="resume__glow"/>
-        <view class="resume__dark"/>
-        <view class="resume__white"/>
-        <view class="resume__border"/>
-        <view class="resume__inner">
-          <view class="resume__main">
-            <text class="resume__title">训练进行中</text>
-            <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
+        <!-- 训练进行中：返回＝最小化后的回程入口（ADR 0020） -->
+        <!-- 边框流光（照搬 Uiverse 霓虹搜索框的多层结构）：四层不同配色／模糊／相位的圆盘叠在卡片边缘 -->
+        <view v-if="activeSession" class="resume" @click="resumeTraining">
+          <view class="resume__glow"/>
+          <view class="resume__dark"/>
+          <view class="resume__white"/>
+          <view class="resume__border"/>
+          <view class="resume__inner">
+            <view class="resume__main">
+              <text class="resume__title">训练进行中</text>
+              <text class="resume__meta ft-num">{{ sessionDoneCount }} 组 · {{ sessionClock }}</text>
+            </view>
+            <text class="resume__go">继续 ›</text>
           </view>
-          <text class="resume__go">继续 ›</text>
         </view>
-      </view>
 
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
-      <FtTabBar active="home" :enter-dir="tabDir" :enter-seq="tabSeq" class="home__tab"/>
+        <view class="ft-btn ft-btn--primary ft-btn--block" @click="onStart">开始训练</view>
+      </view>
+      <FtTabBar active="home" :enter-dir="tabDir" :enter-seq="tabSeq"/>
     </view>
 
     <!-- 训练计划选择器（点「开始训练」弹出） -->
@@ -715,14 +718,12 @@ function goPlans() {
   bottom: 0;
   /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
   z-index: 20;
-  background: $app-canvas;
-  padding: 16rpx 32rpx 0;
 }
 
-/* tabbar 必须和其余三页一样通栏贴边：抵掉 .home__bottom 的左右内边距。
-   不抵的话它的上边线比别的页短 64rpx，切到首页会看出「线变窄了」。 */
-.home__tab {
-  margin: 0 -32rpx;
+/* 自带底色与内边距：切页时它被单独克隆进滑出层，不能指望外层给背景 */
+.home__dock {
+  background: $app-canvas;
+  padding: 16rpx 32rpx 0;
 }
 
 .home__bottom-link {

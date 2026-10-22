@@ -146,6 +146,8 @@ page {
    utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层，切换后整层滑出；
    新页同时从另一侧滑入。底栏不在正文里，且 `__bottom` 都是 z-index: 20，
    所以这一层（10）压不到底栏——底栏钉住不动。
+   底色必须铺满：层铺上后要等新页就绪才起跑，这段时间新页已在底下原位，
+   透明的话两页会叠成重影。
    ⚠️ 别把 View Transitions 那套（::view-transition-*）加回来：主人设备的 WebView
    不支持（要 Chrome 111+），当时一直走兜底硬切，表现为「中间一帧整页空白」。 */
 .tab-slide-layer {
@@ -154,6 +156,7 @@ page {
   overflow: hidden;
   pointer-events: none;
   z-index: 10;
+  background: $app-canvas;
   will-change: transform;
   /* 克隆体可能比视口高，滑出时不能让它撑出滚动条 */
   contain: paint;

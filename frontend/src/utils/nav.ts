@@ -16,6 +16,9 @@ const FRESH_MS = 800
 
 let pending: { from: TabKey; at: number } | null = null
 
+/** 最近一次有效入场是从哪一格来的，给指示条当起点（跨格跳时不能只滑一格） */
+let lastFromIdx: number | null = null
+
 /** 跳转前调用，记下「从哪来」 */
 export function markTabNav(from: TabKey) {
   pending = { from, at: Date.now() }
@@ -28,34 +31,46 @@ export function markTabNav(from: TabKey) {
 export function takeTabEnter(to: TabKey): 'left' | 'right' | null {
   const signal = pending
   pending = null
+  lastFromIdx = null
   if (!signal || Date.now() - signal.at > FRESH_MS) return null
   const fromIdx = ORDER.indexOf(signal.from)
   const toIdx = ORDER.indexOf(to)
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null
+  lastFromIdx = fromIdx
   return toIdx > fromIdx ? 'right' : 'left'
 }
 
-/** 时长与缓动对齐 `uni.scss` 的 `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步） */
-const SLIDE_MS = 260
-const EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
+/** 本次入场的来源格下标；没有有效信号时为 null */
+export function lastTabFromIndex(): number | null {
+  return lastFromIdx
+}
+
+/**
+ * 时长与缓动对齐 `uni.scss` 的 `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步）。
+ * 指示条也用这一对——正文和指示条是同一个动作，节奏必须一致。
+ */
+export const SLIDE_MS = 260
+export const SLIDE_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)'
+
+/** 旧页克隆层最多等新页多久；超时就自己先滑，免得卡在旧页上 */
+const HOLD_MAX_MS = 400
+
+/** 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行 */
+let heldOut: (() => void) | null = null
+
+function releaseOut() {
+  const go = heldOut
+  heldOut = null
+  go?.()
+}
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** 页面滚动发生在外层容器上，克隆体要从顶部整体上移同样的距离才对得上当前视口 */
-function scrollTopOf(el: HTMLElement) {
-  let node: HTMLElement | null = el.parentElement
-  while (node) {
-    if (node.scrollTop > 0) return node.scrollTop
-    node = node.parentElement
-  }
-  return document.scrollingElement?.scrollTop ?? window.scrollY ?? 0
-}
-
 /**
- * 切页转场：**把当前页正文克隆一层盖上去滑出**，紧接着新页从另一侧滑入。
+ * 切页转场：**把当前页正文克隆一层盖上去滑出**，新页从另一侧同帧滑入。
  *
  * 为什么不用 View Transitions：2026-10-21 上线后发现主人设备的 WebView 不支持
  * （该特性要 Chrome 111+），`startViewTransition` 不存在 → 一直走兜底硬切，于是
@@ -64,45 +79,72 @@ function scrollTopOf(el: HTMLElement) {
  * 克隆层还有个白捡的好处：新页挂载要几十到几百毫秒，这段时间**屏幕上是旧页在挡着**，
  * 白屏被遮住了——这正是之前所有版本都没解决的。
  *
- * `dir` 是旧页滑出的方向；`fromSelector` 是当前页正文的选择器（`.log__body` 等）。
- * 底栏不在正文里，且四个页面的 `__bottom` 都有 `z-index: 20`，克隆层（z-index 10）
- * 压不到它——底栏钉住不动。
+ * **两层必须同帧起跑**（2026-10-22 修）：以前克隆层一点就滑，新页要等 `onShow` ＋ 一帧才动，
+ * 中间那几帧新页已经停在原位、又被透明的克隆层叠着——看上去是「两页重影、再往回弹一下」。
+ * 现在克隆层铺好后**先不动**（层有底色，把底下的新页挡住），由 `playTabEnter` 放行；
+ * 新页迟迟不来就在 `HOLD_MAX_MS` 后自己滑。
+ *
+ * `dir` 是旧页滑出的方向；`fromSelectors` 是当前页要跟着滑的块（正文 `.log__body` 等，
+ * 首页还有底部的 `.home__dock`）。每块按它此刻在视口里的位置钉进克隆层，所以页面滚动
+ * 不用另算。tabbar 不在这些块里，且四页的 `__bottom` 都是 `z-index: 20`，
+ * 克隆层（10）压不到它——只有 tabbar 钉住不动。
  */
 export function startSlide(
   dir: 'left' | 'right',
   navigate: () => void,
-  fromSelector: string
+  fromSelectors: readonly string[]
 ) {
-  const src = document.querySelector(fromSelector) as HTMLElement | null
-  if (!src || typeof src.cloneNode !== 'function' || prefersReducedMotion()) {
+  const srcs = fromSelectors
+    .map((s) => document.querySelector(s) as HTMLElement | null)
+    .filter((el): el is HTMLElement => !!el && typeof el.cloneNode === 'function')
+  if (!srcs.length || prefersReducedMotion()) {
     navigate()
     return
   }
 
   const layer = document.createElement('div')
   layer.className = 'tab-slide-layer'
-  const clone = src.cloneNode(true) as HTMLElement
-  clone.style.transform = `translateY(${-scrollTopOf(src)}px)`
-  layer.appendChild(clone)
+  for (const src of srcs) {
+    const r = src.getBoundingClientRect()
+    const clone = src.cloneNode(true) as HTMLElement
+    Object.assign(clone.style, {
+      position: 'absolute',
+      left: `${r.left}px`,
+      top: `${r.top}px`,
+      width: `${r.width}px`,
+      margin: '0',
+      boxSizing: 'border-box'
+    })
+    layer.appendChild(clone)
+  }
   document.body.appendChild(layer)
 
-  // 先把层铺上去，再切换：新页挂载期间由旧页克隆层顶着，不是白屏
-  navigate()
-
-  const dx = dir === 'left' ? -100 : 100
-  const anim = layer.animate(
-    [{ transform: 'translateX(0)' }, { transform: `translateX(${dx}%)` }],
-    { duration: SLIDE_MS, easing: EASE, fill: 'forwards' }
-  )
   let removed = false
   const drop = () => {
     if (removed) return
     removed = true
     layer.remove()
   }
-  void Promise.resolve(anim.finished).catch(() => {}).then(drop)
-  // 兜底：动画被跳过（某些省电模式）也要把层摘掉，否则它一直盖在页面上
-  setTimeout(drop, SLIDE_MS + 250)
+
+  // 上一次还没放行的层（连点）立刻放它滑走，不排队
+  releaseOut()
+  const dx = dir === 'left' ? -100 : 100
+  heldOut = () => {
+    const anim = layer.animate(
+      [{ transform: 'translateX(0)' }, { transform: `translateX(${dx}%)` }],
+      { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' }
+    )
+    void Promise.resolve(anim.finished).catch(() => {}).then(drop)
+    // 兜底：动画被跳过（某些省电模式）也要把层摘掉，否则它一直盖在页面上
+    setTimeout(drop, SLIDE_MS + 250)
+  }
+  const mine = heldOut
+  setTimeout(() => {
+    if (heldOut === mine) releaseOut()
+  }, HOLD_MAX_MS)
+
+  // 先把层铺上去，再切换：新页挂载期间由旧页克隆层顶着，不是白屏
+  navigate()
 }
 
 /**
@@ -110,28 +152,37 @@ export function startSlide(
  *
  * 传选择器而不是元素：`onShow` 触发时新页的 DOM 未必已经在文档里（首次挂载尤其慢），
  * 而 uni-app H5 的 `<view ref>` 拿到的是**组件实例**（没有 `tagName` / `animate`）。
- * 所以这里轮询到元素真的连进文档再播——**不设短上限**，晚到也要滑进来，
- * 因为那时候旧页克隆层多半已经滑走，正是它该出现的时刻。
+ * 所以这里轮询到元素真的连进文档再播；第一块（正文）就绪的那一刻同时放行旧页克隆层，
+ * 两边在同一帧起跑。`selectors` 里其余的块（首页 `.home__dock`）跟着一起滑。
  */
-export function playTabEnter(selector: string, dir: 'left' | 'right' | null) {
-  if (!dir || prefersReducedMotion()) return
+export function playTabEnter(selectors: string | readonly string[], dir: 'left' | 'right' | null) {
+  if (!dir || prefersReducedMotion()) {
+    releaseOut()
+    return
+  }
+  const list = typeof selectors === 'string' ? [selectors] : selectors
   const started = performance.now()
   const tick = () => {
-    const el = document.querySelector(selector) as HTMLElement | null
+    const el = document.querySelector(list[0]) as HTMLElement | null
     if (el && el.isConnected) {
-      if (typeof el.animate !== 'function') return
-      el.getAnimations().forEach((a) => a.cancel())
-      el.animate(
-        [
-          { transform: `translateX(${dir === 'right' ? 100 : -100}%)` },
-          { transform: 'translateX(0)' }
-        ],
-        { duration: SLIDE_MS, easing: EASE, fill: 'backwards' }
-      )
+      if (typeof el.animate !== 'function') return releaseOut()
+      releaseOut()
+      for (const s of list) {
+        const target = document.querySelector(s) as HTMLElement | null
+        if (!target?.isConnected) continue
+        target.getAnimations().forEach((a) => a.cancel())
+        target.animate(
+          [
+            { transform: `translateX(${dir === 'right' ? 100 : -100}%)` },
+            { transform: 'translateX(0)' }
+          ],
+          { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'backwards' }
+        )
+      }
       return
     }
     // 两秒还没出来就别等了：页面根本没挂上，动画也没有意义
-    if (performance.now() - started > 2000) return
+    if (performance.now() - started > 2000) return releaseOut()
     requestAnimationFrame(tick)
   }
   requestAnimationFrame(tick)

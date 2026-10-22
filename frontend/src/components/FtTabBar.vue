@@ -10,7 +10,15 @@
  */
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { animateWhenConnected, markTabNav, startSlide, type TabKey } from '@/utils/nav'
+import {
+  animateWhenConnected,
+  lastTabFromIndex,
+  markTabNav,
+  SLIDE_EASE,
+  SLIDE_MS,
+  startSlide,
+  type TabKey
+} from '@/utils/nav'
 
 const props = defineProps<{
   active: TabKey
@@ -20,12 +28,13 @@ const props = defineProps<{
   enterSeq?: number
 }>()
 
-// body：该页正文的选择器，切页时用来克隆「旧页」那一层
+// slide：该页切走时要跟着滑的块（克隆进「旧页」那一层）。首页底部的提示／训练横幅／
+// 「开始训练」属于页面内容，也要一起滑——只钉住它的话，正文在滑、那一大块却瞬间消失或冒出来。
 const tabs = [
-  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', body: '.home__body' },
-  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', body: '.log__body' },
-  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', body: '.stats__body' },
-  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', body: '.prof__body' }
+  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', slide: ['.home__body', '.home__dock'] },
+  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', slide: ['.log__body'] },
+  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', slide: ['.stats__body'] },
+  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', slide: ['.prof__body'] }
 ] as const
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
@@ -33,31 +42,35 @@ const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === pro
 // 指示条：静止位置永远是当前格；「上一页那一格」只是动画的起点。
 // 方向与内容位移相反——内容从右进场是因为整个容器在往左移，而指示条标的是
 // 「选中哪一格」，所以首页→日志它从左往右走一格。
-const indRef = ref<HTMLElement | null>(null)
+const indRef = ref<unknown>(null)
 const indOffset = ref(activeIdx.value)
 
 function slideIndicator(dir: 'left' | 'right' | null) {
   indOffset.value = activeIdx.value
+  // uni H5 的 `<view ref>` 给的是组件实例（没有 `animate`），不能在这里判 DOM 能力，
+  // 交给 animateWhenConnected 取 `$el`——以前这里判了，指示条其实从来没滑过
   const el = indRef.value
-  if (!dir || !el || typeof el.animate !== 'function') return
+  if (!dir || !el) return
   if (typeof window !== 'undefined' && window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return
   }
-  const from = activeIdx.value + (dir === 'right' ? -1 : 1)
+  // 从真正的来源格出发：首页→统计要滑过两格，不能只从「日志」那格冒出来
+  const from = lastTabFromIndex() ?? activeIdx.value + (dir === 'right' ? -1 : 1)
   animateWhenConnected(
     el,
     [
       { transform: `translateX(${from * 100}%)` },
       { transform: `translateX(${activeIdx.value * 100}%)` }
     ],
-    { duration: 220, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' }
+    { duration: SLIDE_MS, easing: SLIDE_EASE }
   )
 }
 
-// 首次挂载（冷启动）没有方向信号，指示条直接落在当前格，不要滑
+// 首次挂载：冷启动没有方向信号，直接落在当前格；从别的 tab 切来的首访则带着方向——
+// 页面 onShow 先于本组件挂载就把 enterSeq 加过了，下面的 watch 看不到这次变化，得在这里补播
 onMounted(() => {
-  indOffset.value = activeIdx.value
+  slideIndicator(props.enterDir ?? null)
 })
 
 // 之后每次页面被显示，页面把 enterSeq 加一，这里据此重放
@@ -72,7 +85,7 @@ function go(t: (typeof tabs)[number]) {
   // 去右边的 tab：旧页往左滑出、新页从右进来（反过来同理）
   const toIdx = tabs.findIndex((x) => x.key === t.key)
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
-  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].body)
+  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].slide)
 }
 </script>
 
