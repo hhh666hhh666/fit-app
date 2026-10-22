@@ -92,6 +92,27 @@ function copyInherited(from: Element | null, to: HTMLElement) {
   }
 }
 
+/**
+ * `cloneNode` 不带 canvas 的像素，克隆出来是空白（趋势图、训练横幅的流星）。
+ * 按顺序一一对应，把当前这一帧画过去——滑出那 260ms 里它们就是一张静止的截图。
+ */
+function copyCanvases(from: HTMLElement, to: HTMLElement) {
+  const srcs = from.querySelectorAll('canvas')
+  if (!srcs.length) return
+  const dsts = to.querySelectorAll('canvas')
+  srcs.forEach((s, i) => {
+    const d = dsts[i]
+    if (!d || !s.width || !s.height) return
+    try {
+      d.width = s.width
+      d.height = s.height
+      d.getContext('2d')?.drawImage(s, 0, 0)
+    } catch {
+      // 跨域污染等画不过去就算了，空白一闪而过，不影响切页
+    }
+  })
+}
+
 /** 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行 */
 let heldOut: (() => void) | null = null
 
@@ -145,6 +166,7 @@ export function startSlide(
     const r = src.getBoundingClientRect()
     const clone = src.cloneNode(true) as HTMLElement
     copyInherited(src.parentElement, clone)
+    copyCanvases(src, clone)
     Object.assign(clone.style, {
       position: 'absolute',
       left: `${r.left}px`,
