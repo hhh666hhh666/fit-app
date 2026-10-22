@@ -30,6 +30,7 @@
 | [design/设计skill清单.md](./design/设计skill清单.md) | 外部设计 skill 的角色与禁区（档案；速查见 `.codebuddy/rules/design-tools.md`） | 改前端 UI 的人 / AI | 本文件 |
 | [adr/](./adr/) | **决策结论**卡片（Status / Considered Options / Consequences） | 查「为什么这么定」的人 | ADR 自身 |
 | [development/contributing.md](./development/contributing.md) | 分支 / 提交 / PR 约定与文档纪律 | 要提交代码的人 | `git log` |
+| [development/工作流skill清单.md](./development/工作流skill清单.md) | 非设计类外部 skill（grill-with-docs 等）的来源与本项目口径映射 | 要重装 skill 的人 / AI | 本文件 |
 | [todo/](./todo/) | **未决事项唯一入口** | 想知道「还有什么没定」的人 | 各待办文件 |
 | [worklog/](./worklog/) | AI **会话**的实时进度（正在做什么 / 接下来 / 已做完） | 只对创建它的那次会话有意义，**其他会话不必读** | 各文件自身 |
 | [目录结构.md](./目录结构.md) | **两棵带注释目录树**：① 仓库根的文档散在哪 ② `docs/` 体系内部 | 新人 / 冷启动的 AI | 文件系统 |

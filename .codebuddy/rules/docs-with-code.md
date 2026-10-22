@@ -50,3 +50,10 @@ alwaysApply: true
 - **改完 ADR 必须同步 `docs/requirements/scope.md`**：新结论属范围口径 → 进「已定范围与约束」表；被推翻 / 收窄 → 对应行与「明确不做」条目一起改掉。与范围无关的纯内部决策可不入表，但**核对本身不可跳**。
 - 新的未决事项**不许**写在任何文档正文里 → `docs/todo/`。
 - 提交前跑一次链接自检脚本，全绿再 commit。
+
+## 外部 skill 与本项目口径的映射
+
+`grill-with-docs` / `domain-modeling` 这类 skill 自带一套文件约定，**以本项目为准**（来源见 `docs/development/工作流skill清单.md`）：
+
+- 它说的 `GLOSSARY.md` / `CONTEXT.md` **就是根 `CONTEXT.md`**：往里加词沿用现有表格格式（词 / 含义 / 不要叫），**不新建 `GLOSSARY.md`、不改用它的列表格式**。
+- 它说的 ADR **按 `docs/adr/README.md` 写**：`Status` / `Considered Options` / `Consequences` 三节必备，编号与收录标准也以那里为准；它的「一段话就够」不适用。

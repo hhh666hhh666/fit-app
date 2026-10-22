@@ -26,7 +26,7 @@ Thumbs.db
 
 # AI 工具的本地状态与本机设置（不入库）
 .workbuddy/
-# 外部设计 skill 装在项目级、但不入库，换机器按 docs/design/设计skill清单.md 的来源重装
+# 外部 skill 装在项目级、但不入库，换机器按 docs/design/设计skill清单.md 与 docs/development/工作流skill清单.md 的来源重装
 .claude/skills/
 
 # vite 编译配置时的临时产物（出现即不该入库）
