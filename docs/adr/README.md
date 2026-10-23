@@ -64,6 +64,7 @@ Status: accepted
 - [ADR 0038](./0038-tabbar-switchtab-keepalive.md)：主 tab 导航改为 `tabBar` ＋ `switchTab` 保活——切页不再销毁页面，白屏／滚动位置／月份一次解决；H5 内置 tabbar 必须自己压掉。
 - [ADR 0039](./0039-view-transition-tab-slide.md)：切页转场改用 View Transitions 的整页快照——旧页左出、新页右入，真连续推拉；单页入场动效退役。
 - [ADR 0040](./0040-tab-slide-clone-layer.md)：切页转场改为「旧页克隆层滑出」（取代 0039）——不依赖新特性，顺带用旧页遮住新页挂载的空白。
+- [ADR 0041](./0041-design-language-qingchuang.md)：设计语言由「训练日志」整体换成「晴窗」——冷调浅底、苹果式玻璃、橙色只给动作；训练入口嵌进底栏中间（四个主页面通用），进行中横幅取消。
 
 ## 与其他文档的分工
 
