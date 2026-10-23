@@ -25,7 +25,7 @@ Spring Boot + Vue 的自用项目。领域词看 `CONTEXT.md`，文档总索引�
 
 ## 改前端 UI 时的入口
 
-该用哪几个设计 skill、禁区与安装口径 → `.codebuddy/rules/design-tools.md`；设计系统的真相源在 `frontend/src/styles/tokens.css`（**改颜色 / 间距 / 圆角只改它**）。
+该用哪几个设计 skill、禁区与安装口径 → `.codebuddy/rules/design-tools.md`；设计系统的真相源在 `frontend/src/uni.scss`（**改颜色 / 间距 / 圆角只改它**）。
 
 ## 收尾（每次对话结束前）
 

@@ -14,7 +14,7 @@
 | [../README.md](../README.md) | 上手：定位、功能、跑起来、配置要点、CI 与部署 | 所有人 | 代码与脚本 |
 | [../CONTEXT.md](../CONTEXT.md) | 领域术语表（只收本项目独有的词，不含实现） | 读代码的人 | 本文件 |
 | [../PRODUCT.md](../PRODUCT.md) | 产品真相：受众 / 用途 / 定位 / 语气 / 约束 | 判断「某个设计对不对」的人 | 本文件（由 impeccable 生成） |
-| [../DESIGN.md](../DESIGN.md) | 视觉系统的**可读快照**（色板 / 排版 / 材质口径） | 改前端视觉的人 | **从 `frontend/src/styles/tokens.css` 派生**；过时了重新生成 |
+| [../DESIGN.md](../DESIGN.md) | 视觉系统的**可读快照**（色板 / 排版 / 材质口径） | 改前端视觉的人 | **从 `frontend/src/uni.scss` 派生**；过时了重新生成 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 版本变更记录 | 所有人 | `git tag` |
 | [../AGENTS.md](../AGENTS.md) | **给 AI 的规矩**（跨工具摘要，只做路由） | AI / 未来的自己 | `.codebuddy/rules/` |
 | [../.codebuddy/commands/wrap-up.md](../.codebuddy/commands/wrap-up.md) | 收尾自检：把未决事项落 `docs/todo/`、补文档与引用、跑守卫脚本 | AI / 收尾时 | 本文件 |
