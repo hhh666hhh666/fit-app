@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { PALETTE } from '@/utils/palette'
 // 训练详情（从日志页点进来；接 GET /api/workouts/{id}）。
-// 右上角「编辑」进入就地编辑：标题、各组重量/次数、备注可改；按钮变 ✓，点 ✓ 保存（PUT /api/workouts/{id}）。
+// 右上角「编辑」进入就地编辑：标题、各组、消耗、备注可改；底部悬浮「保存修改」提交（PUT /api/workouts/{id}），
+// 右上角变「取消」＝放弃这次改动。
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getWorkout, updateWorkout, updateWorkoutNote } from '@/api/workout'
@@ -9,7 +10,10 @@ import type { WorkoutDetail } from '@/api/workout'
 import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
 
 const detail = ref<WorkoutDetail | null>(null)
 const loading = ref(true)
@@ -122,10 +126,10 @@ onLoad((query) => {
   load(id)
 })
 
-/** 顶栏动作：只读 →「编辑」进编辑态；编辑态 → ✓ 保存。 */
+/** 页头右侧：只读 →「编辑」进编辑态；编辑态 →「取消」问一句再退出（保存走底部按钮）。 */
 function onHeadAction() {
   if (!detail.value || saving.value) return
-  if (editing.value) void save()
+  if (editing.value) confirmDiscard(() => (editing.value = false))
   else startEdit()
 }
 
@@ -276,19 +280,24 @@ async function saveNote() {
   }
 }
 
+/** 编辑中要离开（返回或取消）先问一句；确认后才执行 then。 */
+function confirmDiscard(then: () => void) {
+  uni.showModal({
+    title: '放弃修改？',
+    content: '当前改动尚未保存，放弃后不会保留。',
+    confirmText: '放弃',
+    confirmColor: PALETTE.danger,
+    success: ({ confirm }) => {
+      if (confirm) then()
+    }
+  })
+}
+
 function back() {
   if (editing.value) {
-    uni.showModal({
-      title: '放弃修改？',
-      content: '当前改动尚未保存，返回将丢弃。',
-      confirmText: '放弃',
-      confirmColor: PALETTE.danger,
-      success: ({ confirm }) => {
-        if (confirm) {
-          editing.value = false
-          uni.navigateBack()
-        }
-      }
+    confirmDiscard(() => {
+      editing.value = false
+      uni.navigateBack()
     })
     return
   }
@@ -298,171 +307,146 @@ function back() {
 
 <template>
   <view class="detail">
-    <view class="detail__body">
-      <!-- 顶栏：返回 ＋ 日期·标题 ＋ 编辑/✓ -->
-      <view class="detail__head">
-        <text class="detail__back" @click="back">←</text>
-        <view class="detail__head-mid">
-          <text v-if="!detail" class="detail__head-title">训练详情</text>
-          <template v-else-if="editing">
-            <text class="detail__head-date ft-num">{{ formatDateTimeLabel(detail.createdAt) }}</text>
-            <input
-              v-model="draft.title"
-              class="detail__title-input"
-              maxlength="64"
-              placeholder="训练标题"
-              placeholder-class="detail__ph"
-            />
-          </template>
-          <text v-else class="detail__head-title">
-            {{ formatDateTimeLabel(detail.createdAt) }} · {{ detail.title }}
-          </text>
-        </view>
-        <view v-if="detail" class="detail__act" @click="onHeadAction">
-          <!-- 编辑态：文字「编辑」变 ✓；点它即保存 -->
-          <FtIcon v-if="editing" name="check" :size="20" :stroke="2.2" />
-          <text v-else class="detail__edit">编辑</text>
-        </view>
-        <text v-else class="detail__edit detail__edit--off">编辑</text>
-      </view>
+    <view class="detail__body" :class="{ 'is-editing': editing }">
+      <FtPageHeader
+        :title="detail ? detail.title : '训练详情'"
+        :eyebrow="detail ? formatDateTimeLabel(detail.createdAt) : undefined"
+        back
+        @back="back"
+      >
+        <template v-if="detail" #right>
+          <view class="pill" role="button" @click="onHeadAction">{{ editing ? '取消' : '编辑' }}</view>
+        </template>
+      </FtPageHeader>
 
       <!-- 加载与异常态 -->
-      <view v-if="loading" class="ft-loading">加载中…</view>
-      <view v-else-if="notFound || !detail" class="ft-empty">
-        这条训练记录不存在或已删除
-        <view class="detail__empty-back ft-btn ft-btn--ghost" @click="back">返回日志</view>
+      <view v-if="loading" class="hint">加载中…</view>
+      <view v-else-if="notFound || !detail" class="glass">
+        <FtEmpty title="这条训练记录不存在或已删除" sub="可能在别的设备上删掉了。">
+          <FtButton variant="ghost" size="sm" class="detail__empty-back" @click="back">返回日志</FtButton>
+        </FtEmpty>
       </view>
 
       <template v-else>
-        <!-- 三格指标 -->
-        <view class="metrics">
-          <view class="metrics__cell">
-            <text class="metrics__label">时长</text>
-            <text class="metrics__value ft-num">{{ formatClock(detail.durationSec) }}</text>
-          </view>
-          <view class="metrics__cell">
-            <text class="metrics__label">总组数</text>
-            <text class="metrics__value ft-num">{{ shownSets }}<text class="metrics__unit"> 组</text></text>
-          </view>
-          <view class="metrics__cell">
-            <text class="metrics__label">{{ volumeLabel }}</text>
-            <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit"> {{ volumeUnit }}</text></text>
-          </view>
+        <!-- 编辑态：标题 -->
+        <view v-if="editing" class="glass field-card">
+          <text class="field-card__label">标题</text>
+          <input
+            v-model="draft.title"
+            class="field-card__input"
+            maxlength="64"
+            placeholder="训练标题"
+            placeholder-class="ph"
+          />
         </view>
 
-        <!-- 消耗（ADR 0029）：与时长同级的一行；编辑态可改，留空＝没填 -->
-        <view class="burnline">
-          <text class="burnline__label">消耗</text>
-          <view class="burnline__right">
-            <input
-              v-if="editing"
-              v-model="draft.calories"
-              type="number"
-              class="burnline__input ft-num"
-              placeholder="未填"
-              placeholder-class="burnline__ph"
-            />
-            <text v-else class="burnline__value ft-num">
-              {{ detail.calories != null ? detail.calories : '—' }}
-            </text>
-            <text v-if="editing || detail.calories != null" class="burnline__unit">大卡</text>
+        <!-- 数据卡：时长 / 组数 / 总容量 ＋ 消耗（ADR 0029：编辑态可改，留空＝没填） -->
+        <view class="glass metrics">
+          <view class="metrics__row">
+            <view class="metrics__cell">
+              <text class="metrics__label">时长</text>
+              <text class="metrics__value ft-num">{{ formatClock(detail.durationSec) }}</text>
+            </view>
+            <view class="metrics__cell">
+              <text class="metrics__label">组数</text>
+              <text class="metrics__value ft-num">{{ shownSets }}<text class="metrics__unit">组</text></text>
+            </view>
+            <view class="metrics__cell">
+              <text class="metrics__label">{{ volumeLabel }}</text>
+              <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit">{{ volumeUnit }}</text></text>
+            </view>
+          </view>
+          <view class="metrics__burn">
+            <text class="metrics__label">消耗</text>
+            <view class="metrics__burn-right">
+              <input
+                v-if="editing"
+                v-model="draft.calories"
+                type="number"
+                class="inp metrics__burn-input ft-num"
+                placeholder="未填"
+                placeholder-class="ph"
+              />
+              <text v-else class="metrics__burn-value ft-num">{{ detail.calories != null ? detail.calories : '—' }}</text>
+              <text v-if="editing || detail.calories != null" class="metrics__unit">大卡</text>
+            </view>
           </view>
         </view>
 
         <!-- 只读：按动作分组的组表 -->
-        <template v-if="!editing">
-          <view v-for="(b, i) in detail.blocks" :key="i" class="ft-card block">
+        <view v-if="!editing" class="glass blocks">
+          <view v-for="(b, i) in detail.blocks" :key="i" class="block">
             <view class="block__head">
-              <view class="block__name-line">
-                <text class="block__dot" />
-                <text class="block__name">{{ b.name }}</text>
-              </view>
+              <text class="block__name">{{ b.name }}</text>
               <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
-            <view class="block__sets">
-              <view v-for="(s, j) in b.sets" :key="j" class="set">
-                <text class="set__label" :class="{ 'set__label--pr': s.pr }">
-                  第 {{ j + 1 }} 组
-                  <text v-if="s.pr" class="set__pr ft-marker">PR</text>
-                </text>
-                <view class="set__vals">
-                  <text class="set__value ft-num">{{ setReadText(s, b.metric === 'floors') }}</text>
-                  <text v-if="s.durationSec != null" class="set__dur ft-num">
-                    {{ formatClock(s.durationSec) }}
-                  </text>
-                </view>
-              </view>
+            <view v-for="(s, j) in b.sets" :key="j" class="set">
+              <text class="set__label">第 {{ j + 1 }} 组</text>
+              <text v-if="s.pr" class="pr">PR</text>
+              <text class="set__value ft-num" :class="{ 'set__value--pr': s.pr }">
+                {{ setReadText(s, b.metric === 'floors') }}
+              </text>
+              <!-- 用时列：这个动作有一组带用时就整列留位，没带的组留空，数值才对得齐 -->
+              <text v-if="b.sets.some((x) => x.durationSec != null)" class="set__dur ft-num">
+                {{ s.durationSec != null ? formatClock(s.durationSec) : '' }}
+              </text>
             </view>
           </view>
-        </template>
+        </view>
 
         <!-- 编辑态：逐组改重量/次数/用时，可增删组（动作名不可改） -->
         <template v-else>
-          <view v-for="(b, i) in draft.blocks" :key="i" class="ft-card block">
+          <view v-for="(b, i) in draft.blocks" :key="i" class="glass eblock">
             <view class="block__head">
-              <view class="block__name-line">
-                <text class="block__dot" />
-                <text class="block__name">{{ b.name }}</text>
-              </view>
+              <text class="block__name">{{ b.name }}</text>
               <text class="block__meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
-            <view class="block__sets">
-              <view v-for="(s, j) in b.sets" :key="j" class="set set--edit">
-                <view class="set__line">
-                  <text class="set__label">第 {{ j + 1 }} 组</text>
-                  <view class="set__edit">
-                    <view class="set__inp">
-                      <input
-                        v-if="b.metric === 'floors'"
-                        v-model="s.floors"
-                        type="number"
-                        class="set__field ft-num"
-                      />
-                      <input v-else v-model="s.weight" type="digit" class="set__field ft-num" />
-                      <text class="set__unit">{{ b.metric === 'floors' ? '层' : 'kg' }}</text>
+            <view v-for="(s, j) in b.sets" :key="j" class="eset">
+              <view class="eset__line">
+                <text class="set__label">第 {{ j + 1 }} 组</text>
+                <view class="eset__vals">
+                  <view class="inp">
+                    <input v-if="b.metric === 'floors'" v-model="s.floors" type="number" class="inp__field ft-num" />
+                    <input v-else v-model="s.weight" type="digit" class="inp__field ft-num" />
+                    <text class="inp__unit">{{ b.metric === 'floors' ? '层' : 'kg' }}</text>
+                  </view>
+                  <template v-if="b.metric !== 'floors'">
+                    <text class="eset__x">×</text>
+                    <view class="inp">
+                      <input v-model="s.reps" type="number" class="inp__field ft-num" />
+                      <text class="inp__unit">次</text>
                     </view>
-                    <template v-if="b.metric !== 'floors'">
-                      <text class="set__x">×</text>
-                      <view class="set__inp">
-                        <input v-model="s.reps" type="number" class="set__field ft-num" />
-                        <text class="set__unit">次</text>
-                      </view>
-                    </template>
-                    <text class="set__del" @click="removeSet(i, j)">×</text>
-                  </view>
+                  </template>
                 </view>
-                <!-- 组用时：留空＝这条没有用时（编辑是整体覆盖，见 ADR 0022） -->
-                <view class="set__line set__line--dur">
-                  <text class="set__dur-label">用时</text>
-                  <view class="set__inp set__inp--dur">
-                    <input
-                      v-model="s.dur"
-                      type="text"
-                      placeholder="01:42"
-                      placeholder-class="set__dur-ph"
-                      class="set__field set__field--dur ft-num"
-                    />
-                    <text class="set__unit">分:秒</text>
-                  </view>
+                <view class="eset__del" role="button" aria-label="删掉这一组" @click="removeSet(i, j)">
+                  <FtIcon name="close" :size="14" :stroke="2" />
                 </view>
               </view>
-              <view class="set__add" @click="addSet(i)">+ 加一组</view>
+              <!-- 组用时：留空＝这条没有用时（编辑是整体覆盖，见 ADR 0022） -->
+              <view class="eset__line eset__line--dur">
+                <text class="set__label">用时</text>
+                <view class="inp">
+                  <input v-model="s.dur" type="text" placeholder="01:42" placeholder-class="ph" class="inp__field inp__field--dur ft-num" />
+                  <text class="inp__unit">分:秒</text>
+                </view>
+              </view>
+            </view>
+            <view class="addbtn" role="button" @click="addSet(i)">
+              <FtIcon name="plus" :size="16" :stroke="2" />
+              <text>加一组</text>
             </view>
           </view>
         </template>
 
-        <!-- 备注：只读态失焦即存；编辑态随 ✓ 一起保存 -->
-        <view class="ft-card note">
-          <view class="note__head">
-            <text class="note__icon">≡</text>
-            <text class="note__title">备注</text>
-          </view>
+        <!-- 备注：只读态失焦即存；编辑态随「保存修改」一起保存 -->
+        <view class="glass note">
+          <text class="card-title">备注</text>
           <textarea
             v-if="editing"
             v-model="draft.note"
             class="note__input"
             placeholder="添加备注…"
-            placeholder-class="note__placeholder"
+            placeholder-class="ph"
             :maxlength="200"
             auto-height
           />
@@ -471,160 +455,121 @@ function back() {
             v-model="detail.note"
             class="note__input"
             placeholder="添加备注…"
-            placeholder-class="note__placeholder"
+            placeholder-class="ph"
             :maxlength="200"
             auto-height
             @blur="saveNote"
           />
         </view>
-
-        <!-- 页脚 -->
-        <view class="detail__foot ft-num">FIT-APP LEDGER · RECORD VERIFIED</view>
       </template>
+    </view>
+
+    <!-- 编辑态：贴底悬浮的保存 -->
+    <view v-if="editing" class="detail__bottom">
+      <FtButton variant="primary" block :disabled="saving" class="detail__save" @click="save">保存修改</FtButton>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .detail__body {
-  padding: 36rpx 32rpx 48rpx;
-}
-
-/* ── 顶栏 ── */
-.detail__head {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  padding-bottom: 28rpx;
-}
-
-.detail__back {
-  font-size: 44rpx;
-  line-height: 1;
-  color: $app-ink;
-  padding: 0 8rpx;
-}
-
-.detail__head-mid {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(64rpx + env(safe-area-inset-bottom));
 }
 
-.detail__head-title {
-  font-size: $text-lg;
-  font-weight: 600;
+/* 编辑态底下多了悬浮的保存，正文末尾让出它的高度 */
+.detail__body.is-editing {
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+}
+
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
   color: $app-ink;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.detail__head-date {
-  font-size: 22rpx;
-  color: $app-ink-muted;
-}
-
-/* 编辑态标题输入：下划线式，和只读标题同字号同字重，切换时不跳版 */
-.detail__title-input {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-  border-bottom: 2rpx solid $app-ink;
-  padding: 4rpx 0;
-}
-
-.detail__ph {
+.ph {
   color: $app-ink-subtle;
+  font-weight: $weight-regular;
 }
 
-.detail__act {
-  flex-shrink: 0;
-  min-width: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  color: $app-ink;
-  padding: 8rpx 0;
-}
-
-.detail__edit {
+.hint {
+  padding: 80rpx 0;
+  text-align: center;
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.detail__edit--off {
-  opacity: 0.4;
-}
-
-.detail__empty-back {
-  margin: 32rpx auto 0;
-  width: 240rpx;
-}
-
-/* ── 三格指标 ── */
-.burnline {
+/* 页头右侧的胶囊按钮 */
+.pill {
+  @include glass($glass-bg-strong);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 20rpx 28rpx;
-  margin-bottom: 24rpx;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
 }
 
-.burnline__label {
-  font-size: 22rpx;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: $app-ink-muted;
+.pill:active {
+  opacity: 0.7;
 }
 
-.burnline__right {
+.detail .detail__empty-back {
+  align-self: flex-start;
+  margin-top: 8rpx;
+}
+
+/* ── 编辑态标题 ── */
+.field-card {
   display: flex;
-  align-items: baseline;
-  gap: 8rpx;
+  flex-direction: column;
+  gap: 12rpx;
+  padding-top: 28rpx;
+  padding-bottom: 28rpx;
 }
 
-.burnline__value {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.burnline__input {
-  width: 180rpx;
-  text-align: right;
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-  border-bottom: 2rpx solid $app-line;
-}
-
-.burnline__ph {
-  color: $app-ink-subtle;
-  font-weight: 400;
-}
-
-.burnline__unit {
-  font-size: $text-xs;
+.field-card__label {
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
+.field-card__input {
+  height: 92rpx;
+  padding: 0 24rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+/* ── 数据卡（与汇总页同一个） ── */
 .metrics {
+  padding: 32rpx 12rpx 24rpx;
+}
+
+.metrics__row {
   display: flex;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 24rpx 0;
-  margin-bottom: 24rpx;
 }
 
 .metrics__cell {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -636,240 +581,253 @@ function back() {
 }
 
 .metrics__label {
-  font-size: 22rpx;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .metrics__value {
-  font-size: 40rpx;
-  font-weight: 600;
+  font-size: 44rpx;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
   color: $app-ink;
 }
 
 .metrics__unit {
-  font-size: $text-sm;
-  font-weight: 400;
-  color: $app-ink-muted;
   /* ⚠️ 不靠文本里的空格留间距：模板里的前导空白会被折叠，数字与单位会贴在一起 */
   margin-left: 6rpx;
+  font-size: $text-sm;
+  font-weight: $weight-bold;
+  letter-spacing: 0;
+  color: $app-ink-muted;
 }
 
-/* ── 动作卡 ── */
-.block__head {
+.metrics__burn {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid $app-line-soft;
+  margin: 28rpx 24rpx 0;
+  padding-top: 20rpx;
+  border-top: 1rpx solid $app-line-soft;
 }
 
-.block__name-line {
+.metrics__burn-right {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  min-width: 0;
 }
 
-.block__dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: $app-ink;
-  flex-shrink: 0;
+.metrics__burn-value {
+  font-size: $text-lg;
+  color: $app-ink;
+}
+
+.metrics__burn-input {
+  width: 180rpx;
+}
+
+/* ── 只读组表 ── */
+.blocks {
+  padding: 12rpx 36rpx;
+}
+
+.block {
+  padding: 24rpx 0;
+}
+
+.block + .block {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding-bottom: 8rpx;
 }
 
 .block__name {
-  font-size: $text-lg;
-  font-weight: 600;
+  min-width: 0;
+  font-size: $text-md;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .block__meta {
+  flex-shrink: 0;
   font-size: $text-sm;
   color: $app-ink-muted;
-  flex-shrink: 0;
-}
-
-.block__sets {
-  padding-top: 8rpx;
 }
 
 .set {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16rpx 0;
-}
-
-.set + .set {
-  border-top: 1rpx solid $app-line-soft;
+  gap: 12rpx;
+  padding: 12rpx 0;
 }
 
 .set__label {
-  font-size: $text-md;
+  flex-shrink: 0;
+  font-size: $text-base;
   color: $app-ink-muted;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
 }
 
-/* ⚠️ 联合类名提优先级：scoped 的 .set__label（0,2,0）会压过全局 .ft-marker（0,1,0），
-   荧光会不亮——summary 页踩过，这里直接写联合选择器。 */
-.set__label.set__label--pr {
-  color: $app-ink;
-  font-weight: 500;
-}
-
-.set__pr {
-  font-size: 20rpx;
-  font-weight: 600;
-  color: $app-ink;
-  padding: 2rpx 10rpx;
-  line-height: 1.4;
+/* PR：浅橙底 ＋ 深橙字（PR 是「动作的结果」，归橙色；与汇总页同一个） */
+.pr {
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $accent-soft;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+  color: $accent-strong;
 }
 
 .set__value {
+  margin-left: auto;
   font-size: $text-md;
   color: $app-ink;
 }
 
-/* 值 ＋ 这一组的净用时 */
-.set__vals {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
+.set__value--pr {
+  color: $accent-strong;
 }
 
 .set__dur {
-  font-size: 22rpx;
+  width: 88rpx;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-/* ── 编辑态组行 ── */
+/* ── 编辑态 ── */
+.eblock {
+  padding: 28rpx 32rpx;
+}
+
+.eblock .block__head {
+  padding-bottom: 12rpx;
+}
+
 /* 每组两行：上行＝组号 ＋ 重量×次数 ＋ 删；下行＝用时 */
-.set--edit {
+.eset {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
   gap: 12rpx;
+  padding: 20rpx 0;
+  border-top: 1rpx solid $app-line-soft;
 }
 
-.set__line {
+.eset__line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.set__line--dur {
-  justify-content: flex-start;
   gap: 12rpx;
 }
 
-.set__dur-label {
+.eset__line--dur {
+  padding-right: 60rpx;
+}
+
+.eset__vals {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8rpx;
+}
+
+.eset__line--dur .inp {
+  margin-left: auto;
+}
+
+.eset__x {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.set__inp--dur {
-  padding: 4rpx 12rpx;
-}
-
-.set__field--dur {
-  width: 120rpx;
-}
-
-.set__dur-ph {
-  font-size: $text-md;
-  color: $app-ink-subtle;
-}
-
-.set__edit {
+.eset__del {
+  width: 48rpx;
+  height: 48rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-muted;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  justify-content: center;
 }
 
-.set__inp {
+/* 白底小输入框 ＋ 单位 */
+.inp {
   display: flex;
   align-items: center;
-  border: 1rpx solid $app-ink;
-  border-radius: 8rpx;
-  padding: 6rpx 12rpx;
+  gap: 6rpx;
+  height: 64rpx;
+  padding: 0 16rpx;
+  border-radius: $radius-sm;
+  background: $app-surface;
 }
 
-.set__field {
-  width: 72rpx;
+.inp__field {
+  width: 88rpx;
+  text-align: right;
   font-size: $text-md;
-  font-weight: 600;
   color: $app-ink;
-  text-align: left;
 }
 
-.set__unit {
-  font-size: 20rpx;
-  color: $app-ink-muted;
-  margin-left: 6rpx;
+.inp__field--dur {
+  width: 104rpx;
 }
 
-.set__x {
-  font-size: $text-sm;
+.inp__unit {
+  flex-shrink: 0;
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 
-.set__del {
-  width: 44rpx;
-  text-align: center;
-  font-size: 36rpx;
-  line-height: 1;
-  color: $app-ink-subtle;
+/* 加一组：虚线框，与计划编辑「添加动作」同一个 */
+.addbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  height: 80rpx;
+  margin-top: 8rpx;
+  border: 2rpx dashed $app-line-dash;
+  border-radius: $radius-md;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
-.set__add {
-  padding: 18rpx 0 4rpx;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
+.addbtn:active {
+  opacity: 0.6;
 }
 
 /* ── 备注 ── */
-.note__head {
+.note {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12rpx;
-  padding-bottom: 16rpx;
-}
-
-.note__icon {
-  font-size: $text-md;
-  color: $app-ink-muted;
-}
-
-.note__title {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
+  padding: 28rpx 36rpx;
 }
 
 .note__input {
   width: 100%;
-  min-height: 120rpx;
+  min-height: 80rpx;
   font-size: $text-md;
+  line-height: 1.7;
   color: $app-ink;
-  line-height: 1.6;
 }
 
-.note__placeholder {
-  color: $app-ink-subtle;
+/* ── 底部保存 ── */
+.detail__bottom {
+  position: fixed;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
 }
 
-/* ── 页脚 ── */
-.detail__foot {
-  padding: 48rpx 0 16rpx;
-  text-align: center;
-  font-size: 20rpx;
-  letter-spacing: 0.12em;
-  color: $app-ink-subtle;
+.detail__bottom .detail__save {
+  height: 104rpx;
+  font-size: 30rpx;
 }
 </style>

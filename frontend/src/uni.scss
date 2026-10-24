@@ -35,6 +35,13 @@ $glass-shadow: inset 0 2rpx 0 rgba(255, 255, 255, 0.95), 0 0 0 1rpx rgba(30, 50,
 $glass-shadow-float: 0 24rpx 48rpx -16rpx rgba(30, 50, 80, 0.22); // 悬浮件（底栏、汇总条）
 $app-mask: rgba(29, 29, 31, 0.32); // 弹层遮罩
 
+// ── 看图浮层（全站唯一的深色面：照片要压在黑底上看）──
+$viewer-bg: rgba(10, 11, 13, 0.96);
+$viewer-ink: #ffffff; // 关闭钮、操作字
+$viewer-ink-muted: rgba(255, 255, 255, 0.72); // 说明文字
+$viewer-ink-subtle: rgba(255, 255, 255, 0.5); // 页码
+$viewer-chip: rgba(255, 255, 255, 0.14); // 深底上的胶囊、圆钮
+
 // ── 线 ──
 $app-line: rgba(60, 80, 110, 0.14); // 主分隔线
 $app-line-soft: rgba(60, 80, 110, 0.08); // 卡内细分

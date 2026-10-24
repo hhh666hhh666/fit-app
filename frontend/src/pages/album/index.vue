@@ -5,6 +5,8 @@ import { listAlbum, type AlbumPhoto, type MealKey } from '@/api/nutrition'
 import { deletePhoto, fetchPhotoThumbUrl, fetchPhotoUrl } from '@/utils/photo'
 import { invalidatePhoto } from '@/utils/photo-cache'
 import PhotoViewer from '@/components/PhotoViewer.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ensureLogin } from '@/utils/guard'
 
 // ── 相册（ADR 0014）：全部餐照按日期倒序的网格（每行 3 张、日期分组、触底加载）──
@@ -155,47 +157,43 @@ function removeCurrent() {
   })
 }
 
-function goBack() {
-  uni.navigateBack()
+/** 分组标题：今年的只写「10月21日 周二」，往年的带上年份。 */
+function dateText(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const week = '日一二三四五六'[new Date(y, m - 1, d).getDay()]
+  const head = y === new Date().getFullYear() ? '' : `${y}年`
+  return `${head}${m}月${d}日 周${week}`
 }
 </script>
 
 <template>
   <view class="album">
-    <view class="album__head">
-      <text class="album__back" @click="goBack">‹</text>
-      <text class="album__title">照片</text>
-      <text class="album__count ft-num">{{ rows.length ? rows.length + ' 张' : '' }}</text>
-    </view>
-
     <view class="album__body">
+      <FtPageHeader title="照片" back>
+        <template #right>
+          <text v-if="rows.length" class="album__count ft-num">{{ rows.length }} 张</text>
+        </template>
+      </FtPageHeader>
+
       <view v-if="loading" class="album__hint">加载中…</view>
 
       <template v-else>
-        <view v-for="g in groups" :key="g.date" class="grp">
-          <text class="grp__date ft-num">{{ g.date }}</text>
+        <view v-for="g in groups" :key="g.date" class="glass grp">
+          <text class="grp__date ft-num">{{ dateText(g.date) }}</text>
           <view class="grid">
-            <view v-for="r in g.items" :key="r.id" class="cell" @click="openViewer(r)">
-              <image
-                v-if="thumbs[keyOf(r)]"
-                class="cell__img"
-                :src="thumbs[keyOf(r)]"
-                mode="aspectFill"
-              />
-              <view v-else class="cell__ph" />
-              <text class="cell__tag">{{ MEAL_LABEL[r.meal] }}</text>
+            <view v-for="r in g.items" :key="r.id" class="cell" role="button" @click="openViewer(r)">
+              <image v-if="thumbs[keyOf(r)]" class="cell__img" :src="thumbs[keyOf(r)]" mode="aspectFill" />
+              <text class="cell__tag" :class="'cell__tag--' + r.meal">{{ MEAL_LABEL[r.meal] }}</text>
             </view>
           </view>
         </view>
 
-        <view v-if="rows.length === 0" class="album__empty">
-          还没有照片——记录一餐时拍一张吧
+        <view v-if="rows.length === 0" class="glass">
+          <FtEmpty title="还没有照片" sub="记录一餐时拍一张，就会出现在这里。" />
         </view>
         <view v-else-if="loadingMore" class="album__hint">加载中…</view>
-        <view v-else-if="finished" class="album__hint">共 {{ rows.length }} 张</view>
+        <view v-else-if="finished" class="album__hint ft-num">共 {{ rows.length }} 张</view>
       </template>
-
-      <view class="album__pad" />
     </view>
 
     <PhotoViewer
@@ -206,91 +204,70 @@ function goBack() {
       @close="closeViewer"
       @change="onViewerChange"
     >
-      <text class="vw-del" @click="removeCurrent">删除这张</text>
+      <view class="vw-del" role="button" @click="removeCurrent">删除</view>
     </PhotoViewer>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.album {
-  min-height: 100vh;
-}
-
-.album__head {
+.album__body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx 12rpx;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(64rpx + env(safe-area-inset-bottom));
 }
 
-.album__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.album__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
 .album__count {
-  width: 120rpx;
-  text-align: right;
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-.album__body {
-  padding: 12rpx 32rpx 40rpx;
+  flex-shrink: 0;
+  padding-bottom: 12rpx;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .album__hint {
-  padding: 24rpx 0;
-  text-align: center;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.album__empty {
-  padding: 80rpx 24rpx;
+  padding: 16rpx 0;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
-.album__pad {
-  height: 120rpx;
-}
-
-/* ── 日期分组 ── */
+/* ── 日期分组：一天一张玻璃卡 ── */
 .grp {
-  padding-top: 20rpx;
+  padding: 24rpx;
 }
 
 .grp__date {
   display: block;
-  padding: 0 4rpx 12rpx;
-  font-size: $text-sm;
-  font-weight: 600;
+  padding: 0 8rpx 16rpx;
+  font-size: $text-md;
   color: $app-ink;
 }
 
 .grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
 .cell {
   position: relative;
-  width: calc((100% - 16rpx) / 3);
-  height: 220rpx;
-  border-radius: $radius-md;
+  width: calc((100% - 24rpx) / 3);
+  aspect-ratio: 1;
+  border-radius: $radius-sm;
   overflow: hidden;
-  background: $app-canvas;
+  background: $app-surface-2;
+}
+
+.cell:active {
+  opacity: 0.8;
 }
 
 .cell__img {
@@ -298,29 +275,52 @@ function goBack() {
   height: 100%;
 }
 
-.cell__ph {
-  width: 100%;
-  height: 100%;
-  background: $app-canvas;
-}
-
-/* 角标：餐次（一眼看出这张是哪一餐） */
+/* 角标：餐次，用各餐自己的颜色（与首页、饮食页的餐次图标同一套） */
 .cell__tag {
   position: absolute;
   left: 8rpx;
   bottom: 8rpx;
-  padding: 2rpx 10rpx;
-  border-radius: 6rpx;
-  font-size: 18rpx;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  font-size: $text-xs;
   line-height: 1.6;
-  color: #ffffff;
-  background: rgba(10, 11, 13, 0.5);
 }
 
+.cell__tag--breakfast {
+  background: $meal-breakfast-bg;
+  color: $meal-breakfast-fg;
+}
+
+.cell__tag--lunch {
+  background: $meal-lunch-bg;
+  color: $meal-lunch-fg;
+}
+
+.cell__tag--dinner {
+  background: $meal-dinner-bg;
+  color: $meal-dinner-fg;
+}
+
+.cell__tag--snack {
+  background: $meal-snack-bg;
+  color: $meal-snack-fg;
+}
+
+/* 看图浮层里的「删除」：深底胶囊，和说明胶囊并排 */
 .vw-del {
-  font-size: $text-sm;
-  color: rgba(255, 255, 255, 0.85);
-  border-bottom: 1rpx solid rgba(255, 255, 255, 0.5);
-  padding-bottom: 4rpx;
+  flex-shrink: 0;
+  height: 80rpx;
+  padding: 0 32rpx;
+  display: flex;
+  align-items: center;
+  border-radius: $radius-pill;
+  background: $viewer-chip;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $viewer-ink;
+}
+
+.vw-del:active {
+  opacity: 0.6;
 }
 </style>

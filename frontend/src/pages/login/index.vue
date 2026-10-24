@@ -2,15 +2,12 @@
 import { ref } from 'vue'
 import { login, register } from '@/api/auth'
 import { resetCaches } from '@/api/cache'
+import FtButton from '@/components/FtButton.vue'
 
 const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const submitting = ref(false)
-
-function switchMode() {
-  mode.value = mode.value === 'login' ? 'register' : 'login'
-}
 
 async function submit() {
   if (submitting.value) return
@@ -49,113 +46,165 @@ async function submit() {
       <text class="login__sub">把每一次训练记下来</text>
     </view>
 
-    <view class="form">
-      <view class="form__field">
-        <text class="form__label">用户名</text>
+    <view class="glass form">
+      <view class="seg" role="tablist">
+        <view
+          class="seg__item"
+          :class="{ 'seg__item--on': mode === 'login' }"
+          role="tab"
+          :aria-selected="mode === 'login'"
+          @click="mode = 'login'"
+        >
+          登录
+        </view>
+        <view
+          class="seg__item"
+          :class="{ 'seg__item--on': mode === 'register' }"
+          role="tab"
+          :aria-selected="mode === 'register'"
+          @click="mode = 'register'"
+        >
+          注册
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="field__label">用户名</text>
         <input
           v-model="username"
-          class="form__input"
-          placeholder="字母、数字或下划线，3-32 位"
-          placeholder-class="form__ph"
+          class="field__input"
+          placeholder="字母、数字或下划线，3–32 位"
+          placeholder-class="field__ph"
           :maxlength="32"
         />
       </view>
-      <view class="form__field">
-        <text class="form__label">密码</text>
+      <view class="field">
+        <text class="field__label">密码</text>
         <input
           v-model="password"
-          class="form__input"
+          class="field__input"
           password
           placeholder="至少 6 位"
-          placeholder-class="form__ph"
+          placeholder-class="field__ph"
           :maxlength="64"
         />
       </view>
 
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block login__submit"
-        :class="{ 'ft-btn--disabled': submitting }"
-        @click="submit"
-      >
+      <FtButton variant="primary" block :disabled="submitting" class="form__submit" @click="submit">
         {{ mode === 'login' ? '登录' : '注册' }}
-      </view>
+      </FtButton>
     </view>
-
-    <text class="login__switch" @click="switchMode">
-      {{ mode === 'login' ? '注册新账号' : '已有账号？去登录' }}
-    </text>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .login {
   min-height: 100vh;
-  padding: 0 48rpx;
+  box-sizing: border-box;
+  padding: calc(240rpx + env(safe-area-inset-top)) 40rpx calc(64rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
+  gap: 64rpx;
 }
 
 .login__head {
-  padding-top: 360rpx;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
 }
 
+/* 品牌字是拉丁字母：走 Nunito 800，和全站大数字同一副字 */
 .login__brand {
-  font-size: 52rpx;
-  font-weight: 700;
+  font-family: $font-num;
+  font-size: $text-display;
+  font-weight: $weight-heavy;
+  line-height: 1.1;
   color: $app-ink;
-  letter-spacing: 0.02em;
 }
 
 .login__sub {
-  display: block;
-  margin-top: 16rpx;
-  font-size: $text-base;
+  font-size: $text-md;
   color: $app-ink-muted;
+}
+
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
 .form {
-  margin-top: 96rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
 }
 
-.form__field + .form__field {
-  margin-top: 36rpx;
-}
-
-.form__label {
-  display: block;
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  margin-bottom: 12rpx;
-}
-
-.form__input {
-  width: 100%;
-  height: 96rpx;
+/* ── 登录／注册 分段 ── */
+.seg {
+  display: flex;
+  margin-bottom: 8rpx;
+  padding: 6rpx;
+  border-radius: $radius-pill;
   background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-md;
+}
+
+.seg__item {
+  flex: 1;
+  padding: 14rpx 0;
+  border-radius: $radius-pill;
+  text-align: center;
+  font-size: $text-base;
+  color: $app-ink-muted;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+}
+
+.seg__item--on {
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
+}
+
+/* ── 输入框：白底胶囊，标签在左 ── */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  height: 96rpx;
   padding: 0 28rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+}
+
+.field__label {
+  width: 96rpx;
+  flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.field__input {
+  flex: 1;
+  min-width: 0;
   font-size: $text-md;
   color: $app-ink;
-  box-sizing: border-box;
 }
 
-.form__ph {
+.field__ph {
   color: $app-ink-subtle;
 }
 
-.login__submit {
-  margin-top: 56rpx;
-  height: 96rpx;
-  border-radius: 24rpx;
+.login .form__submit {
+  margin-top: 16rpx;
+  height: 104rpx;
+  font-size: 30rpx;
 }
 
-.login__switch {
-  display: block;
-  text-align: center;
-  margin-top: 40rpx;
-  font-size: $text-base;
-  color: $app-ink-muted;
+@media (prefers-reduced-motion: reduce) {
+  .seg__item {
+    transition: none;
+  }
 }
 </style>

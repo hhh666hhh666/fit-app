@@ -5,9 +5,14 @@
 <script setup lang="ts">
 import FtIcon from '@/components/FtIcon.vue'
 
-withDefaults(defineProps<{ title: string; eyebrow?: string; back?: boolean }>(), { back: false })
+// 父组件写了 @back 就交给它（如训练详情编辑中要先问「放弃修改？」），否则直接返回上一页
+const props = withDefaults(
+  defineProps<{ title: string; eyebrow?: string; back?: boolean; onBack?: () => void }>(),
+  { back: false }
+)
 
 function goBack() {
+  if (props.onBack) return props.onBack()
   uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })
 }
 </script>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 全屏看图浮层（ADR 0014）：记录弹层与相册共用 ──
 //    手势分工：单指左右滑＝翻页、单指上下滑＝关闭、双指捏合＝缩放、双击＝放大/还原。
@@ -171,15 +172,16 @@ function onTap() {
     />
     <text v-else class="pv__loading">加载中…</text>
 
-    <view class="pv__bar">
-      <text class="pv__cap">{{ caption }}</text>
-      <text v-if="total > 1" class="pv__count ft-num">{{ cur + 1 }} / {{ total }}</text>
+    <view class="pv__close" role="button" aria-label="关闭" @click.stop="emit('close')">
+      <FtIcon name="close" :size="20" :stroke="2" tone="inverse" />
     </view>
 
-    <text class="pv__close" @click.stop="emit('close')">×</text>
-
-    <!-- 调用方附加操作（如相册的「删除」） -->
-    <view class="pv__actions" @click.stop>
+    <!-- 底部：说明胶囊 ＋ 调用方附加操作（如相册的「删除」） -->
+    <view class="pv__foot" @click.stop>
+      <view class="pv__bar">
+        <text class="pv__cap">{{ caption }}</text>
+        <text v-if="total > 1" class="pv__count ft-num">{{ cur + 1 }} / {{ total }}</text>
+      </view>
       <slot />
     </view>
   </view>
@@ -188,11 +190,8 @@ function onTap() {
 <style lang="scss" scoped>
 .pv {
   position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(10, 11, 13, 0.96);
+  inset: 0;
+  background: $viewer-bg;
   z-index: 200;
   display: flex;
   align-items: center;
@@ -208,53 +207,67 @@ function onTap() {
 
 .pv__loading {
   font-size: $text-sm;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.pv__bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(40rpx + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24rpx;
-  padding: 0 32rpx;
-}
-
-.pv__cap {
-  font-size: $text-sm;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.pv__count {
-  font-size: $text-sm;
-  color: rgba(255, 255, 255, 0.55);
+  color: $viewer-ink-muted;
 }
 
 .pv__close {
   position: absolute;
   right: 32rpx;
   top: calc(24rpx + env(safe-area-inset-top));
-  width: 72rpx;
-  height: 72rpx;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: $viewer-chip;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 52rpx;
-  line-height: 1;
-  color: #ffffff;
 }
 
-.pv__actions {
+.pv__close:active {
+  opacity: 0.6;
+}
+
+.pv__foot {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(120rpx + env(safe-area-inset-bottom));
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48rpx;
+  gap: 16rpx;
+}
+
+.pv__bar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  height: 80rpx;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  border-radius: $radius-pill;
+  background: $viewer-chip;
+}
+
+.pv__cap {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $text-base;
+  color: $viewer-ink-muted;
+}
+
+.pv__count {
+  flex-shrink: 0;
+  font-size: $text-sm;
+  color: $viewer-ink-subtle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv__img {
+    transition: none;
+  }
 }
 </style>

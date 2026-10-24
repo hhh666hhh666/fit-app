@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useDietStore } from '@/stores/diet'
 import { ensureLogin } from '@/utils/guard'
+import FtButton from '@/components/FtButton.vue'
+import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
 import { getResumeFx, RESUME_FX_OPTIONS, setResumeFx, type ResumeFx } from '@/utils/resume-fx'
 
 // ── 设置：图片上传压缩（四档）＋ 饮食目标（饮水步进不在这里——在饮食页就地改）
@@ -95,40 +98,39 @@ async function save() {
     saving.value = false
   }
 }
-
-function goBack() {
-  uni.navigateBack()
-}
 </script>
 
 <template>
   <view class="settings">
     <view class="settings__body">
-      <view class="settings__head">
-        <text class="settings__back" @click="goBack">‹</text>
-        <text class="settings__title">设置</text>
-        <view class="settings__head-space" />
-      </view>
+      <FtPageHeader title="设置" back />
 
       <!-- 图片压缩 -->
-      <view class="ft-card block">
-        <text class="block__title">图片上传压缩</text>
+      <view class="glass block">
+        <text class="card-title">图片上传压缩</text>
         <text class="block__hint">餐照在本机压缩后再上传（存服务器）</text>
-        <view v-for="q in QUALITIES" :key="q.key" class="qrow" @click="photoQuality = q.key">
-          <view class="qrow__mid">
-            <text class="qrow__label">{{ q.label }}</text>
-            <text class="qrow__desc">{{ q.desc }}</text>
+        <view
+          v-for="q in QUALITIES"
+          :key="q.key"
+          class="opt"
+          role="radio"
+          :aria-checked="photoQuality === q.key"
+          @click="photoQuality = q.key"
+        >
+          <view class="opt__mid">
+            <text class="opt__label">{{ q.label }}</text>
+            <text class="opt__desc">{{ q.desc }}</text>
           </view>
           <view class="radio" :class="{ 'radio--on': photoQuality === q.key }">
-            <view v-if="photoQuality === q.key" class="radio__dot" />
+            <FtIcon v-if="photoQuality === q.key" name="check" :size="13" :stroke="2.4" tone="inverse" />
           </view>
         </view>
       </view>
 
       <!-- 饮食目标 -->
-      <view class="ft-card block">
-        <text class="block__title">饮食目标</text>
-        <text class="block__hint">每日完成度按这些值算；留空 = 不设</text>
+      <view class="glass block">
+        <text class="card-title">饮食目标</text>
+        <text class="block__hint">每日完成度按这些值算；留空＝不设</text>
         <view class="fld">
           <text class="fld__label">热量（大卡）</text>
           <input v-model="targets.kcal" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
@@ -151,165 +153,158 @@ function goBack() {
         </view>
       </view>
 
-      <!-- 训练进行中动效（放最后：纯观感偏好，排在业务设置之后） -->
-      <view class="ft-card block">
-        <text class="block__title">训练进行中动效</text>
+      <!-- 训练进行中动效（放最后：纯观感偏好，排在业务设置之后；点选即存，不走下面的「保存」） -->
+      <view class="glass block">
+        <text class="card-title">训练进行中动效</text>
         <text class="block__hint">训练没结束时，底栏中间圆钮外圈的动效；仅本机，点选即生效</text>
-        <view v-for="o in RESUME_FX_OPTIONS" :key="o.key" class="qrow" @click="pickResumeFx(o.key)">
-          <view class="qrow__mid">
-            <text class="qrow__label">{{ o.label }}</text>
-            <text class="qrow__desc">{{ o.desc }}</text>
+        <view
+          v-for="o in RESUME_FX_OPTIONS"
+          :key="o.key"
+          class="opt"
+          role="radio"
+          :aria-checked="resumeFx === o.key"
+          @click="pickResumeFx(o.key)"
+        >
+          <view class="opt__mid">
+            <text class="opt__label">{{ o.label }}</text>
+            <text class="opt__desc">{{ o.desc }}</text>
           </view>
           <view class="radio" :class="{ 'radio--on': resumeFx === o.key }">
-            <view v-if="resumeFx === o.key" class="radio__dot" />
+            <FtIcon v-if="resumeFx === o.key" name="check" :size="13" :stroke="2.4" tone="inverse" />
           </view>
         </view>
       </view>
-
-      <view class="settings__pad" />
     </view>
 
+    <!-- 保存：贴底悬浮的主按钮，与编辑食物页同一位置 -->
     <view class="settings__bottom">
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block"
-        :class="{ 'ft-btn--disabled': saving }"
-        @click="save"
-      >
-        保存
-      </view>
+      <FtButton variant="primary" block :disabled="saving" class="settings__save" @click="save">保存</FtButton>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .settings__body {
-  padding: 28rpx 32rpx 0;
-}
-
-.settings__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4rpx 0 20rpx;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
-.settings__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.settings__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.settings__head-space {
-  width: 64rpx;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
 .block {
-  margin-bottom: 24rpx;
-  padding: 26rpx 28rpx 14rpx;
+  padding-top: 28rpx;
+  padding-bottom: 12rpx;
 }
 
-.block__title {
-  font-size: $text-base;
-  font-weight: 600;
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .block__hint {
   display: block;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-  padding: 8rpx 0 10rpx;
+  padding: 4rpx 0 12rpx;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
 }
 
-.qrow {
+/* ── 单选行 ── */
+.opt {
   display: flex;
   align-items: center;
+  gap: 16rpx;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
+  border-top: 1rpx solid $app-line-soft;
 }
 
-.qrow__mid {
+.opt:active {
+  opacity: 0.6;
+}
+
+.opt__mid {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4rpx;
 }
 
-.qrow__label {
+.opt__label {
   font-size: $text-md;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
-.qrow__desc {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
+.opt__desc {
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
+/* 选中：深色实心圈 ＋ 白勾（与动作库多选同一个勾） */
 .radio {
   width: 40rpx;
   height: 40rpx;
+  flex-shrink: 0;
+  box-sizing: border-box;
   border-radius: 50%;
-  border: 2rpx solid $app-line;
+  border: 2rpx solid $app-line-dash;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
 .radio--on {
+  background: $app-ink;
   border-color: $app-ink;
 }
 
-.radio__dot {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  background: $app-ink;
-}
-
+/* ── 数值行 ── */
 .fld {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .fld__label {
-  font-size: $text-sm;
-  color: $app-ink-muted;
   flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .fld__input {
+  flex: 1;
+  margin-left: 20rpx;
   text-align: right;
   font-size: $text-md;
   color: $app-ink;
-  flex: 1;
-  margin-left: 20rpx;
 }
 
 .ph {
   color: $app-ink-subtle;
-}
-
-.settings__pad {
-  height: 220rpx;
+  font-weight: $weight-regular;
 }
 
 .settings__bottom {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+}
+
+.settings__bottom .settings__save {
+  height: 104rpx;
+  font-size: 30rpx;
 }
 </style>

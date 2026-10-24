@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { PALETTE } from '@/utils/palette'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
+import FtSheet from '@/components/FtSheet.vue'
 import { computed, ref } from 'vue'
 import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
 import {
@@ -38,10 +42,6 @@ import {
 // ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
 
 const PAGE_SIZE = 20
-
-function goBack() {
-  uni.navigateBack()
-}
 
 const overview = ref<BodyOverview | null>(null)
 const records = ref<BodyRecordRow[]>([])
@@ -509,1249 +509,1119 @@ function fatText(v: number | null | undefined): string {
 
 <template>
   <view class="bodypg">
-    <!-- 顶栏：常规＝返回＋标题；多选态＝取消＋已选＋全选/删除（照日志页） -->
-    <view class="bodypg__head">
-      <template v-if="!selectMode">
-        <text class="bodypg__back" @click="goBack">‹</text>
-        <text class="bodypg__title">身体档案</text>
-        <view class="bodypg__head-space" />
-      </template>
-      <template v-else>
-        <text class="bodypg__cancel" @click="exitSelect">取消</text>
-        <text class="bodypg__sel ft-num">已选 {{ selectedCount }} 项</text>
-        <view class="bodypg__acts">
-          <text class="bodypg__all" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
-          <text
-            class="bodypg__del"
-            :class="{ 'bodypg__del--off': selectedCount === 0 }"
-            @click="doDelete"
-          >
-            删除
-          </text>
-        </view>
-      </template>
-    </view>
-
-    <view v-if="loading" class="ft-loading">加载中…</view>
-
-    <view v-else class="bodypg__body">
-      <!-- 个人档案卡：四项 ＋ 今日消耗 ＋ 「怎么算的」（ADR 0029／0030） -->
-      <view class="ft-card pcard">
-        <view class="pcard__head">
-          <text class="pcard__label">个人档案</text>
-          <text v-if="profile?.complete" class="pcard__edit" @click="openProfileSheet">编辑</text>
-        </view>
-
-        <template v-if="profile?.complete">
-          <view class="pcard__grid">
-            <view class="pcard__cell">
-              <text class="pcard__k">性别</text>
-              <text class="pcard__v">{{ sexLabel(profile.sex) }}</text>
-            </view>
-            <view class="pcard__cell">
-              <text class="pcard__k">年龄</text>
-              <text class="pcard__v ft-num">{{ profile.age ?? '–' }}</text>
-            </view>
-            <view class="pcard__cell">
-              <text class="pcard__k">身高</text>
-              <text class="pcard__v ft-num">{{ profile.heightCm ?? '–' }} cm</text>
-            </view>
-            <view class="pcard__cell">
-              <text class="pcard__k">活动量</text>
-              <text class="pcard__v">{{ levelLabel(profile.activityLevel) }}</text>
-            </view>
-          </view>
-
-          <view v-if="energy?.complete" class="pcard__energy">
-            <view class="pcard__burn-row">
-              <text class="pcard__burn ft-num">{{ energy.totalKcal }}</text>
-              <text class="pcard__burn-unit">大卡 · 今日消耗</text>
-            </view>
-            <text class="pcard__how" @click="energySheet.show = true">怎么算的</text>
-          </view>
-          <view v-else class="pcard__miss" @click="openSheet">
-            还没有体重记录，补一条才能算消耗 ›
-          </view>
+    <view class="bodypg__body">
+      <FtPageHeader title="身体档案" back>
+        <template v-if="selectMode" #right>
+          <view class="pill" role="button" @click="exitSelect">取消</view>
         </template>
+      </FtPageHeader>
 
-        <view v-else class="pcard__empty" @click="openProfileSheet">
-          <text class="pcard__empty-t">填一下性别、生日、身高，就能算出每天消耗</text>
-          <text class="pcard__fill">去填写 +</text>
-        </view>
-      </view>
+      <view v-if="loading" class="hint">加载中…</view>
 
-      <!-- 当前体重卡 -->
-      <view class="ft-card wcard">
-        <view class="wcard__head">
-          <text class="wcard__label">当前体重</text>
-          <text class="wcard__add" @click="openSheet">记一笔 +</text>
-        </view>
-        <view class="wcard__main">
-          <view class="wcard__num-row">
-            <template v-if="overview?.latest">
-                <text class="wcard__num ft-num">{{ displayWeight(overview.latest.weight) }}</text>
-              <text class="wcard__unit">{{ weightUnitShort(weightUnit) }}</text>
-            </template>
-            <text v-else class="wcard__none">还没有体重记录</text>
+      <template v-else>
+        <!-- 个人档案卡：四项 ＋ 今日消耗 ＋ 「怎么算的」（ADR 0029／0030） -->
+        <view class="glass">
+          <view class="card-head">
+            <text class="card-title">个人档案</text>
+            <view v-if="profile?.complete" class="chip-btn" role="button" @click="openProfileSheet">编辑</view>
           </view>
-          <text v-if="overview?.isLowest" class="wcard__badge ft-marker ft-num">阶段最低 · PR</text>
-        </view>
-        <view v-if="overview?.latest" class="wcard__foot">
-          <text class="wcard__date ft-num">{{ formatDateLabel(overview.latest.date) }} · 最近一次记录</text>
-          <text v-if="overview.weekDiff != null" class="wcard__diff ft-num">
-            较上周 {{ signed(overview.weekDiff, weightUnit) }} {{ weightUnitShort(weightUnit) }}
-          </text>
-        </view>
-        <!-- 体脂：与体重并列，只记录不参与计算（ADR 0030） -->
-        <view v-if="overview?.bodyFat" class="wcard__fat">
-          <text class="wcard__fat-k">体脂</text>
-          <text class="wcard__fat-v ft-num">{{ fatText(overview.bodyFat.value) }}</text>
-          <text class="wcard__fat-d ft-num">{{ formatDateLabel(overview.bodyFat.date) }}</text>
-        </view>
-      </view>
 
-      <!-- 基础围度卡（最新一次） -->
-      <view class="ft-card gcard">
-        <view class="gcard__head">
-          <text class="gcard__label">基础围度</text>
-          <text v-if="overview?.girth" class="gcard__date ft-num">
-            {{ formatDateLabel(overview.girth.date) }} 测定
-          </text>
-        </view>
-        <view v-if="overview?.girth" class="gcard__grid">
-          <view class="gcard__cell">
-            <text class="gcard__glabel">胸围</text>
-            <view class="gcard__gnum-row">
-              <text class="gcard__gnum ft-num">{{ girthValue(overview.girth.chest) }}</text>
-              <text class="gcard__gunit">cm</text>
-            </view>
-          </view>
-          <view class="gcard__cell">
-            <text class="gcard__glabel">腰围</text>
-            <view class="gcard__gnum-row">
-              <text class="gcard__gnum ft-num">{{ girthValue(overview.girth.waist) }}</text>
-              <text class="gcard__gunit">cm</text>
-            </view>
-          </view>
-          <view class="gcard__cell">
-            <text class="gcard__glabel">臀围</text>
-            <view class="gcard__gnum-row">
-              <text class="gcard__gnum ft-num">{{ girthValue(overview.girth.hip) }}</text>
-              <text class="gcard__gunit">cm</text>
-            </view>
-          </view>
-          <view class="gcard__cell">
-            <text class="gcard__glabel">臂围</text>
-            <view class="gcard__gnum-row">
-              <text class="gcard__gnum ft-num">{{ girthValue(overview.girth.arm) }}</text>
-              <text class="gcard__gunit">cm</text>
-            </view>
-          </view>
-        </view>
-        <text v-else class="gcard__empty">还没有围度记录——「记一笔」里可以一起量</text>
-      </view>
-
-      <!-- 体重 / 体脂趋势（点标题切换序列，ADR 0030） -->
-      <view class="ft-card chartcard">
-        <view class="chartcard__head">
-          <view class="chartcard__title-row">
-            <text
-              class="chartcard__title"
-              :class="{ 'chartcard__title--on': chartMetric === 'weight' }"
-              @click="chartMetric = 'weight'"
-              >体重</text
-            >
-            <text class="chartcard__slash">/</text>
-            <text
-              class="chartcard__title"
-              :class="{ 'chartcard__title--on': chartMetric === 'fat' }"
-              @click="chartMetric = 'fat'"
-              >体脂</text
-            >
-          </view>
-          <text v-if="chartRange" class="chartcard__range ft-num">{{ chartRange }}</text>
-        </view>
-        <FtTrendChart
-          v-if="chartPoints.length >= 2"
-          :key="chartMetric"
-          :points="chartPoints"
-          :height="180"
-          :zero-based="false"
-          :format-value="chartFormat"
-        />
-        <text v-else class="chartcard__empty">{{ chartEmptyText }}</text>
-        <text v-if="chartPoints.length >= 2" class="chartcard__tip">
-          同一天记多次取最小值 · 单指按住看数值 · 双指捏合缩放
-        </text>
-      </view>
-
-      <!-- 围度趋势（单独一张图，部位分段条切换） -->
-      <view class="ft-card chartcard">
-        <view class="chartcard__head">
-          <text class="chartcard__title">围度趋势</text>
-          <text v-if="girthRange" class="chartcard__range ft-num">{{ girthRange }}</text>
-        </view>
-        <view class="seg">
-          <text
-            v-for="p in GIRTH_PARTS"
-            :key="p.key"
-            class="seg__item"
-            :class="{ 'seg__item--on': girthPart === p.key }"
-            @click="girthPart = p.key"
-          >
-            {{ p.label }}
-          </text>
-        </view>
-        <FtTrendChart
-          v-if="girthPoints.length >= 2"
-          :points="girthPoints"
-          :height="180"
-          :zero-based="false"
-        />
-        <text v-else class="chartcard__empty">这个部位再量一次，就能看到趋势线</text>
-        <text v-if="girthPoints.length >= 2" class="chartcard__tip">
-          同一天量多次取最小值 · 单指按住看数值 · 双指捏合缩放
-        </text>
-      </view>
-
-      <!-- 全部记录（体重与围度同一条时间线） -->
-      <view class="ft-card mcard">
-        <view class="mcard__head">
-          <text class="mcard__title">全部记录</text>
-          <text class="mcard__meta ft-num">TIME / {{ weightUnitShort(weightUnit).toUpperCase() }} / DIFF</text>
-        </view>
-        <view v-if="records.length === 0" class="mcard__empty">还没有记录</view>
-        <view
-          v-for="(r, i) in records"
-          :key="r.id"
-          class="mrow"
-          :class="{ 'mrow--sel': selectMode && selected.has(r.id) }"
-          @click="onRowClick(r)"
-          @longpress="onRowLongPress(r)"
-        >
-          <view
-            v-if="selectMode"
-            class="mrow__check"
-            :class="{ 'mrow__check--on': selected.has(r.id) }"
-          >
-            <FtIcon v-if="selected.has(r.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
-          </view>
-          <view class="mrow__dot" :class="{ 'mrow__dot--hollow': i !== 0 }" />
-          <view class="mrow__main">
-            <view class="mrow__line1">
-              <text class="mrow__date ft-num">{{ formatDateTimeLabel(r.date) }}</text>
-              <text v-if="r.note" class="mrow__note">{{ r.note }}</text>
-              <view class="mrow__right">
-                <text v-if="r.weight != null" class="mrow__kg ft-num">
-                  {{ displayWeight(r.weight) }} {{ weightUnitShort(weightUnit) }}
-                </text>
-                <text class="mrow__diff ft-num">{{ r.diff == null ? '—' : signed(r.diff, weightUnit) }}</text>
+          <template v-if="profile?.complete">
+            <view class="quad">
+              <view class="quad__cell">
+                <text class="quad__k">性别</text>
+                <text class="quad__v">{{ sexLabel(profile.sex) }}</text>
+              </view>
+              <view class="quad__cell">
+                <text class="quad__k">年龄</text>
+                <text class="quad__v ft-num">{{ profile.age ?? '–' }}</text>
+              </view>
+              <view class="quad__cell">
+                <text class="quad__k">身高</text>
+                <text class="quad__v ft-num">{{ profile.heightCm ?? '–' }}<text class="unit">cm</text></text>
+              </view>
+              <view class="quad__cell">
+                <text class="quad__k">活动量</text>
+                <text class="quad__v">{{ levelLabel(profile.activityLevel) }}</text>
               </view>
             </view>
-            <text v-if="girthLine(r)" class="mrow__girth ft-num">{{ girthLine(r) }}</text>
+
+            <view v-if="energy?.complete" class="energy">
+              <view class="energy__num-row">
+                <text class="energy__num ft-num">{{ energy.totalKcal }}</text>
+                <text class="energy__unit">大卡 · 今日消耗</text>
+              </view>
+              <view class="chip-btn" role="button" @click="energySheet.show = true">怎么算的</view>
+            </view>
+            <view v-else class="link-row" role="button" @click="openSheet">
+              <text>还没有体重记录，补一条才能算消耗</text>
+              <FtIcon name="chevron-right" :size="18" tone="subtle" />
+            </view>
+          </template>
+
+          <FtEmpty v-else title="还没填个人档案" sub="填一下性别、生日、身高和活动量，就能算出每天消耗。">
+            <FtButton size="sm" class="bodypg__fill" @click="openProfileSheet">去填写</FtButton>
+          </FtEmpty>
+        </view>
+
+        <!-- 当前体重 -->
+        <view class="glass">
+          <view class="card-head">
+            <text class="card-title">当前体重</text>
+            <text v-if="overview?.isLowest" class="pr">阶段最低 · PR</text>
+          </view>
+          <view v-if="overview?.latest" class="weight">
+            <text class="weight__num ft-num">{{ displayWeight(overview.latest.weight) }}</text>
+            <text class="weight__unit">{{ weightUnitShort(weightUnit) }}</text>
+          </view>
+          <text v-else class="muted-line">还没有体重记录</text>
+          <view v-if="overview?.latest" class="weight__foot">
+            <text class="ft-num">{{ formatDateLabel(overview.latest.date) }} · 最近一次</text>
+            <text v-if="overview.weekDiff != null" class="weight__diff ft-num">
+              较上周 {{ signed(overview.weekDiff, weightUnit) }} {{ weightUnitShort(weightUnit) }}
+            </text>
+          </view>
+          <!-- 体脂：与体重并列，只记录不参与计算（ADR 0030） -->
+          <view v-if="overview?.bodyFat" class="weight__fat">
+            <text class="weight__fat-k">体脂</text>
+            <text class="weight__fat-v ft-num">{{ fatText(overview.bodyFat.value) }}</text>
+            <text class="weight__fat-d ft-num">{{ formatDateLabel(overview.bodyFat.date) }}</text>
           </view>
         </view>
-        <view v-if="loadingMore" class="mcard__more">加载中…</view>
-        <view v-else-if="!hasMore && records.length > 0" class="mcard__more">
-          共 {{ records.length }} 条
-        </view>
-      </view>
 
-      <view class="bodypg__pad" />
+        <!-- 基础围度（最新一次） -->
+        <view class="glass">
+          <view class="card-head">
+            <text class="card-title">基础围度</text>
+            <text v-if="overview?.girth" class="card-meta ft-num">{{ formatDateLabel(overview.girth.date) }} 测定</text>
+          </view>
+          <view v-if="overview?.girth" class="quad">
+            <view v-for="p in GIRTH_PARTS" :key="p.key" class="quad__cell">
+              <text class="quad__k">{{ p.label }}</text>
+              <text class="quad__v quad__v--num ft-num">{{ girthValue(overview.girth[p.key]) }}<text class="unit">cm</text></text>
+            </view>
+          </view>
+          <text v-else class="muted-line">还没有围度记录，「记录今天的数据」里可以一起量</text>
+        </view>
+
+        <!-- 体重 / 体脂趋势（分段切换序列，ADR 0030：不做双线） -->
+        <view class="glass">
+          <view class="card-head">
+            <view class="seg seg--sm" role="tablist">
+              <view
+                class="seg__item"
+                :class="{ 'seg__item--on': chartMetric === 'weight' }"
+                role="tab"
+                :aria-selected="chartMetric === 'weight'"
+                @click="chartMetric = 'weight'"
+              >
+                体重
+              </view>
+              <view
+                class="seg__item"
+                :class="{ 'seg__item--on': chartMetric === 'fat' }"
+                role="tab"
+                :aria-selected="chartMetric === 'fat'"
+                @click="chartMetric = 'fat'"
+              >
+                体脂
+              </view>
+            </view>
+            <text v-if="chartRange" class="card-meta ft-num">{{ chartRange }}</text>
+          </view>
+          <FtTrendChart
+            v-if="chartPoints.length >= 2"
+            :key="chartMetric"
+            :points="chartPoints"
+            :height="180"
+            :zero-based="false"
+            :format-value="chartFormat"
+          />
+          <text v-else class="muted-line">{{ chartEmptyText }}</text>
+          <text v-if="chartPoints.length >= 2" class="tip">同一天记多次取最小值 · 单指按住看数值 · 双指捏合缩放</text>
+        </view>
+
+        <!-- 围度趋势（单独一张图，部位分段切换） -->
+        <view class="glass">
+          <view class="card-head">
+            <text class="card-title">围度趋势</text>
+            <text v-if="girthRange" class="card-meta ft-num">{{ girthRange }}</text>
+          </view>
+          <view class="seg seg--full" role="tablist">
+            <view
+              v-for="p in GIRTH_PARTS"
+              :key="p.key"
+              class="seg__item"
+              :class="{ 'seg__item--on': girthPart === p.key }"
+              role="tab"
+              :aria-selected="girthPart === p.key"
+              @click="girthPart = p.key"
+            >
+              {{ p.label }}
+            </view>
+          </view>
+          <FtTrendChart v-if="girthPoints.length >= 2" :points="girthPoints" :height="180" :zero-based="false" />
+          <text v-else class="muted-line">这个部位再量一次，就能看到趋势线</text>
+          <text v-if="girthPoints.length >= 2" class="tip">同一天量多次取最小值 · 单指按住看数值 · 双指捏合缩放</text>
+        </view>
+
+        <!-- 全部记录（体重与围度同一条时间线；点行编辑，长按多选删除） -->
+        <view class="glass mlist">
+          <view class="card-head mlist__head">
+            <text class="card-title">全部记录</text>
+            <text class="card-meta">{{ selectMode ? '点选要删的记录' : '点一条编辑 · 长按批量删除' }}</text>
+          </view>
+          <FtEmpty v-if="records.length === 0" title="还没有记录" sub="点下面「记录今天的数据」记第一条。" />
+          <view
+            v-for="r in records"
+            :key="r.id"
+            class="mrow"
+            @click="onRowClick(r)"
+            @longpress="onRowLongPress(r)"
+          >
+            <view v-if="selectMode" class="check" :class="{ 'check--on': selected.has(r.id) }">
+              <FtIcon v-if="selected.has(r.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
+            </view>
+            <view class="mrow__main">
+              <view class="mrow__line">
+                <text class="mrow__date ft-num">{{ formatDateTimeLabel(r.date) }}</text>
+                <text v-if="r.note" class="mrow__note">{{ r.note }}</text>
+                <text v-if="r.weight != null" class="mrow__kg ft-num">
+                  {{ displayWeight(r.weight) }}<text class="unit">{{ weightUnitShort(weightUnit) }}</text>
+                </text>
+              </view>
+              <view v-if="girthLine(r) || r.diff != null" class="mrow__line">
+                <text class="mrow__girth ft-num">{{ girthLine(r) }}</text>
+                <text v-if="r.diff != null" class="mrow__diff ft-num">{{ signed(r.diff, weightUnit) }}</text>
+              </view>
+            </view>
+          </view>
+          <view v-if="loadingMore" class="mlist__more">加载中…</view>
+          <view v-else-if="!hasMore && records.length > 0" class="mlist__more ft-num">共 {{ records.length }} 条</view>
+        </view>
+      </template>
     </view>
 
-    <!-- 底部固定：记录今天（多选态下藏起来，避免误触） -->
+    <!-- 底部：常规＝记录今天（悬浮主按钮）；多选＝操作条（与动作库同一个） -->
     <view v-if="!selectMode" class="bodypg__bottom">
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="openSheet">+ 记录今天的数据</view>
+      <FtButton variant="primary" block class="bodypg__record" @click="openSheet">
+        <FtIcon name="plus" :size="18" :stroke="2.2" />
+        <text>记录今天的数据</text>
+      </FtButton>
+    </view>
+    <view v-else class="selbar">
+      <text class="selbar__count ft-num">已选 {{ selectedCount }} 项</text>
+      <view class="selbar__all" role="button" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</view>
+      <view class="selbar__del" :class="{ 'is-off': selectedCount === 0 }" role="button" @click="doDelete">删除</view>
     </view>
 
     <!-- 录入 / 编辑弹层 -->
-    <view v-if="sheet.show" class="sheet-mask" @click="sheet.show = false" />
-    <view v-if="sheet.show" class="sheet">
-      <view class="sheet__handle" />
-      <text class="sheet__title">{{ sheet.editId == null ? '记录身体数据' : '编辑记录' }}</text>
-      <text v-if="lastHint" class="sheet__hint ft-num">{{ lastHint }}</text>
-
-      <view class="fld">
-        <text class="fld__label">日期</text>
-        <picker mode="date" :value="sheet.date" @change="onDateChange">
-          <view class="fld__picker ft-num">{{ sheet.date }} ▾</view>
-        </picker>
-      </view>
-
-      <view class="fld">
-        <text class="fld__label">时刻</text>
-        <picker mode="time" :value="sheet.time" @change="onTimeChange">
-          <view class="fld__picker ft-num">{{ sheet.time }} ▾</view>
-        </picker>
-      </view>
-
-      <view class="fld">
-        <view class="fld__label-row">
-          <text class="fld__label">体重（{{ weightUnitLabel(weightUnit) }}）</text>
-          <view class="unit-switch">
-            <text class="unit-switch__item" :class="{ 'unit-switch__item--on': weightUnit === 'jin' }" @click="unitChange('jin')">斤</text>
-            <text class="unit-switch__item" :class="{ 'unit-switch__item--on': weightUnit === 'kg' }" @click="unitChange('kg')">千克</text>
+    <FtSheet
+      v-if="sheet.show"
+      :title="sheet.editId == null ? '记录身体数据' : '编辑记录'"
+      :sub="lastHint ? `${lastHint}的数据已预填，没量的项清空即可` : undefined"
+      @close="sheet.show = false"
+    >
+      <scroll-view scroll-y class="sh__scroll" :class="{ 'is-bare': !lastHint }">
+        <view class="group">
+          <view class="row">
+            <text class="row__k">日期</text>
+            <picker mode="date" :value="sheet.date" @change="onDateChange">
+              <view class="row__picker ft-num">{{ sheet.date }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
+            </picker>
+          </view>
+          <view class="row">
+            <text class="row__k">时刻</text>
+            <picker mode="time" :value="sheet.time" @change="onTimeChange">
+              <view class="row__picker ft-num">{{ sheet.time }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
+            </picker>
           </view>
         </view>
-        <input
-          v-model="sheet.weight"
-          class="fld__input ft-num"
-          type="digit"
-          :step="weightInputStep()"
-          :placeholder="weightUnit === 'jin' ? '如 145.0' : '如 72.50'"
-          placeholder-class="fld__ph"
-        />
-      </view>
 
-      <!-- 体脂率：跟体重并列的一项，只记录不参与任何计算（ADR 0030） -->
-      <view class="fld">
-        <view class="fld__label-row">
-          <text class="fld__label">体脂率（%）</text>
-          <text class="fld__aside">只做记录，不参与计算</text>
+        <view class="group">
+          <view class="row">
+            <text class="row__k">体重</text>
+            <view class="units" role="radiogroup" aria-label="体重单位">
+              <view
+                class="units__item"
+                :class="{ 'units__item--on': weightUnit === 'jin' }"
+                role="radio"
+                :aria-checked="weightUnit === 'jin'"
+                @click="unitChange('jin')"
+              >
+                斤
+              </view>
+              <view
+                class="units__item"
+                :class="{ 'units__item--on': weightUnit === 'kg' }"
+                role="radio"
+                :aria-checked="weightUnit === 'kg'"
+                @click="unitChange('kg')"
+              >
+                千克
+              </view>
+            </view>
+            <input
+              v-model="sheet.weight"
+              class="row__input ft-num"
+              type="digit"
+              :step="weightInputStep()"
+              :placeholder="weightUnit === 'jin' ? '如 145.0' : '如 72.50'"
+              placeholder-class="ph"
+            />
+          </view>
+          <!-- 体脂率：跟体重并列的一项，只记录不参与任何计算（ADR 0030） -->
+          <view class="row">
+            <view class="row__k-col">
+              <text class="row__k">体脂率（%）</text>
+              <text class="row__aside">只做记录，不参与计算</text>
+            </view>
+            <input v-model="sheet.bodyFat" class="row__input ft-num" type="digit" step="0.1" placeholder="如 18.4" placeholder-class="ph" />
+          </view>
         </view>
-        <input
-          v-model="sheet.bodyFat"
-          class="fld__input ft-num"
-          type="digit"
-          step="0.1"
-          placeholder="如 18.4"
-          placeholder-class="fld__ph"
-        />
-      </view>
 
-      <view class="fld-grid">
-        <view class="fld">
-          <text class="fld__label">胸围（cm）</text>
-          <input v-model="sheet.chest" class="fld__input ft-num" type="digit" placeholder="–" />
+        <view class="group">
+          <text class="group__label">围度（cm）</text>
+          <view class="girths">
+            <view v-for="p in GIRTH_PARTS" :key="p.key" class="girths__cell">
+              <text class="girths__k">{{ p.label }}</text>
+              <input v-model="sheet[p.key]" class="girths__input ft-num" type="digit" placeholder="–" placeholder-class="ph" />
+            </view>
+          </view>
         </view>
-        <view class="fld">
-          <text class="fld__label">腰围（cm）</text>
-          <input v-model="sheet.waist" class="fld__input ft-num" type="digit" placeholder="–" />
-        </view>
-        <view class="fld">
-          <text class="fld__label">臀围（cm）</text>
-          <input v-model="sheet.hip" class="fld__input ft-num" type="digit" placeholder="–" />
-        </view>
-        <view class="fld">
-          <text class="fld__label">臂围（cm）</text>
-          <input v-model="sheet.arm" class="fld__input ft-num" type="digit" placeholder="–" />
-        </view>
-      </view>
 
-      <view class="fld">
-        <text class="fld__label">备注</text>
-        <input
-          v-model="sheet.note"
-          class="fld__input"
-          placeholder="晨起空腹 / 练后称重…"
-          placeholder-class="fld__ph"
-          maxlength="64"
-        />
-      </view>
-
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block sheet__btn"
-        :class="{ 'ft-btn--disabled': sheet.saving }"
-        @click="save"
-      >
-        保存
-      </view>
-    </view>
+        <view class="group">
+          <view class="row">
+            <text class="row__k">备注</text>
+            <input
+              v-model="sheet.note"
+              class="row__input row__input--text"
+              placeholder="晨起空腹 / 练后称重…"
+              placeholder-class="ph"
+              maxlength="64"
+            />
+          </view>
+        </view>
+      </scroll-view>
+      <FtButton variant="primary" block :disabled="sheet.saving" class="sh__btn" @click="save">保存</FtButton>
+    </FtSheet>
 
     <!-- 个人档案弹层（ADR 0030） -->
-    <view v-if="profileSheet.show" class="sheet-mask" @click="profileSheet.show = false" />
-    <view v-if="profileSheet.show" class="sheet">
-      <view class="sheet__handle" />
-      <text class="sheet__title">个人档案</text>
-      <text class="sheet__hint">填一次就行；体重始终取「身体档案」里最新的一条</text>
-
-      <view class="fld">
-        <text class="fld__label">性别</text>
-        <view class="pick-row">
-          <text
-            v-for="o in SEX_OPTIONS"
-            :key="o.key"
-            class="pick"
-            :class="{ 'pick--on': profileSheet.sex === o.key }"
-            @click="profileSheet.sex = o.key"
-            >{{ o.label }}</text
-          >
+    <FtSheet
+      v-if="profileSheet.show"
+      title="个人档案"
+      sub="填一次就行；体重始终取「身体档案」里最新的一条"
+      @close="profileSheet.show = false"
+    >
+      <scroll-view scroll-y class="sh__scroll">
+        <view class="group">
+          <view class="row">
+            <text class="row__k">性别</text>
+            <view class="units" role="radiogroup" aria-label="性别">
+              <view
+                v-for="o in SEX_OPTIONS"
+                :key="o.key"
+                class="units__item"
+                :class="{ 'units__item--on': profileSheet.sex === o.key }"
+                role="radio"
+                :aria-checked="profileSheet.sex === o.key"
+                @click="profileSheet.sex = o.key"
+              >
+                {{ o.label }}
+              </view>
+            </view>
+          </view>
+          <view class="row">
+            <text class="row__k">出生日期</text>
+            <picker mode="date" :value="profileSheet.birthDate" @change="onBirthChange">
+              <view class="row__picker ft-num" :class="{ 'is-empty': !profileSheet.birthDate }">
+                {{ profileSheet.birthDate || '选择日期' }}<FtIcon name="chevron-right" :size="16" tone="subtle" />
+              </view>
+            </picker>
+          </view>
+          <view class="row">
+            <text class="row__k">身高（cm）</text>
+            <input v-model="profileSheet.height" class="row__input ft-num" type="digit" step="0.1" placeholder="如 175" placeholder-class="ph" />
+          </view>
         </view>
-      </view>
 
-      <view class="fld">
-        <text class="fld__label">出生日期</text>
-        <picker mode="date" :value="profileSheet.birthDate" @change="onBirthChange">
-          <view class="fld__picker ft-num">{{ profileSheet.birthDate || '选择日期' }} ▾</view>
-        </picker>
-      </view>
-
-      <view class="fld">
-        <text class="fld__label">身高（cm）</text>
-        <input
-          v-model="profileSheet.height"
-          class="fld__input ft-num"
-          type="digit"
-          step="0.1"
-          placeholder="如 175"
-          placeholder-class="fld__ph"
-        />
-      </view>
-
-      <view class="fld">
-        <view class="fld__label-row">
-          <text class="fld__label">平时活动量</text>
-          <text class="fld__aside">只算日常，训练另记</text>
-        </view>
-        <view class="pick-col">
+        <view class="group">
+          <view class="group__head">
+            <text class="group__label">平时活动量</text>
+            <text class="row__aside">只算日常，训练另记</text>
+          </view>
           <view
             v-for="o in LEVEL_OPTIONS"
             :key="o.key"
-            class="pick-card"
-            :class="{ 'pick-card--on': profileSheet.activityLevel === o.key }"
+            class="opt"
+            role="radio"
+            :aria-checked="profileSheet.activityLevel === o.key"
             @click="profileSheet.activityLevel = o.key"
           >
-            <text class="pick-card__t">{{ o.label }}</text>
-            <text class="pick-card__d">{{ o.desc }}</text>
+            <view class="opt__mid">
+              <text class="opt__label">{{ o.label }}</text>
+              <text class="opt__desc">{{ o.desc }}</text>
+            </view>
+            <view class="check" :class="{ 'check--on': profileSheet.activityLevel === o.key }">
+              <FtIcon v-if="profileSheet.activityLevel === o.key" name="check" :size="13" :stroke="2.4" tone="inverse" />
+            </view>
           </view>
         </view>
-      </view>
-
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block sheet__btn"
-        :class="{ 'ft-btn--disabled': profileSheet.saving }"
-        @click="saveProfileSheet"
-      >
+      </scroll-view>
+      <FtButton variant="primary" block :disabled="profileSheet.saving" class="sh__btn" @click="saveProfileSheet">
         保存
-      </view>
-    </view>
+      </FtButton>
+    </FtSheet>
 
-    <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029） -->
-    <view v-if="energySheet.show" class="sheet-mask" @click="energySheet.show = false" />
-    <view v-if="energySheet.show" class="sheet">
-      <view class="sheet__handle" />
-      <text class="sheet__title">今日消耗怎么算的</text>
-      <template v-if="energy?.complete">
-        <view class="eq">
-          <view class="eq__row">
-            <text class="eq__k">基础代谢</text>
-            <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+    <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029）；与饮食页同一套排版 -->
+    <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
+      <scroll-view scroll-y class="sh__scroll is-bare">
+        <template v-if="energy?.complete">
+          <view class="eq">
+            <view class="eq__row">
+              <text class="eq__k">基础代谢</text>
+              <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+            </view>
+            <text class="eq__note">
+              按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
+              {{ energy.age }} · {{ sexLabel(energy.sex) }}
+            </text>
+            <view class="eq__row">
+              <text class="eq__k">× 生活活动系数</text>
+              <text class="eq__v ft-num">{{ energy.activityFactor }}（{{ levelLabel(energy.activityLevel) }}）</text>
+            </view>
+            <view class="eq__row">
+              <text class="eq__k">= 基础消耗</text>
+              <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
+            </view>
+            <view class="eq__row">
+              <text class="eq__k">+ 今日训练消耗</text>
+              <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
+            </view>
+            <view class="eq__row eq__row--sum">
+              <text class="eq__k">= 今日总消耗</text>
+              <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
+            </view>
           </view>
-          <text class="eq__note">
-            按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
-            {{ energy.age }} · {{ sexLabel(energy.sex) }}
+          <text class="eq__hint">
+            生活活动系数只算日常活动（工作、走动），专门训练不在里面——所以训练消耗是单独加上去的，不会重复计算。
           </text>
-          <view class="eq__row">
-            <text class="eq__k">× 生活活动系数</text>
-            <text class="eq__v ft-num">{{ energy.activityFactor }}（{{ levelLabel(energy.activityLevel) }}）</text>
-          </view>
-          <view class="eq__row">
-            <text class="eq__k">= 基础消耗</text>
-            <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
-          </view>
-          <view class="eq__row">
-            <text class="eq__k">+ 今日训练消耗</text>
-            <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
-          </view>
-          <view class="eq__row eq__row--sum">
-            <text class="eq__k">= 今日总消耗</text>
-            <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
-          </view>
-        </view>
-        <text class="eq__hint">
-          生活活动系数只算日常活动（工作、走动），专门训练不在里面——所以训练消耗是单独加上去的，不会重复计算。
-        </text>
-        <text class="eq__hint">
-          体重取身体档案里最新一条{{ weightDateHint }}，换体重后数字会跟着变。
-        </text>
-      </template>
-      <view class="ft-btn ft-btn--block sheet__btn" @click="energySheet.show = false">知道了</view>
-    </view>
+          <text class="eq__hint">体重取身体档案里最新一条{{ weightDateHint }}，换体重后数字会跟着变。</text>
+        </template>
+      </scroll-view>
+      <FtButton block class="sh__btn" @click="energySheet.show = false">知道了</FtButton>
+    </FtSheet>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.bodypg__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx 20rpx;
-}
-
-.bodypg__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.bodypg__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.bodypg__head-space {
-  width: 64rpx;
-}
-
-/* ── 多选态顶栏 ── */
-.bodypg__cancel {
-  font-size: $text-base;
-  color: $app-ink-muted;
-  width: 64rpx;
-}
-
-.bodypg__sel {
-  font-size: $text-base;
-  color: $app-ink;
-}
-
-.bodypg__acts {
-  display: flex;
-  align-items: center;
-  gap: 28rpx;
-  width: 64rpx;
-  justify-content: flex-end;
-}
-
-.bodypg__all {
-  font-size: $text-base;
-  color: $app-ink;
-  white-space: nowrap;
-}
-
-.bodypg__del {
-  font-size: $text-base;
-  color: #c4453c;
-  white-space: nowrap;
-}
-
-.bodypg__del--off {
-  opacity: 0.35;
-}
-
 .bodypg__body {
-  padding: 0 32rpx;
-}
-
-/* ── 当前体重卡 ── */
-.wcard__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 24rpx;
+  /* 底下常驻一颗悬浮按钮（或多选操作条），正文末尾让出它的高度 */
+  padding: 28rpx 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
-.wcard__label {
-  font-size: 22rpx;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+.hint {
+  padding: 80rpx 0;
+  text-align: center;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.ph {
   color: $app-ink-subtle;
+  font-weight: $weight-regular;
 }
 
-.wcard__add {
+.unit {
+  /* ⚠️ 不靠文本里的空格留间距：模板里的前导空白会被折叠，数字与单位会贴在一起 */
+  margin-left: 6rpx;
+  font-size: $text-sm;
+  font-weight: $weight-bold;
+  color: $app-ink-muted;
+}
+
+/* 页头右侧的胶囊按钮 */
+.pill {
+  @include glass($glass-bg-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
   font-size: $text-base;
-  color: $app-ink;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
 }
 
-.wcard__main {
+.pill:active {
+  opacity: 0.7;
+}
+
+/* ── 卡头：标题 ＋ 右侧小字或小胶囊 ── */
+.card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16rpx 0 20rpx;
-}
-
-.wcard__num-row {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-}
-
-.wcard__num {
-  font-size: 88rpx;
-  font-weight: 700;
-  color: $app-ink;
-  line-height: 1;
-}
-
-.wcard__unit {
-  font-size: $text-md;
-  color: $app-ink-muted;
-}
-
-.wcard__none {
-  font-size: $text-md;
-  color: $app-ink-muted;
-}
-
-.wcard__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1rpx solid $app-line-soft;
-  padding-top: 18rpx;
-}
-
-.wcard__date {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
-.wcard__diff {
-  font-size: $text-sm;
-  color: $app-ink;
-}
-
-/* ── 围度卡 ── */
-.gcard__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  gap: 16rpx;
   padding-bottom: 20rpx;
 }
 
-.gcard__label {
-  font-size: 22rpx;
-  color: $app-ink-subtle;
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
 }
 
-.gcard__date {
-  font-size: $text-xs;
+.card-meta {
+  min-width: 0;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.gcard__grid {
+.chip-btn {
+  flex-shrink: 0;
+  padding: 10rpx 24rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
+}
+
+.chip-btn:active {
+  opacity: 0.6;
+}
+
+.muted-line {
+  display: block;
+  font-size: $text-base;
+  line-height: 1.6;
+  color: $app-ink-muted;
+}
+
+.tip {
+  display: block;
+  padding-top: 12rpx;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.bodypg .bodypg__fill {
+  align-self: flex-start;
+  margin-top: 8rpx;
+}
+
+/* ── 四格（个人档案、围度） ── */
+.quad {
   display: flex;
 }
 
-.gcard__cell {
+.quad__cell {
   flex: 1;
-  text-align: center;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
-.gcard__cell + .gcard__cell {
+.quad__cell + .quad__cell {
+  padding-left: 20rpx;
   border-left: 1rpx solid $app-line-soft;
 }
 
-.gcard__glabel {
-  font-size: $text-xs;
+.quad__k {
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.gcard__gnum-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 4rpx;
-  padding-top: 10rpx;
-}
-
-.gcard__gnum {
-  font-size: $text-2xl;
-  font-weight: 700;
-  color: $app-ink;
-  line-height: 1.1;
-}
-
-.gcard__gunit {
-  font-size: 18rpx;
-  color: $app-ink-subtle;
-}
-
-.gcard__empty {
-  display: block;
-  padding: 24rpx 0 8rpx;
-  text-align: center;
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-/* ── 折线卡 ── */
-.chartcard__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-bottom: 16rpx;
-}
-
-.chartcard__title {
+.quad__v {
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
-/* 标题当切换器用：「体重 / 体脂」（ADR 0030，同一张图换序列） */
-.chartcard__title-row {
+.quad__v--num {
+  font-size: $text-xl;
+  font-weight: $weight-heavy;
+}
+
+/* 今日消耗 */
+.energy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.energy__num-row {
   display: flex;
   align-items: baseline;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
-.chartcard__title--on {
+.energy__num {
+  font-size: $text-2xl;
+  font-weight: $weight-heavy;
+  line-height: 1.1;
   color: $app-ink;
 }
 
-.chartcard__title:not(.chartcard__title--on) {
-  color: $app-ink-subtle;
-  font-weight: 400;
-}
-
-.chartcard__slash {
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-.chartcard__range {
+.energy__unit {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.chartcard__tip {
-  display: block;
-  padding: 10rpx 8rpx 0;
-  font-size: 20rpx;
-  color: $app-ink-subtle;
-}
-
-.chartcard__empty {
-  display: block;
-  padding: 48rpx 0;
-  text-align: center;
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-/* ── 部位分段条 ── */
-.seg {
+.link-row {
   display: flex;
-  gap: 12rpx;
-  padding-bottom: 20rpx;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid $app-line-soft;
+  font-size: $text-base;
+  color: $app-ink-2;
+}
+
+.link-row:active {
+  opacity: 0.6;
+}
+
+/* PR：浅橙底 ＋ 深橙字（PR 是「动作的结果」，归橙色） */
+.pr {
+  flex-shrink: 0;
+  padding: 4rpx 16rpx;
+  border-radius: $radius-pill;
+  background: $accent-soft;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+  color: $accent-strong;
+}
+
+/* ── 当前体重 ── */
+.weight {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.weight__num {
+  font-size: $text-display;
+  font-weight: $weight-heavy;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: $app-ink;
+}
+
+.weight__unit {
+  font-size: $text-lg;
+  color: $app-ink-muted;
+}
+
+.weight__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding-top: 12rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.weight__diff {
+  color: $app-ink-2;
+}
+
+.weight__fat {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.weight__fat-k {
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.weight__fat-v {
+  font-size: $text-lg;
+  color: $app-ink;
+}
+
+.weight__fat-d {
+  margin-left: auto;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* ── 分段控件 ── */
+.seg {
+  @include glass;
+  display: flex;
+  padding: 6rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+}
+
+.seg--full {
+  margin-bottom: 20rpx;
 }
 
 .seg__item {
-  flex: 1;
+  padding: 10rpx 28rpx;
+  border-radius: $radius-pill;
   text-align: center;
-  font-size: $text-sm;
+  font-size: $text-base;
   color: $app-ink-muted;
-  background: $app-surface-2;
-  border-radius: $radius-sm;
-  padding: 12rpx 0;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+}
+
+.seg--full .seg__item {
+  flex: 1;
+  padding: 10rpx 0;
 }
 
 .seg__item--on {
-  background: $app-ink;
-  color: #ffffff;
-  font-weight: 600;
-}
-
-/* ── 明细 ── */
-.mcard__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-bottom: 8rpx;
-}
-
-.mcard__title {
-  font-size: $text-md;
-  font-weight: 600;
+  background: $app-surface-2;
   color: $app-ink;
+  font-weight: $weight-bold;
 }
 
-.mcard__meta {
-  font-size: 20rpx;
-  letter-spacing: 1rpx;
-  color: $app-ink-subtle;
+/* ── 全部记录 ── */
+.mlist {
+  padding: 28rpx 32rpx 8rpx;
+}
+
+.mlist__head {
+  padding: 0 4rpx 12rpx;
 }
 
 .mrow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: 16rpx;
   padding: 22rpx 4rpx;
   border-top: 1rpx solid $app-line-soft;
 }
 
-.mrow--sel {
-  background: $app-canvas;
-  border-radius: $radius-md;
-  padding-left: 16rpx;
-  padding-right: 16rpx;
-}
-
-.mrow__check {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid $app-line;
-  background: $app-surface;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-right: 16rpx;
-  margin-top: 4rpx;
-}
-
-.mrow__check--on {
-  background: $app-ink;
-  border-color: $app-ink;
-}
-
-.mrow__dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: $app-ink;
-  margin-right: 16rpx;
-  flex-shrink: 0;
-  margin-top: 14rpx;
-}
-
-.mrow__dot--hollow {
-  background: transparent;
-  border: 2rpx solid $app-line;
+.mrow:active {
+  opacity: 0.6;
 }
 
 .mrow__main {
   flex: 1;
   min-width: 0;
-}
-
-.mrow__line1 {
-  display: flex;
-  align-items: baseline;
-}
-
-.mrow__date {
-  font-size: $text-base;
-  color: $app-ink;
-  flex-shrink: 0;
-}
-
-.mrow__note {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  margin-left: 14rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mrow__right {
-  margin-left: auto;
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  flex-shrink: 0;
-}
-
-.mrow__kg {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.mrow__diff {
-  width: 90rpx;
-  text-align: right;
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  flex-shrink: 0;
-}
-
-.mrow__girth {
-  display: block;
-  padding-top: 8rpx;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.mcard__empty {
-  padding: 40rpx 0;
-  text-align: center;
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-.mcard__more {
-  padding: 24rpx 0 8rpx;
-  text-align: center;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-/* ── 底部 ── */
-.bodypg__pad {
-  height: 220rpx;
-}
-
-.bodypg__bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-}
-
-/* ── 录入 / 编辑弹层 ── */
-.sheet-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
-  z-index: 90;
-}
-
-.sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-  z-index: 91;
-}
-
-.sheet__handle {
-  width: 72rpx;
-  height: 8rpx;
-  border-radius: 4rpx;
-  background: $app-line;
-  margin: 0 auto 24rpx;
-}
-
-.sheet__title {
-  display: block;
-  font-size: 34rpx;
-  font-weight: 600;
-  color: $app-ink;
-  padding-bottom: 6rpx;
-}
-
-/* 预填提示：告诉主人这些数是上回的，不想记就清空（清空即不存） */
-.sheet__hint {
-  display: block;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-  padding-bottom: 16rpx;
-}
-
-.fld {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
-  flex: 1;
-}
-
-.fld__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 1;
-}
-
-.unit-switch {
-  display: flex;
-  gap: 8rpx;
-  margin-left: 16rpx;
-}
-
-.unit-switch__item {
-  padding: 6rpx 12rpx;
-  border-radius: 999rpx;
-  color: $app-ink-muted;
-  background: $app-surface-2;
-  font-size: $text-xs;
-}
-
-.unit-switch__item--on {
-  color: #ffffff;
-  background: $app-ink;
-}
-
-.fld__label {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  flex-shrink: 0;
-}
-
-.fld__picker {
-  font-size: $text-md;
-  color: $app-ink;
-}
-
-.fld__input {
-  text-align: right;
-  font-size: $text-md;
-  color: $app-ink;
-  flex: 1;
-  margin-left: 20rpx;
-}
-
-.fld__ph {
-  color: $app-ink-subtle;
-}
-
-.fld-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 28rpx;
-}
-
-.fld-grid .fld {
-  flex: 1 1 40%;
-}
-
-.sheet__btn {
-  margin-top: 32rpx;
-}
-
-/* ── 个人档案卡（ADR 0030） ── */
-.pcard {
-  margin-bottom: 24rpx;
-}
-
-.pcard__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 18rpx;
-}
-
-.pcard__label {
-  font-size: $text-sm;
-  color: $app-ink-subtle;
-}
-
-.pcard__edit {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  padding: 4rpx 12rpx;
-  border: 1rpx solid $app-line;
-  border-radius: 999rpx;
-}
-
-.pcard__grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14rpx 0;
-}
-
-.pcard__cell {
-  flex: 1 1 50%;
-  display: flex;
-  align-items: baseline;
-  gap: 10rpx;
-}
-
-.pcard__k {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.pcard__v {
-  font-size: $text-base;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.pcard__energy {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-top: 22rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid $app-line-soft;
-}
-
-.pcard__burn-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10rpx;
-}
-
-.pcard__burn {
-  font-size: 56rpx;
-  font-weight: 700;
-  line-height: 1;
-  color: $app-ink;
-}
-
-.pcard__burn-unit {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-.pcard__how {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  text-decoration: underline;
-}
-
-.pcard__miss {
-  margin-top: 18rpx;
-  padding-top: 18rpx;
-  border-top: 1rpx solid $app-line-soft;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-.pcard__empty {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  padding: 6rpx 0 4rpx;
-}
-
-.pcard__empty-t {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
-.pcard__fill {
-  flex-shrink: 0;
-  font-size: $text-xs;
-  color: $app-ink;
-  padding: 8rpx 18rpx;
-  border: 1rpx solid $app-line;
-  border-radius: 999rpx;
-}
-
-/* 当前体重卡里的体脂行 */
-.wcard__fat {
-  display: flex;
-  align-items: baseline;
-  gap: 10rpx;
-  margin-top: 14rpx;
-  padding-top: 14rpx;
-  border-top: 1rpx solid $app-line-soft;
-}
-
-.wcard__fat-k {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.wcard__fat-v {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.wcard__fat-d {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
-}
-
-/* ── 档案弹层里的选择器 ── */
-.fld__aside {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
-}
-
-.pick-row {
-  display: flex;
-  gap: 16rpx;
-  margin-left: auto;
-}
-
-.pick {
-  min-width: 96rpx;
-  text-align: center;
-  padding: 10rpx 20rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid $app-line;
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
-.pick--on {
-  background: $app-ink;
-  border-color: $app-ink;
-  color: #ffffff;
-}
-
-.pick-col {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  padding-top: 12rpx;
-}
-
-.pick-card {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
-  padding: 16rpx 20rpx;
-  border-radius: $radius-md;
-  border: 1rpx solid $app-line;
 }
 
-.pick-card--on {
-  border-color: $app-ink;
-  background: $app-surface-2;
+.mrow__line {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  min-width: 0;
 }
 
-.pick-card__t {
+.mrow__date {
+  flex-shrink: 0;
   font-size: $text-base;
-  font-weight: 600;
   color: $app-ink;
 }
 
-.pick-card__d {
+.mrow__note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.mrow__kg {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.mrow__girth {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.mrow__diff {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: $text-sm;
+  color: $app-ink-2;
+}
+
+.mlist__more {
+  padding: 24rpx 0;
+  border-top: 1rpx solid $app-line-soft;
+  text-align: center;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* 勾选圈（多选、活动量单选共用；与动作库同一个） */
+.check {
+  width: 40rpx;
+  height: 40rpx;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2rpx solid $app-line-dash;
+  background: $app-surface;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.check--on {
+  background: $app-ink;
+  border-color: $app-ink;
+}
+
+/* ── 底部 ── */
+.bodypg__bottom {
+  position: fixed;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+}
+
+.bodypg__bottom .bodypg__record {
+  height: 104rpx;
+  font-size: 30rpx;
+}
+
+.selbar {
+  @include glass($glass-bg-strong);
+  position: fixed;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  height: 104rpx;
+  padding: 0 12rpx 0 36rpx;
+  box-sizing: border-box;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $glass-shadow-float;
+}
+
+.selbar__count {
+  flex: 1;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.selbar__all {
+  padding: 16rpx 20rpx;
+  font-size: $text-base;
+  color: $app-ink-2;
+}
+
+.selbar__del {
+  height: 80rpx;
+  padding: 0 40rpx;
+  display: flex;
+  align-items: center;
+  border-radius: $radius-pill;
+  background: $app-danger;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-surface;
+}
+
+.selbar__del.is-off {
+  opacity: 0.35;
+}
+
+.selbar__all:active,
+.selbar__del:active {
+  opacity: 0.7;
+}
+
+/* ── 弹层（壳是 FtSheet，分组是白卡） ── */
+.sh__scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 60vh;
+}
+
+/* 没有副标题时，标题下自己让出副标题那一段的距离 */
+.sh__scroll.is-bare {
+  margin-top: 28rpx;
+}
+
+.bodypg .sh__btn {
+  flex-shrink: 0;
+  margin-top: 28rpx;
+}
+
+.group {
+  padding: 4rpx 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
+}
+
+.group + .group {
+  margin-top: 20rpx;
+}
+
+.group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 20rpx 0 4rpx;
+}
+
+.group__label {
+  display: block;
+  padding: 20rpx 0 4rpx;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.group__head .group__label {
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  min-height: 92rpx;
+}
+
+.row + .row {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.row__k {
+  flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.row__k-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row__aside {
   font-size: $text-xs;
   color: $app-ink-subtle;
 }
 
-/* ── 「怎么算的」算式 ── */
+.row__input {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: $text-lg;
+  color: $app-ink;
+}
+
+.row__input--text {
+  font-size: $text-md;
+}
+
+.row__picker {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.row picker {
+  margin-left: auto;
+}
+
+.row__picker.is-empty {
+  color: $app-ink-subtle;
+}
+
+/* 小分段（体重单位、性别）：选中＝深字 ＋ 浅胶囊底 */
+.units {
+  flex-shrink: 0;
+  display: flex;
+  padding: 4rpx;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-pill;
+}
+
+.units__item {
+  padding: 6rpx 20rpx;
+  border-radius: $radius-pill;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.units__item--on {
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
+}
+
+/* 性别那一行没有输入框，小分段靠右 */
+.row .units:last-child {
+  margin-left: auto;
+}
+
+/* 围度：2×2 小输入格 */
+.girths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding: 12rpx 0 24rpx;
+}
+
+.girths__cell {
+  width: calc((100% - 16rpx) / 2);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  height: 80rpx;
+  padding: 0 20rpx;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
+}
+
+.girths__k {
+  flex-shrink: 0;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.girths__input {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+/* 活动量：单选行 */
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 22rpx 0;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.group__head + .opt {
+  border-top: none;
+}
+
+.opt:active {
+  opacity: 0.6;
+}
+
+.opt__mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.opt__label {
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.opt__desc {
+  font-size: $text-sm;
+  line-height: 1.5;
+  color: $app-ink-muted;
+}
+
+/* 「怎么算的」：与饮食页同一套排版 */
 .eq {
-  padding: 8rpx 0 4rpx;
+  padding: 8rpx 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .eq__row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 12rpx 0;
-  border-bottom: 1rpx dashed $app-line-soft;
+  padding: 16rpx 0;
 }
 
-.eq__row--sum {
-  border-bottom: none;
-  border-top: 2rpx solid $app-ink;
-  margin-top: 6rpx;
+.eq__row + .eq__row,
+.eq__note + .eq__row {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+/* 「＝」那一行是小计：上面压一条深线 */
+.eq__row.eq__row--sum {
+  border-top: 2rpx solid $app-ink-2;
 }
 
 .eq__k {
-  font-size: $text-sm;
+  font-size: $text-base;
   color: $app-ink-muted;
 }
 
 .eq__v {
-  font-size: $text-base;
-  font-weight: 600;
+  font-size: $text-md;
   color: $app-ink;
 }
 
 .eq__note {
   display: block;
-  font-size: 20rpx;
-  line-height: 1.5;
-  color: $app-ink-subtle;
-  padding: 0 0 12rpx;
+  padding-bottom: 12rpx;
+  font-size: $text-xs;
+  line-height: 1.6;
+  color: $app-ink-muted;
 }
 
 .eq__hint {
   display: block;
-  font-size: $text-xs;
+  padding-top: 16rpx;
+  font-size: $text-sm;
   line-height: 1.7;
   color: $app-ink-muted;
-  padding-top: 14rpx;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg__item {
+    transition: none;
+  }
 }
 </style>
