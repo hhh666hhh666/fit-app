@@ -69,21 +69,7 @@ page::before {
   background: $app-canvas-bg;
 }
 
-/* ── 通用件（按「晴窗」换皮；页面别再各写一份。组件化的版本见 components/Ft*.vue）── */
-
-.ft-page {
-  padding: 24rpx 24rpx 48rpx;
-}
-
-/* 玻璃卡片 */
-.ft-card {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-}
+/* ── 全局只留两个类：数字字体与加载中占位。其余通用件都在 components/Ft*.vue（按钮、卡片、空态…），别再往这里加 ── */
 
 /* 数字：重量 / 次数 / 日期 / 容量一律走 Nunito（0–9 等宽，竖排也对得齐） */
 .ft-num {
@@ -91,86 +77,6 @@ page::before {
   font-weight: $weight-bold;
   font-feature-settings: 'tnum';
   font-variant-numeric: tabular-nums;
-}
-
-.ft-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 92rpx;
-  border-radius: $radius-pill;
-  font-size: $text-md;
-  font-weight: $weight-bold;
-  background: $glass-bg-strong;
-  color: $app-ink-2;
-  border: 1rpx solid $glass-edge;
-  box-shadow: $shadow-sm;
-  box-sizing: border-box;
-  transition: transform $dur-fast $ease-out, opacity $dur-fast $ease-out;
-}
-
-/* 按压反馈：轻微下沉。全站按钮一个手感 */
-.ft-btn:active {
-  transform: scale(0.97);
-  opacity: 0.9;
-}
-
-/* 主按钮：橙色渐变（橙色只给动作——每页最多一个） */
-.ft-btn--primary {
-  background: $accent-bg;
-  color: $app-surface;
-  border-color: transparent;
-  box-shadow: $accent-shadow;
-}
-
-.ft-btn--ghost {
-  background: transparent;
-  border-color: $app-line;
-  box-shadow: none;
-  color: $app-ink-muted;
-}
-
-.ft-btn--block {
-  width: 100%;
-}
-
-.ft-btn--disabled {
-  opacity: 0.4;
-}
-
-.ft-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 40rpx;
-  padding: 0 16rpx;
-  border-radius: $radius-xs;
-  background: $app-surface-2;
-  color: $app-ink-muted;
-  font-size: $text-sm;
-  line-height: 1;
-}
-
-.ft-muted {
-  color: $app-ink-muted;
-}
-
-.ft-subtle {
-  color: $app-ink-subtle;
-}
-
-/* PR 高亮：浅橙底 ＋ 深橙字（晴窗里荧光笔退役；PR 属于「动作的结果」，归橙色） */
-.ft-marker {
-  background: $app-highlight;
-  border-radius: 16rpx;
-  padding: 4rpx 12rpx;
-  color: $accent-strong;
-}
-
-.ft-empty {
-  padding: 120rpx 0;
-  text-align: center;
-  color: $app-ink-muted;
-  font-size: $text-md;
 }
 
 .ft-loading {
