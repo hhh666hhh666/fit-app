@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {computed, ref} from 'vue'
 import {onPullDownRefresh, onShow} from '@dcloudio/uni-app'
-import FtTabBar from '@/components/FtTabBar.vue'
 import FtDietRings from '@/components/FtDietRings.vue'
 import MealSheet from '@/components/MealSheet.vue'
 import {useScheduleStore} from '@/stores/schedule'
@@ -12,11 +11,11 @@ import {clearAll} from '@/api/cache'
 import {buildDietRings} from '@/utils/diet'
 import {formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
-import {playTabEnter, takeTabEnter} from '@/utils/nav'
+import FtTabPage from '@/components/FtTabPage.vue'
+import { useTabPage } from '@/utils/tab-page'
 
-// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
-const tabDir = ref<'left' | 'right' | null>(null)
-const tabSeq = ref(0)
+// 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
+const tab = useTabPage('home')
 
 const today = (() => {
   const d = new Date()
@@ -171,10 +170,7 @@ const schedule = useScheduleStore()
 
 onShow(() => {
   if (!ensureLogin()) return
-  const dir = takeTabEnter('home')
-  tabDir.value = dir
-  tabSeq.value++
-  playTabEnter('.home__body', dir)
+  tab.enter()
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
@@ -206,7 +202,7 @@ function goLibrary() {
 </script>
 
 <template>
-  <view class="home">
+  <FtTabPage :page="tab" class="home">
     <view class="home__body">
       <!-- 顶部行 -->
       <view class="home__head">
@@ -287,13 +283,6 @@ function goLibrary() {
           </view>
         </view>
       </view>
-
-      <view class="home__pad"/>
-    </view>
-
-    <!-- 底栏：开练入口（中间圆钮）、选计划弹层、进行中的回程都在里面（ADR 0041） -->
-    <view class="home__bottom">
-      <FtTabBar active="home" :enter-dir="tabDir" :enter-seq="tabSeq"/>
     </view>
 
     <!-- 饮食记录弹层 -->
@@ -304,7 +293,7 @@ function goLibrary() {
         @close="sheetMeal = null"
         @changed="refreshDiet"
     />
-  </view>
+  </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
@@ -542,21 +531,5 @@ function goLibrary() {
   width: 1rpx;
   height: 32rpx;
   background: $app-line;
-}
-
-/* ── 底部固定区 ── */
-.home__pad {
-  height: $tabbar-space;
-}
-
-.home__bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
-  z-index: 20;
-  /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
-  pointer-events: none;
 }
 </style>

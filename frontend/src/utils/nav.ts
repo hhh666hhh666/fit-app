@@ -6,10 +6,9 @@
 // 为什么不落 Pinia／storage：这是一次性的过场信号，不是业务状态。开关是 SPA 内跳转、
 // 不重载 JS，模块级变量足够存活；消费即清，也不需要「什么时候忘掉」的规则。
 
-export type TabKey = 'home' | 'log' | 'stats' | 'profile'
+import { tabIndex, type TabKey } from '@/utils/tabs'
 
-/** 下标即 tab 栏的左右顺序，方向只由下标差决定 */
-const ORDER: readonly TabKey[] = ['home', 'log', 'stats', 'profile']
+export type { TabKey }
 
 /** 信号有效期：超时即视为上一次的残留（连点、慢加载、从下级页回来） */
 const FRESH_MS = 800
@@ -33,8 +32,9 @@ export function takeTabEnter(to: TabKey): 'left' | 'right' | null {
   pending = null
   lastFromIdx = null
   if (!signal || Date.now() - signal.at > FRESH_MS) return null
-  const fromIdx = ORDER.indexOf(signal.from)
-  const toIdx = ORDER.indexOf(to)
+  // 方向只由 tab 表里的下标差决定（下标即底栏的左右顺序）
+  const fromIdx = tabIndex(signal.from)
+  const toIdx = tabIndex(to)
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return null
   lastFromIdx = fromIdx
   return toIdx > fromIdx ? 'right' : 'left'
@@ -46,7 +46,8 @@ export function lastTabFromIndex(): number | null {
 }
 
 /**
- * 时长与缓动对齐 `uni.scss` 的 `$ease-out`（JS 读不到 SCSS 变量，改 token 记得同步）。
+ * 时长与缓动是 `uni.scss` 的 `$dur-slide` / `$ease-out` 的镜像（JS 读不到 SCSS 变量；
+ * `scripts/check-tab-config.sh` 校验两边一致）。
  * 指示条也用这一对——正文和指示条是同一个动作，节奏必须一致。
  */
 export const SLIDE_MS = 260

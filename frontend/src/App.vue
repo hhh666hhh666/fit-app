@@ -179,20 +179,7 @@ page::before {
   color: $app-ink-muted;
 }
 
-/* 四个主 tab 的页面根：横向裁掉切页位移期间的溢出。
-   位移（translateX ±18vw）会让内容短暂超出页面宽度；不裁的话，移动端 WebView 会把
-   它当成可横向滚动的容器，在视口底部画一条横向滚动条——全宽、约 3dp 的灰色长条，
-   压在 tabbar 下缘（2026-10-21 真机反馈的「底部出现长条」就是它）。
-   用 clip 而不是 hidden：hidden 会把页面根变成滚动容器，clip 只裁不滚。两者都不影响
-   内部 fixed 底栏（fixed 的包含块是视口，不受祖先 overflow 裁剪）。
-   ⚠️ 新增主 tab 页面时，类名要一起加进这里。 */
-.home,
-.log,
-.stats,
-.prof {
-  overflow-x: hidden; /* 老 WebView 兜底 */
-  overflow-x: clip;
-}
+/* 四个主 tab 的页面根（横向裁切、底部留白、钉住的底栏）收在 components/FtTabPage.vue。 */
 
 /* ── 切页转场：旧页克隆层滑出（ADR 0040）──
    utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层的 __content，
@@ -200,7 +187,7 @@ page::before {
    底色必须铺满：层铺上后要等新页就绪才起跑，这段时间新页已在底下原位，
    透明的话两页会叠成重影。层本身不动——底色是和 page::before 同一层钉在视口的渐变，
    一起滑的话光晕会跟着横移。
-   层级：克隆层 10 ＜ 底栏副本 15 ＜ 真底栏（各页 __bottom）20。底栏每页一份，旧页一藏
+   层级：克隆层 10 ＜ 底栏副本 15 ＜ 真底栏（FtTabPage 的 __bottom）20。底栏每页一份，旧页一藏
    它就没了，新页的要等挂上才出现；副本就补这几帧，新底栏一画出来就把它盖住。
    ⚠️ 别把 View Transitions 那套（::view-transition-*）加回来：主人设备的 WebView
    不支持（要 Chrome 111+），当时一直走兜底硬切，表现为「中间一帧整页空白」。 */

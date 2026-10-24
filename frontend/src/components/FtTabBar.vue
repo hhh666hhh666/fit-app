@@ -29,9 +29,9 @@ import {
   markTabNav,
   SLIDE_EASE,
   SLIDE_MS,
-  startSlide,
-  type TabKey
+  startSlide
 } from '@/utils/nav'
+import { TABS, type Tab, type TabKey } from '@/utils/tabs'
 
 const props = defineProps<{
   active: TabKey
@@ -41,21 +41,8 @@ const props = defineProps<{
   enterSeq?: number
 }>()
 
-// slide：该页切走时要跟着滑的块（克隆进「旧页」那一层）。col：在五等分里占哪一列（2 是圆钮）。
-const tabs: readonly {
-  key: TabKey
-  label: string
-  icon: FtIconName
-  iconOn: FtIconName
-  url: string
-  slide: readonly string[]
-  col: number
-}[] = [
-  { key: 'home', label: '首页', icon: 'home', iconOn: 'home-fill', url: '/pages/home/index', slide: ['.home__body'], col: 0 },
-  { key: 'log', label: '日志', icon: 'list', iconOn: 'list-fill', url: '/pages/log/index', slide: ['.log__body'], col: 1 },
-  { key: 'stats', label: '统计', icon: 'chart', iconOn: 'chart-fill', url: '/pages/stats/index', slide: ['.stats__body'], col: 3 },
-  { key: 'profile', label: '我的', icon: 'user', iconOn: 'user-fill', url: '/pages/profile/index', slide: ['.prof__body'], col: 4 }
-]
+// 四个 tab 的定义只在 utils/tabs.ts：body＝切走时克隆、滑动的正文；col＝五等分里的列（2 是圆钮）
+const tabs: readonly (Tab & { icon: FtIconName; iconOn: FtIconName })[] = TABS
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
 const activeCol = computed(() => tabs[activeIdx.value].col)
@@ -226,7 +213,7 @@ function go(t: (typeof tabs)[number]) {
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
   const raw = rootRef.value as { $el?: HTMLElement } | HTMLElement | null
   const root = ((raw as { $el?: HTMLElement } | null)?.$el ?? raw) as HTMLElement | null
-  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].slide, root ? [root] : [])
+  startSlide(dir, () => uni.switchTab({ url: t.url }), [tabs[activeIdx.value].body], root ? [root] : [])
 }
 
 // 首次挂载：冷启动没有方向信号，直接落在当前格；从别的 tab 切来的首访则带着方向——

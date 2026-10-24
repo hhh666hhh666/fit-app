@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
-import FtTabBar from '@/components/FtTabBar.vue'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
 import { clearAll } from '@/api/cache'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
 import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
-import { playTabEnter, takeTabEnter } from '@/utils/nav'
+import FtTabPage from '@/components/FtTabPage.vue'
+import { useTabPage } from '@/utils/tab-page'
 import FtIcon from '@/components/FtIcon.vue'
 
-// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
-const tabDir = ref<'left' | 'right' | null>(null)
-const tabSeq = ref(0)
+// 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
+const tab = useTabPage('log')
 
 const PAGE_SIZE = 50
 
@@ -114,10 +113,7 @@ async function load(reset = false) {
 
 onShow(() => {
   if (!ensureLogin()) return
-  const dir = takeTabEnter('log')
-  tabDir.value = dir
-  tabSeq.value++
-  playTabEnter('.log__body', dir)
+  tab.enter()
   void load(true)
 })
 
@@ -224,7 +220,7 @@ function doDelete() {
 </script>
 
 <template>
-  <view class="log">
+  <FtTabPage :page="tab" class="log">
     <view class="log__body">
       <!-- 顶栏：常规＝标题＋月份；多选态＝取消＋已选＋全选/删除 -->
       <view class="log__head">
@@ -310,13 +306,8 @@ function doDelete() {
 
       <view v-if="loadingMore" class="log__more">加载中…</view>
 
-      <view class="log__pad" />
     </view>
-
-    <view class="log__bottom">
-      <FtTabBar active="log" :enter-dir="tabDir" :enter-seq="tabSeq" />
-    </view>
-  </view>
+  </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
@@ -572,26 +563,10 @@ function doDelete() {
   color: $app-ink-subtle;
 }
 
-.log__pad {
-  height: $tabbar-space;
-}
-
 .log__more {
   padding: 24rpx 0;
   text-align: center;
   font-size: $text-sm;
   color: $app-ink-subtle;
-}
-
-/* ── 底部 tab ── */
-.log__bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
-  z-index: 20;
-  /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
-  pointer-events: none;
 }
 </style>

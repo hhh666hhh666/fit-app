@@ -47,6 +47,10 @@ jobs:
       - name: 写死颜色守卫（告警）
         run: bash scripts/check-hardcoded-colors.sh
 
+      # pages.json 的 tabBar 是框架读的、utils/tabs.ts 是代码读的；切页时长 JS 与 SCSS 各一份。
+      - name: 主 tab 手写点一致性
+        run: bash scripts/check-tab-config.sh
+
   backend:
     name: 后端 · Maven 单测
     runs-on: ubuntu-latest

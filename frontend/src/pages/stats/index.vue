@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
-import FtTabBar from '@/components/FtTabBar.vue'
 import { getStats, type StatsPeriod, type StatsData } from '@/api/stats'
 import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
-import { playTabEnter, takeTabEnter } from '@/utils/nav'
+import FtTabPage from '@/components/FtTabPage.vue'
+import { useTabPage } from '@/utils/tab-page'
 
-// 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
-const tabDir = ref<'left' | 'right' | null>(null)
-const tabSeq = ref(0)
+// 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
+const tab = useTabPage('stats')
 
 // ── 统计（设计稿：.workbuddy/stitch/screen/stats.png）──
 
@@ -37,10 +36,7 @@ async function load() {
 
 onShow(() => {
   if (!ensureLogin()) return
-  const dir = takeTabEnter('stats')
-  tabDir.value = dir
-  tabSeq.value++
-  playTabEnter('.stats__body', dir)
+  tab.enter()
   load()
 })
 
@@ -83,7 +79,7 @@ function barHeight(count: number): string {
 </script>
 
 <template>
-  <view class="stats">
+  <FtTabPage :page="tab" class="stats">
     <view class="stats__body">
       <!-- 标题行 -->
       <view class="stats__head">
@@ -169,13 +165,8 @@ function barHeight(count: number): string {
       </view>
 
       <text class="stats__foot">FIT-APP LEDGER · DISCIPLINE IN NUMBERS</text>
-      <view class="stats__pad" />
     </view>
-
-    <view class="stats__bottom">
-      <FtTabBar active="stats" :enter-dir="tabDir" :enter-seq="tabSeq" />
-    </view>
-  </view>
+  </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
@@ -413,20 +404,5 @@ function barHeight(count: number): string {
   letter-spacing: 2rpx;
   color: $app-ink-subtle;
   padding: 40rpx 0 8rpx;
-}
-
-.stats__pad {
-  height: $tabbar-space;
-}
-
-.stats__bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
-  z-index: 20;
-  /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
-  pointer-events: none;
 }
 </style>
