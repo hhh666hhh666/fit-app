@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+### Changed
+
+- **本机开发数据库改用 Docker 命名卷** `fit-app-mysql-data`，不再绑定挂载 `./.data/mysql`（`MYSQL_DATA_DIR` 作废）：Windows 上表名大小写规则与线上一致，首次初始化也快得多。旧机器升级后是空库，搬数据的步骤见 `docs/operations/configuration.md`。
+
 ## [0.27.1] - 2026-10-24
 
 ### Changed

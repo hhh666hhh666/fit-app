@@ -16,12 +16,17 @@ services:
       --collation-server=utf8mb4_unicode_ci
       --default-time-zone=+08:00
     volumes:
-      # 长语法写绑定挂载，避免 Windows 盘符（E:）被短语法的冒号切错
-      - type: bind
-        source: ${MYSQL_DATA_DIR:-./.data/mysql}
-        target: /var/lib/mysql
+      # 命名卷而不是绑定挂载宿主机目录：数据留在 Docker 自己的 Linux 文件系统里，
+      # 表名大小写规则与线上一致（Windows 盘不区分大小写，会被设成 lower_case_table_names=2），
+      # 也免去经 WSL 跨文件系统读写的慢（首次初始化曾慢到 healthcheck 先判 unhealthy）。
+      - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-change-me}"]
       interval: 5s
       timeout: 5s
       retries: 20
+
+volumes:
+  mysql-data:
+    # 显式命名：不随仓库目录名（worktree 等）变成另一个卷
+    name: fit-app-mysql-data

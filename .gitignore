@@ -14,7 +14,7 @@ android-shell/app/build/
 .env.local
 .env.*.local
 
-# 本机数据库数据目录（docker-compose.dev.yml 的 MYSQL_DATA_DIR 指向这里）
+# 旧版本机数据库数据目录（docker-compose.dev.yml 已改用命名卷，留着拦旧机器上的残留）
 .data/
 
 # 编辑器与系统

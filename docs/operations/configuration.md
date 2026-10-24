@@ -44,6 +44,25 @@ cp .env.example .env    # 然后至少把 JWT 密钥换成随机值（生成命�
 **改端口要动两处**：`.env` 的 `MYSQL_PORT`（compose 映射）与 `application.yml` 的默认 URL（本机裸跑）。
 两处不一致时，症状是「容器在跑但后端报连接被拒」。
 
+## 本机数据库数据：命名卷 `fit-app-mysql-data`
+
+`docker-compose.dev.yml` 把 MySQL 数据放在 Docker 命名卷里，**不绑定挂载宿主机目录**（2026-10-24 起；原先是 `MYSQL_DATA_DIR` → `./.data/mysql`）。理由两条：
+
+- **表名大小写与线上一致**：Windows 盘不区分大小写，MySQL 在绑定挂载的目录上会自动设成 `lower_case_table_names=2`，而线上 Linux 区分大小写——SQL 里表名大小写写错，本机发现不了。
+- **首次初始化快**：经 WSL 跨文件系统读写很慢，曾慢到 healthcheck 先把容器判成 unhealthy。
+
+代价是数据不再是仓库旁一个可见目录，备份 / 清库走 docker：
+
+```bash
+docker exec fit-app-mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" fit_app' > fit_app.sql   # 备份
+docker compose -f docker-compose.dev.yml down -v                                                    # 清库（连卷一起删）
+```
+
+⚠️ **从旧版升级的机器**：新卷是空的，起来后是空库（后端启动时 Flyway 建表）。旧数据还在 `./.data/mysql`，
+要留的话先用旧版 compose 起一次、按上面备份，再换新版起来导入：
+`docker exec -i fit-app-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" fit_app' < fit_app.sql`。
+确认不要了再手工删 `.data/`；`.env` 里残留的 `MYSQL_DATA_DIR` 已无人读，删不删都行。
+
 ## 本机裸跑的后端读不到 compose 那套环境变量
 
 `mvn spring-boot:run` 只认**自己进程的环境变量**，不会去读 `.env`，所以数据源密码要靠
@@ -86,7 +105,6 @@ mvn -B -ntp spring-boot:run
 | 项 | 云上 |
 |---|---|
 | `MYSQL_ROOT_PASSWORD` | 必须与 `/srv/quizzy/.env` 里**同值**——是同一个实例，不是「同名而已」 |
-| `MYSQL_DATA_DIR` | 云上不再需要（那是自带 MySQL 时才用的数据卷路径） |
 | 库不存在时 | JDBC URL 带 `createDatabaseIfNotExist=true`，首次部署自动建 `fit_app` |
 
 ⚠️ 备份脚本要 `docker exec` 进 `quizzy-mysql` 去 dump `fit_app`，不能连 `localhost:3306`
