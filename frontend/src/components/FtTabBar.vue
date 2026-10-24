@@ -1,15 +1,28 @@
-/**
- * 底部主 tab 栏。四页各渲染一份（uni-app 没有共享 layout），页内位置由页面决定。
- *
- * 切换走 `uni.switchTab`：四个主页面在 `pages.json` 里注册成 tabBar 页，框架用
- * KeepAlive 把它们按 `type: "tabBar"` 缓存住、永不 prune——所以切页**不再销毁页面**，
- * `reLaunch` 那段「旧页已拆、新页未建」的白屏空档随之消失（ADR 0038）。
- *
- * 框架会在 H5 上另渲染一条内置 `uni-tabbar`（它不认 `custom: true`），已在 App.vue
- * 里用样式压掉；这里这份才是真正显示的。
- */
+<!--
+  底栏（晴窗，ADR 0041）：悬浮玻璃胶囊，五等分——首页、日志、**中间训练圆钮**、统计、我的。
+  四页各渲染一份（uni-app 没有共享 layout），页内位置由页面决定。
+
+  - 切换走 `uni.switchTab`：四个主页面是 tabBar 页，框架按 KeepAlive 缓存、切页不销毁（ADR 0038）。
+    框架另渲染的内置 `uni-tabbar` 已在 App.vue 里压掉。
+  - 选中项的浅色胶囊底就是 ADR 0037 那条会滑的指示条，滑动按「列」算，中间那列只是被跨过去。
+  - 胶囊顶边正中是**真凹口**：玻璃层用 `clip-path: path()` 裁，亮边和投影用同一条路径在 SVG 里另画。
+    投影不能挂 `filter` 在玻璃层的父级上——那会让 backdrop-filter 失效。
+  - 中间圆钮：没有进行中的训练＝哑铃，点开选计划；有＝播放图标，点一下直接继续，
+    **长按**才弹「继续上次／开新的」（ADR 0020 的二选一，文案沿用）。外圈动效见 FtMeteorTrace。
+  - 选计划弹层随训练入口从首页挪到这里，四个主页面都能直接开练。
+-->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import FtIcon, { type FtIconName } from '@/components/FtIcon.vue'
+import FtMeteorTrace from '@/components/FtMeteorTrace.vue'
+import FtSheet from '@/components/FtSheet.vue'
+import FtListRow from '@/components/FtListRow.vue'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
+import { useScheduleStore } from '@/stores/schedule'
+import { formatClock, formatDateLabel } from '@/utils/format'
+import { clearSession, loadSession, netElapsedSec, type Session } from '@/utils/session'
+import { getResumeFx, type ResumeFx } from '@/utils/resume-fx'
 import {
   animateWhenConnected,
   lastTabFromIndex,
@@ -24,60 +37,184 @@ const props = defineProps<{
   active: TabKey
   /** 本页这次显示的入场方向；页面在 onShow 里取到后透传，用来让指示条从上一格滑过来 */
   enterDir?: 'left' | 'right' | null
-  /** 每次 onShow 自增一次，用来触发指示条重放（页面保活，不能用挂载时机） */
+  /** 每次 onShow 自增一次：重放指示条、重读进行中的会话（页面保活，不能用挂载时机） */
   enterSeq?: number
 }>()
 
-// slide：该页切走时要跟着滑的块（克隆进「旧页」那一层）。首页底部的提示／训练横幅／
-// 「开始训练」属于页面内容，也要一起滑——只钉住它的话，正文在滑、那一大块却瞬间消失或冒出来。
-const tabs = [
-  { key: 'home', label: '首页', icon: 'home', url: '/pages/home/index', slide: ['.home__body', '.home__dock'] },
-  { key: 'log', label: '日志', icon: 'list', url: '/pages/log/index', slide: ['.log__body'] },
-  { key: 'stats', label: '统计', icon: 'chart-bar', url: '/pages/stats/index', slide: ['.stats__body'] },
-  { key: 'profile', label: '我的', icon: 'user', url: '/pages/profile/index', slide: ['.prof__body'] }
-] as const
+// slide：该页切走时要跟着滑的块（克隆进「旧页」那一层）。col：在五等分里占哪一列（2 是圆钮）。
+const tabs: readonly {
+  key: TabKey
+  label: string
+  icon: FtIconName
+  iconOn: FtIconName
+  url: string
+  slide: readonly string[]
+  col: number
+}[] = [
+  { key: 'home', label: '首页', icon: 'home', iconOn: 'home-fill', url: '/pages/home/index', slide: ['.home__body'], col: 0 },
+  { key: 'log', label: '日志', icon: 'list', iconOn: 'list-fill', url: '/pages/log/index', slide: ['.log__body'], col: 1 },
+  { key: 'stats', label: '统计', icon: 'chart', iconOn: 'chart-fill', url: '/pages/stats/index', slide: ['.stats__body'], col: 3 },
+  { key: 'profile', label: '我的', icon: 'user', iconOn: 'user-fill', url: '/pages/profile/index', slide: ['.prof__body'], col: 4 }
+]
 
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
+const activeCol = computed(() => tabs[activeIdx.value].col)
 
-// 指示条：静止位置永远是当前格；「上一页那一格」只是动画的起点。
-// 方向与内容位移相反——内容从右进场是因为整个容器在往左移，而指示条标的是
-// 「选中哪一格」，所以首页→日志它从左往右走一格。
+// ── 凹口几何（px）：胶囊高 62、两端半圆；凹口是圆心在顶边上方 4px、半径 36 的圆，
+//    与顶边之间用半径 8 的圆角过渡。宽度随屏宽变，所以路径在运行时按实测宽度生成。──
+const BAR_H = 62
+const barRef = ref<unknown>(null)
+const barW = ref(0)
+
+const notchPath = computed(() => {
+  const W = barW.value
+  if (!W) return ''
+  const r = BAR_H / 2
+  const c = W / 2
+  const f = (n: number) => Math.round(n * 100) / 100
+  return (
+    `M${r},0 H${f(c - 42.33)} A8,8 0 0 1 ${f(c - 34.63)},5.82 ` +
+    `A36,36 0 0 0 ${f(c + 34.63)},5.82 A8,8 0 0 1 ${f(c + 42.33)},0 ` +
+    `H${f(W - r)} A${r},${r} 0 0 1 ${f(W - r)},${BAR_H} H${r} A${r},${r} 0 0 1 ${r},0 Z`
+  )
+})
+
+const glassStyle = computed(() => {
+  const d = notchPath.value
+  if (!d) return {}
+  return { clipPath: `path('${d}')`, WebkitClipPath: `path('${d}')`, borderRadius: '0' }
+})
+
+// 四个页面各有一份底栏、同时都在文档里（保活），SVG 滤镜 id 必须各自唯一：
+// 引用到一份被 display:none 藏起来的滤镜，Chrome 会把投影整个丢掉
+const shadowId = `ftb-shadow-${Math.random().toString(36).slice(2, 8)}`
+
+function measure() {
+  const raw = barRef.value as { $el?: HTMLElement } | HTMLElement | null
+  const el = ((raw as { $el?: HTMLElement } | null)?.$el ?? raw) as HTMLElement | null
+  const w = el?.offsetWidth ?? 0
+  // 保活页被藏起来时量到 0，别拿 0 覆盖掉上一次的有效宽度
+  if (w > 0) barW.value = w
+}
+
+// ── 指示条：静止位置永远是当前列；「上一页那一列」只是动画的起点 ──
 const indRef = ref<unknown>(null)
-const indOffset = ref(activeIdx.value)
 
 function slideIndicator(dir: 'left' | 'right' | null) {
-  indOffset.value = activeIdx.value
-  // uni H5 的 `<view ref>` 给的是组件实例（没有 `animate`），不能在这里判 DOM 能力，
-  // 交给 animateWhenConnected 取 `$el`——以前这里判了，指示条其实从来没滑过
   const el = indRef.value
   if (!dir || !el) return
   if (typeof window !== 'undefined' && window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return
   }
-  // 从真正的来源格出发：首页→统计要滑过两格，不能只从「日志」那格冒出来
-  const from = lastTabFromIndex() ?? activeIdx.value + (dir === 'right' ? -1 : 1)
+  // 从真正的来源格出发：首页→统计要滑过两格（中间那列圆钮被跨过去），不能只从邻格冒出来
+  const fromIdx = lastTabFromIndex() ?? activeIdx.value + (dir === 'right' ? -1 : 1)
+  const fromCol = tabs[Math.min(Math.max(fromIdx, 0), tabs.length - 1)].col
   animateWhenConnected(
     el,
     [
-      { transform: `translateX(${from * 100}%)` },
-      { transform: `translateX(${activeIdx.value * 100}%)` }
+      { transform: `translateX(${fromCol * 100}%)` },
+      { transform: `translateX(${activeCol.value * 100}%)` }
     ],
     { duration: SLIDE_MS, easing: SLIDE_EASE }
   )
 }
 
-// 首次挂载：冷启动没有方向信号，直接落在当前格；从别的 tab 切来的首访则带着方向——
-// 页面 onShow 先于本组件挂载就把 enterSeq 加过了，下面的 watch 看不到这次变化，得在这里补播
-onMounted(() => {
-  slideIndicator(props.enterDir ?? null)
+// ── 进行中的会话（ADR 0020：会话存本机；回程入口从首页横幅挪到这颗圆钮）──
+const session = ref<Session | null>(null)
+const resumeFx = ref<ResumeFx>(getResumeFx())
+
+function refreshSession() {
+  session.value = loadSession()
+  resumeFx.value = getResumeFx()
+}
+
+const doneCount = computed(() =>
+  (session.value?.blocks ?? []).reduce((sum, b) => sum + b.sets.filter((s) => s.done).length, 0)
+)
+
+const btnLabel = computed(() => (session.value ? `继续训练，已完成 ${doneCount.value} 组` : '开始训练'))
+
+// ── 选计划（ADR 0016：周安排只决定谁置顶，不自动执行）──
+const schedule = useScheduleStore()
+const picker = ref(false)
+
+const pickerHint = computed(() => {
+  if (schedule.todayPlan) return `今天 · ${schedule.todayPlan.name}`
+  if (schedule.isRest) return '今天休息'
+  return '今天没有安排'
 })
 
-// 之后每次页面被显示，页面把 enterSeq 加一，这里据此重放
-watch(
-  () => props.enterSeq,
-  () => slideIndicator(props.enterDir ?? null)
-)
+/** 今天的置顶，其余保持原序 */
+const plansOrdered = computed(() => {
+  const todayId = schedule.todayPlan?.id
+  const list = [...schedule.plans]
+  if (todayId == null) return list
+  const i = list.findIndex((p) => p.id === todayId)
+  return i <= 0 ? list : [list[i], ...list.slice(0, i), ...list.slice(i + 1)]
+})
+
+function openPicker() {
+  void schedule.load()
+  picker.value = true
+}
+
+/** 新会话带 `fresh=1`：会话页据此放弃接续、重新开一场 */
+function startPlan(id: number) {
+  picker.value = false
+  uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
+}
+
+function freeTrain() {
+  picker.value = false
+  uni.navigateTo({ url: '/pages/session/index?fresh=1' })
+}
+
+/** 没有计划时的出口：去「我的 → 训练计划」新建（改计划只走那里） */
+function goPlans() {
+  picker.value = false
+  uni.navigateTo({ url: '/pages/plans/index' })
+}
+
+// 长按之后松手，浏览器多半还会补发一次 click——用这个标记吞掉，免得「弹框」和「直接继续」同时发生
+let swallowClick = false
+
+function onCenterTap() {
+  if (swallowClick) {
+    swallowClick = false
+    return
+  }
+  refreshSession()
+  if (session.value) {
+    uni.navigateTo({ url: '/pages/session/index' })
+    return
+  }
+  openPicker()
+}
+
+/** 长按：只在有进行中的会话时有意义——开新的要先确认丢掉旧的（ADR 0020） */
+function onCenterLongPress() {
+  refreshSession()
+  const s = session.value
+  if (!s) return
+  swallowClick = true
+  setTimeout(() => (swallowClick = false), 800)
+  uni.showModal({
+    title: '上一次训练还没结束',
+    content: `已记 ${doneCount.value} 组 · 已进行 ${formatClock(netElapsedSec(s, Date.now()))}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
+    confirmText: '继续上次',
+    cancelText: '开新的',
+    success: ({ confirm }) => {
+      if (confirm) {
+        uni.navigateTo({ url: '/pages/session/index' })
+        return
+      }
+      clearSession()
+      session.value = null
+      openPicker()
+    }
+  })
+}
 
 function go(t: (typeof tabs)[number]) {
   if (t.key === props.active) return
@@ -87,85 +224,291 @@ function go(t: (typeof tabs)[number]) {
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
   startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].slide)
 }
+
+// 首次挂载：冷启动没有方向信号，直接落在当前格；从别的 tab 切来的首访则带着方向——
+// 页面 onShow 先于本组件挂载就把 enterSeq 加过了，下面的 watch 看不到这次变化，得在这里补播
+onMounted(() => {
+  measure()
+  window.addEventListener('resize', measure)
+  refreshSession()
+  slideIndicator(props.enterDir ?? null)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measure)
+})
+
+// 之后每次页面被显示，页面把 enterSeq 加一：重量宽度（藏起来期间可能转过屏）、重读会话、重放指示条
+watch(
+  () => props.enterSeq,
+  () => {
+    measure()
+    refreshSession()
+    picker.value = false
+    slideIndicator(props.enterDir ?? null)
+  }
+)
 </script>
 
 <template>
   <view class="ft-tabbar">
-    <view class="ft-tabbar__items">
-      <view
-        v-for="t in tabs"
-        :key="t.key"
-        class="ft-tabbar__item"
-        :class="{ 'is-active': t.key === active }"
-        @click="go(t)"
-      >
-        <wd-icon :name="t.icon" size="21px" />
-        <text class="ft-tabbar__label">{{ t.label }}</text>
+    <view ref="barRef" class="ft-tabbar__bar">
+      <!-- 投影：按凹口路径画的模糊影子，垫在玻璃下面 -->
+      <svg v-if="notchPath" class="ft-tabbar__svg" :viewBox="`0 0 ${barW} ${BAR_H}`" aria-hidden="true">
+        <defs>
+          <filter :id="shadowId" x="-20%" y="-40%" width="140%" height="200%">
+            <feGaussianBlur stdDeviation="12" />
+          </filter>
+        </defs>
+        <path :d="notchPath" class="ft-tabbar__shadow" transform="translate(0 12)" :filter="`url(#${shadowId})`" />
+      </svg>
+
+      <view class="ft-tabbar__glass" :style="glassStyle" />
+
+      <!-- 外描边 ＋ 白亮边：同一条路径描两遍 -->
+      <svg v-if="notchPath" class="ft-tabbar__svg" :viewBox="`0 0 ${barW} ${BAR_H}`" aria-hidden="true">
+        <path :d="notchPath" class="ft-tabbar__outline" />
+        <path :d="notchPath" class="ft-tabbar__edge" />
+      </svg>
+
+      <view class="ft-tabbar__track">
+        <view
+          ref="indRef"
+          class="ft-tabbar__ind"
+          :style="{ transform: `translateX(${activeCol * 100}%)` }"
+        />
+      </view>
+
+      <view class="ft-tabbar__items" role="tablist" aria-label="主导航">
+        <template v-for="(t, i) in tabs" :key="t.key">
+          <view v-if="i === 2" class="ft-tabbar__hole" />
+          <view
+            class="ft-tabbar__item"
+            :class="{ 'is-active': t.key === active }"
+            role="tab"
+            :aria-selected="t.key === active"
+            @click="go(t)"
+          >
+            <FtIcon :name="t.key === active ? t.iconOn : t.icon" :size="22" />
+            <text class="ft-tabbar__label">{{ t.label }}</text>
+          </view>
+        </template>
+      </view>
+
+      <view class="ft-tabbar__center">
+        <FtMeteorTrace v-if="session && resumeFx !== 'off'" :fx="resumeFx === 'glow' ? 'glow' : 'meteor'" />
+        <view
+          class="ft-tabbar__btn"
+          role="button"
+          :aria-label="btnLabel"
+          @click="onCenterTap"
+          @longpress="onCenterLongPress"
+        >
+          <FtIcon v-if="session" name="play" :size="26" tone="inverse" />
+          <FtIcon v-else name="dumbbell" :size="28" :stroke="2.2" tone="inverse" />
+        </view>
       </view>
     </view>
 
-    <!-- 当前项短横：用墨黑而不是荧光笔——`$app-highlight` 在白底上对比度约 1.1:1，
-         细线放上去基本看不见（首页流光第①条同款教训），荧光仍留给内容级高亮 -->
-    <view
-      ref="indRef"
-      class="ft-tabbar__ind"
-      :style="{ transform: `translateX(${indOffset * 100}%)` }"
-    />
+    <!-- 选计划弹层：放在玻璃层外面（带 backdrop-filter 的祖先会改掉 fixed 的定位基准） -->
+    <view v-if="picker" class="ft-tabbar__sheet">
+      <FtSheet title="选择训练计划" :sub="pickerHint" @close="picker = false">
+        <scroll-view v-if="plansOrdered.length" scroll-y class="ft-tabbar__plans">
+          <FtListRow
+            v-for="p in plansOrdered"
+            :key="p.id"
+            :title="p.name"
+            :sub="`${p.exerciseCount} 个动作${p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''}`"
+            :highlight="p.id === schedule.todayPlan?.id"
+            arrow
+            @click="startPlan(p.id)"
+          >
+            <template #badge>
+              <text v-if="p.id === schedule.todayPlan?.id" class="ft-tabbar__badge">今天 · 建议</text>
+            </template>
+          </FtListRow>
+        </scroll-view>
+
+        <FtEmpty v-else title="还没有训练计划" sub="在「我的 → 训练计划」里建一个，之后就能在这里选。" />
+
+        <view class="ft-tabbar__actions">
+          <FtButton v-if="!plansOrdered.length" variant="primary" block @click="goPlans">去新建计划</FtButton>
+          <FtButton variant="ghost" block @click="freeTrain">自由训练</FtButton>
+        </view>
+      </FtSheet>
+    </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .ft-tabbar {
-  /* 切页时底栏要钉住：靠 App.vue 里 __bottom 的 z-index（20）压住克隆层（10），
-     这里不需要额外的东西。 */
+  /* 外层透明、不接点击：只有胶囊和圆钮挡手，底下的内容照样滚 */
+  pointer-events: none;
+  padding: 0 $tabbar-side calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+}
+
+.ft-tabbar__bar {
   position: relative;
-  overflow: hidden;
-  background: $app-surface;
-  border-top: 1rpx solid $app-line;
-  padding: 14rpx 0 calc(10rpx + env(safe-area-inset-bottom));
+  height: $tabbar-h;
+  pointer-events: auto;
 }
 
-.ft-tabbar__items {
-  display: flex;
+.ft-tabbar__svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: $tabbar-h;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.ft-tabbar__item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4rpx;
-  color: $app-ink-subtle;
-  font-size: $text-xs;
-  line-height: 1.2;
-  transition: color $dur-fast $ease-out;
+.ft-tabbar__shadow {
+  fill: $tabbar-shadow-color;
 }
 
-.ft-tabbar__item.is-active {
-  color: $app-ink;
-  font-weight: 600;
+.ft-tabbar__outline {
+  fill: none;
+  stroke: $tabbar-outline;
+  stroke-width: 1.5;
+}
+
+.ft-tabbar__edge {
+  fill: none;
+  stroke: $glass-edge;
+  stroke-width: 1;
+}
+
+/* 宽度没量到之前（首帧）先按普通胶囊画，量到后换成带凹口的路径 */
+.ft-tabbar__glass {
+  position: absolute;
+  inset: 0;
+  border-radius: $radius-pill;
+  background: $glass-bg-strong;
+  -webkit-backdrop-filter: $glass-blur;
+  backdrop-filter: $glass-blur;
+}
+
+/* 指示条轨道与五列对齐：内边距 6px，每列 20% */
+.ft-tabbar__track {
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
 }
 
 .ft-tabbar__ind {
   position: absolute;
   left: 0;
-  bottom: calc(4rpx + env(safe-area-inset-bottom));
-  width: 25%;
+  top: 0;
+  bottom: 0;
+  width: 20%;
   display: flex;
   justify-content: center;
-  pointer-events: none;
 }
 
 .ft-tabbar__ind::before {
   content: '';
-  width: 32rpx;
-  height: 4rpx;
-  border-radius: 2rpx;
-  background: $app-ink;
+  width: 58px;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+}
+
+.ft-tabbar__items {
+  position: absolute;
+  inset: 6px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-items: center;
+  align-items: stretch;
+}
+
+.ft-tabbar__item {
+  width: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: $app-ink-muted;
+  transition: color $dur-fast $ease-out, transform $dur-fast $ease-out;
+}
+
+.ft-tabbar__item:active {
+  transform: scale(0.94);
+}
+
+.ft-tabbar__label {
+  font-size: $text-xs;
+  line-height: 1.2;
+}
+
+.ft-tabbar__item.is-active {
+  color: $app-ink;
+}
+
+.ft-tabbar__item.is-active .ft-tabbar__label {
+  font-weight: $weight-bold;
+}
+
+/* 圆钮：嵌在凹口里，圆心对准凹口圆心（顶边上方 4px） */
+.ft-tabbar__center {
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  width: $tabbar-btn;
+  height: $tabbar-btn;
+  margin-left: calc(#{$tabbar-btn} / -2);
+}
+
+.ft-tabbar__btn {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: $accent-bg;
+  box-shadow: $accent-shadow-round;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform $dur-fast $ease-out;
+  /* 长按要用来弹二选一：别让系统弹「复制 / 选择」菜单 */
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-tabbar__btn:active {
+  transform: scale(0.93);
+}
+
+.ft-tabbar__sheet {
+  pointer-events: auto;
+}
+
+.ft-tabbar__plans {
+  max-height: 560rpx;
+  margin-bottom: 24rpx;
+}
+
+.ft-tabbar__badge {
+  flex-shrink: 0;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+  color: $accent-strong;
+  background: $accent-soft;
+  border-radius: $radius-pill;
+  padding: 2rpx 14rpx;
+}
+
+.ft-tabbar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ft-tabbar__item {
+  .ft-tabbar__item,
+  .ft-tabbar__btn {
     transition: none;
   }
 }

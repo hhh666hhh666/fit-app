@@ -9,6 +9,7 @@ import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/forma
 import { metricKindOf, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 import { playTabEnter, takeTabEnter } from '@/utils/nav'
+import FtIcon from '@/components/FtIcon.vue'
 
 // 切页入场（ADR 0038）：页面现在被保活、不再重建，所以只能每次 onShow 按方向重放一遍。
 const tabDir = ref<'left' | 'right' | null>(null)
@@ -284,7 +285,7 @@ function doDelete() {
             class="lrow__check"
             :class="{ 'lrow__check--on': selected.has(item.id) }"
           >
-            <wd-icon v-if="selected.has(item.id)" name="check" size="13px" color="#ffffff" />
+            <FtIcon v-if="selected.has(item.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
           </view>
           <view class="lrow__date">
             <text class="lrow__date-main ft-num">{{ formatDateLabel(item.createdAt) }}</text>
@@ -572,7 +573,7 @@ function doDelete() {
 }
 
 .log__pad {
-  height: 240rpx;
+  height: $tabbar-space;
 }
 
 .log__more {
@@ -590,5 +591,7 @@ function doDelete() {
   bottom: 0;
   /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
   z-index: 20;
+  /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
+  pointer-events: none;
 }
 </style>

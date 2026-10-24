@@ -416,7 +416,7 @@ function barHeight(count: number): string {
 }
 
 .stats__pad {
-  height: 200rpx;
+  height: $tabbar-space;
 }
 
 .stats__bottom {
@@ -426,5 +426,7 @@ function barHeight(count: number): string {
   bottom: 0;
   /* 高于切页克隆层（.tab-slide-layer 是 10）：转场期间底栏钉住、不被遮 */
   z-index: 20;
+  /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
+  pointer-events: none;
 }
 </style>

@@ -27,9 +27,9 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        // wot-design-uni 的 scss 用了 @import 与 sass 全局内置函数（nth/unquote 等），
-        // 在 Dart Sass 1.80+ 上是 deprecation warning。库不归我们改，静音掉以保持日志干净；
-        // 这三类是「库的历史写法」，新写的样式不受影响。
+        // uni-app 自带的 scss 与旧版 sass 调用方式在 Dart Sass 1.80+ 上是 deprecation warning
+        // （当初主要是 wot-design-uni 的 @import 与全局内置函数，wot 已随「晴窗」移除，ADR 0041）。
+        // 不归我们改的历史写法，静音掉以保持日志干净；新写的样式不受影响。
         silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'if-function']
       }
     }

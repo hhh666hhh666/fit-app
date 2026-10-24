@@ -6,7 +6,7 @@ import { ensureLogin } from '@/utils/guard'
 import { getResumeFx, RESUME_FX_OPTIONS, setResumeFx, type ResumeFx } from '@/utils/resume-fx'
 
 // ── 设置：图片上传压缩（四档）＋ 饮食目标（饮水步进不在这里——在饮食页就地改）
-//    ＋ 训练横幅动效（本机偏好，点选即存，不走下面的「保存」）──
+//    ＋ 训练进行中动效（本机偏好，点选即存，不走下面的「保存」）──
 
 const resumeFx = ref<ResumeFx>(getResumeFx())
 
@@ -151,10 +151,10 @@ function goBack() {
         </view>
       </view>
 
-      <!-- 训练横幅动效（放最后：纯观感偏好，排在业务设置之后） -->
+      <!-- 训练进行中动效（放最后：纯观感偏好，排在业务设置之后） -->
       <view class="ft-card block">
-        <text class="block__title">训练横幅动效</text>
-        <text class="block__hint">首页「训练进行中」边框的动效；仅本机，点选即生效</text>
+        <text class="block__title">训练进行中动效</text>
+        <text class="block__hint">训练没结束时，底栏中间圆钮外圈的动效；仅本机，点选即生效</text>
         <view v-for="o in RESUME_FX_OPTIONS" :key="o.key" class="qrow" @click="pickResumeFx(o.key)">
           <view class="qrow__mid">
             <text class="qrow__label">{{ o.label }}</text>

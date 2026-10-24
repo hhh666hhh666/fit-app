@@ -93,7 +93,7 @@ function copyInherited(from: Element | null, to: HTMLElement) {
 }
 
 /**
- * `cloneNode` 不带 canvas 的像素，克隆出来是空白（趋势图、训练横幅的流星）。
+ * `cloneNode` 不带 canvas 的像素，克隆出来是空白（趋势图）。
  * 按顺序一一对应，把当前这一帧画过去——滑出那 260ms 里它们就是一张静止的截图。
  */
 function copyCanvases(from: HTMLElement, to: HTMLElement) {
@@ -143,7 +143,7 @@ function prefersReducedMotion() {
  * 新页迟迟不来就在 `HOLD_MAX_MS` 后自己滑。
  *
  * `dir` 是旧页滑出的方向；`fromSelectors` 是当前页要跟着滑的块（正文 `.log__body` 等，
- * 首页还有底部的 `.home__dock`）。每块按它此刻在视口里的位置钉进克隆层，所以页面滚动
+ * 每页一块）。每块按它此刻在视口里的位置钉进克隆层，所以页面滚动
  * 不用另算。tabbar 不在这些块里，且四页的 `__bottom` 都是 `z-index: 20`，
  * 克隆层（10）压不到它——只有 tabbar 钉住不动。
  */
@@ -213,7 +213,7 @@ export function startSlide(
  * 传选择器而不是元素：`onShow` 触发时新页的 DOM 未必已经在文档里（首次挂载尤其慢），
  * 而 uni-app H5 的 `<view ref>` 拿到的是**组件实例**（没有 `tagName` / `animate`）。
  * 所以这里轮询到元素真的连进文档再播；第一块（正文）就绪的那一刻同时放行旧页克隆层，
- * 两边在同一帧起跑。`selectors` 里其余的块（首页 `.home__dock`）跟着一起滑。
+ * 两边在同一帧起跑。`selectors` 里其余的块（如果有）跟着一起滑。
  */
 export function playTabEnter(selectors: string | readonly string[], dir: 'left' | 'right' | null) {
   if (!dir || prefersReducedMotion()) {
