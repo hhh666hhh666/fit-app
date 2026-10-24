@@ -6,7 +6,7 @@ import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getPlan } from '@/api/plan'
 import { formatClock, muscleLabel } from '@/utils/format'
-import { metricKindOf, metricText } from '@/utils/metric'
+import { metricKindOf, metricUnit, metricValue } from '@/utils/metric'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
 import {
@@ -508,14 +508,16 @@ const metricKind = computed(() => metricKindOf(hasLift.value, totalFloors.value)
 const volumeLabel = computed(() =>
   !hasLift.value && blocks.value.some((b) => b.metric === 'floors') ? '总层数' : '总重'
 )
-/** 整场既没力量也没层数时显示「—」，不显示 0 kg。 */
-const volumeText = computed(() =>
-  metricText(metricKind.value, totalVolume.value, totalFloors.value)
+/** 整场既没力量也没层数时显示「—」，不显示 0 kg。数字与单位分开画：数字大、单位小。 */
+const volumeValue = computed(() =>
+  metricValue(metricKind.value, totalVolume.value, totalFloors.value)
 )
+const volumeUnit = computed(() => metricUnit(metricKind.value))
 
-/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」。 */
+/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」；还没填的组显示「—」。 */
 function setValueText(x: SessionSet): string {
-  return isFloors.value ? `${x.f} 层` : `${x.w} kg × ${x.r}`
+  if (isFloors.value) return x.f ? `${x.f} 层` : '—'
+  return x.w || x.r ? `${x.w || '–'} kg × ${x.r || '–'}` : '—'
 }
 
 /** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。
@@ -606,6 +608,12 @@ async function submit(doneBlocks: { b: SessionBlock; sets: SessionSet[] }[]) {
   }
 }
 
+/** 卡头的「目标」只留数值：formatSetTargets 有的口径自带「目标」前缀，没设目标就不显示。 */
+function goalValue(goal: string): string {
+  if (!goal || goal === '未设目标') return ''
+  return goal.replace(/^目标 /, '')
+}
+
 function comingSoon(tip: string) {
   uni.showToast({ title: tip, icon: 'none' })
 }
@@ -614,38 +622,30 @@ function comingSoon(tip: string) {
 <template>
   <view class="session">
     <view class="session__body" :class="{ 'session__body--paused': paused }">
-      <!-- 1. 顶部状态行：整块状态区可点＝暂停 / 恢复 -->
+      <!-- 1. 顶部：状态胶囊（整块可点＝暂停 / 恢复）＋ 本次消耗 -->
       <view class="session__head">
-        <view class="session__status" @click="togglePause">
-          <view class="session__dot" :class="{ 'session__dot--paused': paused }" />
-          <text class="session__status-text">{{ paused ? '已暂停' : '训练中' }}</text>
-          <text class="session__status-mid">·</text>
-          <text class="session__clock ft-num">{{ clock }}</text>
-          <view class="session__pause">
-            <view v-if="paused" class="session__play" />
-            <template v-else>
-              <view class="session__pause-bar" />
-              <view class="session__pause-bar" />
-            </template>
+        <view class="status" role="button" :aria-label="paused ? '恢复计时' : '暂停计时'" @click="togglePause">
+          <view class="status__dot" :class="{ 'status__dot--paused': paused }" />
+          <text class="status__text">{{ paused ? '已暂停' : '训练中' }}</text>
+          <text class="status__clock ft-num">{{ clock }}</text>
+          <view class="status__btn">
+            <FtIcon :name="paused ? 'play' : 'pause'" :size="18" :stroke="2" />
           </view>
         </view>
-        <text class="session__end" @click="finish">结束训练</text>
-      </view>
 
-      <!-- 本次消耗：手填，计入当日总消耗（ADR 0029）。放这里是因为它跟时长同级，属于「整场」 -->
-      <view class="burn">
-        <text class="burn__label">本次消耗</text>
-        <view class="burn__field">
+        <!-- 本次消耗：手填，计入当日总消耗（ADR 0029）。它跟时长同级，属于「整场」 -->
+        <view class="burn">
+          <text class="burn__label">消耗</text>
           <input
             v-model="calories"
             type="number"
             class="burn__input ft-num"
             placeholder="–"
+            aria-label="本次消耗（大卡），算进今日消耗"
             :disabled="paused"
           />
-          <text class="burn__unit">大卡</text>
+          <text class="burn__label">大卡</text>
         </view>
-        <text class="burn__hint">手填，算进今日消耗</text>
       </view>
 
       <template v-if="curBlock">
@@ -656,17 +656,17 @@ function comingSoon(tip: string) {
               v-for="(b, i) in blocks"
               :id="'chip-' + i"
               :key="i"
-              class="switcher__chip"
-              :class="{
-                'switcher__chip--active': i === curIdx,
-                'switcher__chip--done': i !== curIdx && isBlockDone(i)
-              }"
+              class="chip"
+              :class="{ 'chip--active': i === curIdx }"
               @click="switchTo(i)"
             >
-              <text class="switcher__name">{{ b.name }}</text>
-              <view class="switcher__meta">
-                <text v-if="i !== curIdx && isBlockDone(i)" class="switcher__tick">✓</text>
-                <text class="switcher__prog ft-num">{{ doneInBlock(i) }}/{{ b.sets.length }}</text>
+              <text class="chip__name">{{ b.name }}</text>
+              <view
+                class="chip__prog ft-num"
+                :class="{ 'chip__prog--on': i === curIdx || isBlockDone(i) }"
+              >
+                <FtIcon v-if="i !== curIdx && isBlockDone(i)" name="check" :size="13" :stroke="2.6" />
+                <text>{{ doneInBlock(i) }}/{{ b.sets.length }}</text>
               </view>
             </view>
           </view>
@@ -685,348 +685,295 @@ function comingSoon(tip: string) {
               <text class="card__title">{{ curBlock.name }}</text>
               <text class="card__tag">{{ curBlock.muscle }}</text>
             </view>
-            <view class="card__last">
-              <text v-if="curBlock.last === '暂无记录'">暂无记录</text>
-              <text v-else>上次 <text class="ft-num">{{ curBlock.last }}</text></text>
-              <text v-if="curBlock.goal" class="card__goal ft-num">{{ curBlock.goal }}</text>
+            <view class="card__meta">
+              <text v-if="curBlock.last === '暂无记录'">上次 暂无记录</text>
+              <text v-else>上次 <text class="card__meta-val ft-num">{{ curBlock.last }}</text></text>
+              <text v-if="goalValue(curBlock.goal)">
+                目标 <text class="card__meta-val ft-num">{{ goalValue(curBlock.goal) }}</text>
+              </text>
             </view>
           </view>
 
-          <view class="card__legend">
-            <text class="legend__c1">组次</text>
-            <view class="legend__right">
-              <text class="ft-num">{{ isFloors ? '层数' : '负荷 / 次数' }}</text>
-              <text class="legend__state">状态</text>
-            </view>
-          </view>
+          <view class="sets">
+            <view
+              v-for="(s, i) in curBlock.sets"
+              :key="i"
+              class="setrow"
+              :class="{ 'setrow--active': isActive(i), 'setrow--todo': !s.done && !isActive(i) }"
+              @longpress="onLongPress(i)"
+            >
+              <text class="setrow__idx ft-num">{{ i + 1 }}</text>
 
-          <view
-            v-for="(s, i) in curBlock.sets"
-            :key="i"
-            class="setrow"
-            :class="{ 'setrow--active': isActive(i) }"
-            @longpress="onLongPress(i)"
-          >
-            <view v-if="isActive(i)" class="setrow__bar" />
-
-            <text class="setrow__idx" :class="{ 'setrow__idx--strong': isActive(i) }">
-              第 {{ i + 1 }} 组
-            </text>
-
-            <view class="setrow__right">
-              <!-- 完成态：只读值 ＋ 这一组的净用时 ＋ 实心勾 -->
-              <template v-if="s.done">
-                <text class="setrow__value ft-num">{{ setValueText(s) }}</text>
-                <text v-if="s.dur != null" class="setrow__dur ft-num">{{ formatClock(s.dur) }}</text>
-                <view class="setrow__checkbox">
-                  <FtIcon name="check" :size="14" :stroke="2.4" />
-                </view>
-              </template>
-
-              <!-- 未完成：值可改；点勾完成（活动行黑框高亮，其余浅框） -->
-              <template v-else>
+              <!-- 当前组：值可改，橙色圆钮＝完成本组（本屏唯一的橙色焦点） -->
+              <template v-if="isActive(i)">
                 <view class="setrow__inputs">
-                  <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
-                    <input
-                      v-if="isFloors"
-                      v-model="s.f"
-                      type="number"
-                      class="setrow__input-field ft-num"
-                      :disabled="paused"
-                    />
-                    <input
-                      v-else
-                      v-model="s.w"
-                      type="digit"
-                      class="setrow__input-field ft-num"
-                      :disabled="paused"
-                    />
-                    <text class="setrow__unit">{{ isFloors ? '层' : 'kg' }}</text>
-                  </view>
+                  <input
+                    v-if="isFloors"
+                    v-model="s.f"
+                    type="number"
+                    class="setrow__input ft-num"
+                    aria-label="层数"
+                    :disabled="paused"
+                  />
+                  <input
+                    v-else
+                    v-model="s.w"
+                    type="digit"
+                    class="setrow__input ft-num"
+                    aria-label="重量"
+                    :disabled="paused"
+                  />
+                  <text class="setrow__unit">{{ isFloors ? '层' : 'kg' }}</text>
                   <template v-if="!isFloors">
-                    <text class="setrow__x">×</text>
-                    <view class="setrow__input" :class="{ 'setrow__input--soft': !isActive(i) }">
-                      <input
-                        v-model="s.r"
-                        type="number"
-                        class="setrow__input-field ft-num"
-                        :disabled="paused"
-                      />
-                      <text class="setrow__unit">次</text>
-                    </view>
+                    <text class="setrow__x ft-num">×</text>
+                    <input
+                      v-model="s.r"
+                      type="number"
+                      class="setrow__input setrow__input--reps ft-num"
+                      aria-label="次数"
+                      :disabled="paused"
+                    />
+                    <text class="setrow__unit">次</text>
                   </template>
                 </view>
-                <view
-                  class="setrow__check"
-                  :class="{ 'setrow__check--pending': !isActive(i) }"
-                  @click="completeSet(i)"
-                >
-                  <FtIcon name="check" :size="14" :stroke="2.4" :tone="isActive(i) ? 'inverse' : 'inherit'" />
+                <view class="setrow__go" role="button" aria-label="完成本组" @click="completeSet(i)">
+                  <FtIcon name="check" :size="24" :stroke="2.2" />
                 </view>
+              </template>
+
+              <!-- 已完成：只读值 ＋ 这一组的净用时 ＋ 浅橙实心勾；还没轮到：只读值 ＋ 虚线圈 -->
+              <template v-else>
+                <text class="setrow__value ft-num">{{ setValueText(s) }}</text>
+                <text class="setrow__dur ft-num">{{ s.done && s.dur != null ? formatClock(s.dur) : '' }}</text>
+                <view v-if="s.done" class="setrow__done">
+                  <FtIcon name="check" :size="18" :stroke="2.2" />
+                </view>
+                <view v-else class="setrow__todo" />
               </template>
             </view>
           </view>
-        </view>
 
-        <!-- 3. 加一组 -->
-        <view class="add-set" :class="{ 'add-set--locked': paused }" @click="addSet">
-          <text class="add-set__plus">+</text>
-          <text>加一组</text>
-        </view>
-
-        <!-- 4. 添加动作（临场增删动作见待办，暂为占位） -->
-        <view class="add-act" @click="comingSoon('动作选择建设中')">
-          <text class="add-set__plus">+</text>
-          <text>添加动作</text>
+          <!-- 3. 加一组 ／ 添加动作（临场增删动作见待办，暂为占位） -->
+          <view class="card__actions">
+            <view class="card__action" :class="{ 'card__action--locked': paused }" @click="addSet">
+              <FtIcon name="plus" :size="18" :stroke="2" />
+              <text>加一组</text>
+            </view>
+            <view class="card__action" @click="comingSoon('动作选择建设中')">
+              <FtIcon name="plus" :size="18" :stroke="2" />
+              <text>添加动作</text>
+            </view>
+          </view>
         </view>
 
         <text class="session__tip">长按组次可删除这一组，或取消完成</text>
       </template>
-
-      <view class="session__pad" />
     </view>
 
-    <!-- 5. 底部固定区 -->
-    <view class="session__bottom">
-      <view class="session__summary">
-        <text>本次 </text>
-        <text class="ft-num session__summary-num">{{ doneCount }}</text>
-        <text> 组 · {{ volumeLabel }} </text>
-        <text class="ft-num session__summary-num">{{ volumeText }}</text>
+    <!-- 4. 底部汇总条：和底栏同款的悬浮胶囊；「结束训练」降为灰色次级按钮 -->
+    <view class="dock">
+      <view class="dock__sum">
+        <text class="dock__label">
+          本次 <text class="dock__label-num ft-num">{{ doneCount }}</text> 组 · {{ volumeLabel }}
+        </text>
+        <view class="dock__value ft-num">
+          <text>{{ volumeValue }}</text>
+          <text v-if="volumeUnit" class="dock__unit">{{ volumeUnit }}</text>
+        </view>
       </view>
-      <view class="ft-btn ft-btn--primary ft-btn--block session__finish" @click="finish">
-        结束训练
-      </view>
+      <view class="dock__end" role="button" @click="finish">结束训练</view>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .session__body {
-  padding: 48rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: calc(36rpx + env(safe-area-inset-top)) 40rpx calc(220rpx + env(safe-area-inset-bottom));
 }
 
-/* ── 顶部状态行 ── */
+/* 暂停中：录入区整体压暗（点击另有代码层拦截，这里只是让「已暂停」看得见） */
+.session__body--paused .card {
+  opacity: 0.45;
+}
+
+/* ── 顶部 ── */
 .session__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16rpx 0;
-  margin-bottom: 32rpx;
+  gap: 20rpx;
 }
 
-.session__status {
+.status {
+  @include glass;
   display: flex;
   align-items: center;
   gap: 16rpx;
+  padding: 16rpx 16rpx 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
-.session__dot {
+/* 计时在走＝橙点 ＋ 浅橙光圈（「训练中」属于动作）；暂停＝空心灰点 */
+.status__dot {
   width: 16rpx;
   height: 16rpx;
   border-radius: 50%;
-  background: $app-ink;
+  background: $accent;
+  box-shadow: 0 0 0 8rpx $accent-soft;
 }
 
-.session__dot--paused {
-  background: $app-surface;
-  border: 2rpx solid $app-ink-subtle;
+.status__dot--paused {
+  background: transparent;
+  border: 3rpx solid $app-ink-subtle;
+  box-shadow: none;
+  box-sizing: border-box;
 }
 
-.session__status-text {
-  font-size: $text-lg;
-  font-weight: 600;
+.status__text {
+  font-size: $text-base;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
-.session__status-mid {
-  color: $app-ink-muted;
-}
-
-.session__clock {
-  font-size: $text-lg;
-  font-weight: 600;
+/* 0–9 在 Nunito 里等宽，min-width 只防「9:59 → 10:00」多一位时整块跳 */
+.status__clock {
+  min-width: 108rpx;
+  font-size: 36rpx;
+  font-weight: $weight-heavy;
   color: $app-ink;
 }
 
-/* 暂停 / 恢复按钮：运行中显示两条竖线，暂停中显示三角 */
-.session__pause {
+.status__btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6rpx;
-  width: 44rpx;
-  height: 44rpx;
-  border: 2rpx solid $app-ink;
-  border-radius: 8rpx;
 }
 
-.session__pause-bar {
-  width: 4rpx;
-  height: 20rpx;
-  background: $app-ink;
-}
-
-.session__play {
-  width: 0;
-  height: 0;
-  border-top: 10rpx solid transparent;
-  border-bottom: 10rpx solid transparent;
-  border-left: 16rpx solid $app-ink;
-  margin-left: 4rpx;
-}
-
-.session__end {
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
-}
-
-/* ── 本次消耗（ADR 0029） ── */
 .burn {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  padding: 14rpx 20rpx;
-  margin: -12rpx 0 26rpx;
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-md;
+  gap: 12rpx;
 }
 
 .burn__label {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-muted;
-  flex-shrink: 0;
-}
-
-.burn__field {
-  display: flex;
-  align-items: baseline;
-  gap: 6rpx;
-  flex: 1;
 }
 
 .burn__input {
-  min-width: 0;
-  width: 140rpx;
-  font-size: $text-md;
-  font-weight: 600;
+  width: 112rpx;
+  height: 68rpx;
+  box-sizing: border-box;
+  border-radius: $radius-sm;
+  background: $glass-bg-strong;
+  border: 1rpx solid $glass-edge;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: $weight-bold;
   color: $app-ink;
-  border-bottom: 2rpx solid $app-line;
-  padding-bottom: 2rpx;
 }
 
-.burn__unit {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+/* ── 动作切换条 ── */
+.switcher {
+  white-space: nowrap;
+  /* 横滑条出血到屏幕边缘，首尾项仍与正文对齐 */
+  margin: 0 -40rpx;
+  width: auto;
 }
 
-.burn__hint {
-  font-size: 18rpx;
-  color: $app-ink-subtle;
-  flex-shrink: 0;
+/* 横滑条不要滚动条：电脑浏览器里它会在胶囊下面画一条灰线 */
+.switcher :deep(.uni-scroll-view) {
+  scrollbar-width: none;
+}
+
+.switcher :deep(.uni-scroll-view::-webkit-scrollbar) {
+  display: none;
+}
+
+.switcher__inner {
+  display: inline-flex;
+  gap: 16rpx;
+  padding: 4rpx 40rpx 12rpx;
+}
+
+.chip {
+  @include glass;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 140rpx;
+  padding: 18rpx 28rpx;
+  border-radius: 36rpx;
+  border: 1rpx solid $glass-edge;
+  box-shadow: $shadow-sm;
+}
+
+/* 当前动作：白底 ＋ 橙色描边（ADR 0041） */
+.chip--active {
+  background: $app-surface;
+  border-color: $accent;
+  box-shadow: 0 0 0 1rpx $accent, 0 16rpx 32rpx -20rpx $accent-glow;
+}
+
+.chip__name {
+  max-width: 240rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.chip__prog {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* 做完的和正在做的进度用深橙：进度是「动作的结果」 */
+.chip__prog--on {
+  color: $accent-strong;
 }
 
 /* ── 循环组状态行 ── */
 .circhint {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  padding: 0 4rpx 18rpx;
+  gap: 12rpx;
+  padding: 0 8rpx;
 }
 
 .circhint__dot {
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background: $app-ink;
+  background: $app-ink-muted;
 }
 
 .circhint__text {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-/* 暂停中：录入区整体压暗（点击另有代码层拦截，这里只是让「已暂停」看得见） */
-.session__body--paused .card,
-.session__body--paused .add-set {
-  opacity: 0.45;
-}
-
-/* ── 动作切换条 ── */
-.switcher {
-  white-space: nowrap;
-  margin-bottom: 24rpx;
-}
-
-.switcher__inner {
-  display: inline-flex;
-  gap: 16rpx;
-  padding-bottom: 4rpx;
-}
-
-.switcher__chip {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-  min-width: 168rpx;
-  padding: 16rpx 24rpx;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-md;
-}
-
-.switcher__chip--active {
-  background: $app-ink;
-  border-color: $app-ink;
-}
-
-.switcher__chip--done {
-  background: $app-canvas;
-}
-
-.switcher__name {
   font-size: $text-sm;
-  font-weight: 600;
-  color: $app-ink;
-  max-width: 240rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.switcher__chip--active .switcher__name {
-  color: #ffffff;
-}
-
-.switcher__meta {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.switcher__tick {
-  font-size: 20rpx;
-  line-height: 1;
-  color: $app-ink;
-}
-
-.switcher__prog {
-  font-size: 20rpx;
   color: $app-ink-muted;
-}
-
-.switcher__chip--active .switcher__prog {
-  color: rgba(255, 255, 255, 0.7);
 }
 
 /* ── 录入卡 ── */
 .card {
-  background: $app-surface;
-  border: 1rpx solid $app-line;
+  @include glass;
+  border: 1rpx solid $glass-edge;
   border-radius: $radius-lg;
-  overflow: hidden;
-  margin-bottom: 24rpx;
+  box-shadow: $glass-shadow;
+  padding: 36rpx 28rpx 24rpx;
 }
 
 .card--locked {
@@ -1034,275 +981,273 @@ function comingSoon(tip: string) {
 }
 
 .card__head {
-  padding: 32rpx 32rpx 24rpx;
-  border-bottom: 1rpx solid $app-line;
+  padding: 0 12rpx;
 }
 
 .card__title-row {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  margin-bottom: 6rpx;
 }
 
 .card__title {
-  font-size: 40rpx;
-  font-weight: 700;
+  font-size: 44rpx;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .card__tag {
-  font-size: 22rpx;
-  font-weight: 500;
-  color: $app-ink-muted;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
+  padding: 4rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
-.card__last {
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 28rpx;
+  margin-top: 12rpx;
   font-size: $text-sm;
   color: $app-ink-muted;
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
 }
 
-.card__goal {
+.card__meta-val {
   color: $app-ink;
-  font-weight: 500;
-}
-
-/* 表头 */
-.card__legend {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12rpx 32rpx;
-  background: #fbfbfa;
-  border-bottom: 1rpx solid $app-line;
-  font-size: 22rpx;
-  font-weight: 500;
-  color: $app-ink-muted;
-}
-
-.legend__c1 {
-  width: 128rpx;
-}
-
-.legend__right {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-}
-
-.legend__state {
-  width: 56rpx;
-  text-align: right;
 }
 
 /* 组行 */
+.sets {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-top: 28rpx;
+}
+
 .setrow {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 32rpx;
-  background: $app-surface;
-}
-
-.setrow + .setrow {
-  border-top: 1rpx solid $app-line;
-}
-
-.setrow--active {
-  padding: 20rpx 32rpx;
-}
-
-/* 活动行的左缘荧光条（本屏唯一的高亮用法） */
-.setrow__bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 8rpx;
-  background: $app-highlight;
+  gap: 16rpx;
+  min-height: 64rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 36rpx;
 }
 
 .setrow__idx {
-  width: 128rpx;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
+  width: 40rpx;
   flex-shrink: 0;
-}
-
-.setrow__idx--strong {
-  color: $app-ink;
-  font-weight: 600;
-}
-
-.setrow__right {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 20rpx;
+  font-weight: $weight-heavy;
+  color: $app-ink-muted;
 }
 
 .setrow__value {
-  font-size: $text-md;
-  font-weight: 500;
+  flex: 1;
+  font-size: 34rpx;
   color: $app-ink;
+}
+
+.setrow--todo .setrow__value {
+  color: $app-ink-muted;
 }
 
 /* 这一组的净用时（与上一组完成的间隔，不含暂停） */
 .setrow__dur {
-  font-size: 22rpx;
+  width: 96rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
+  text-align: right;
 }
 
-.setrow__checkbox {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 8rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
+.setrow__done,
+.setrow__todo {
+  width: 64rpx;
+  height: 64rpx;
+  margin-left: 16rpx;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+
+.setrow__done {
+  background: $accent-soft;
+  color: $accent-strong;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: $app-ink;
-  flex-shrink: 0;
 }
 
-/* 输入态 */
+.setrow__todo {
+  border: 3rpx dashed $app-line-dash;
+}
+
+/* 当前组：浅橙整行底 ＋ 白色输入框 ＋ 橙色圆钮 */
+.setrow--active {
+  padding: 24rpx;
+  background: $accent-row;
+}
+
+.setrow--active .setrow__idx {
+  color: $accent-strong;
+}
+
 .setrow__inputs {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
+  min-width: 0;
 }
 
 .setrow__input {
-  display: flex;
-  align-items: center;
-  border: 2rpx solid $app-ink;
-  border-radius: 8rpx;
+  width: 124rpx;
+  height: 88rpx;
+  box-sizing: border-box;
+  border-radius: 28rpx;
   background: $app-surface;
-  padding: 8rpx 16rpx;
-}
-
-/* 非活动行（预填待做）：浅框，值可改 */
-.setrow__input--soft {
-  border-color: $app-line;
-}
-
-.setrow__input-field {
-  width: 64rpx;
-  font-size: $text-md;
-  font-weight: 600;
+  box-shadow: inset 0 0 0 3rpx $accent-ring;
+  text-align: center;
+  font-size: 40rpx;
+  font-weight: $weight-heavy;
   color: $app-ink;
-  text-align: left;
+}
+
+.setrow__input--reps {
+  width: 100rpx;
 }
 
 .setrow__unit {
-  font-size: 22rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
-  margin-left: 8rpx;
 }
 
 .setrow__x {
-  font-size: $text-sm;
-  color: $app-ink-muted;
+  padding: 0 4rpx;
+  color: $app-ink-subtle;
 }
 
-.setrow__check {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 8rpx;
-  background: $app-ink;
+.setrow__go {
+  width: 104rpx;
+  height: 104rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: $accent-bg;
+  color: $app-surface;
+  box-shadow: $accent-shadow;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  transition: transform $dur-fast $ease-out;
 }
 
-/* 非活动行（预填待做）的勾：线框空心 */
-.setrow__check--pending {
-  background: $app-surface;
-  border: 2rpx solid $app-ink;
-  color: $app-ink;
+.setrow__go:active {
+  transform: scale(0.94);
 }
 
-/* ── + 加一组 ── */
-.add-set {
+/* ── 加一组 ／ 添加动作 ── */
+.card__actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.card__action {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 28rpx;
+  background: $app-surface-2;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8rpx;
-  padding: 8rpx 8rpx;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
-}
-
-.add-set--locked {
-  pointer-events: none;
-}
-
-.add-set__plus {
   font-size: $text-md;
+  color: $app-ink-2;
 }
 
-/* ── 添加动作（占位） ── */
-.add-act {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  border-top: 1rpx solid $app-line;
-  margin-top: 24rpx;
-  padding: 28rpx 8rpx 0;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
+.card__action:active {
+  opacity: 0.7;
+}
+
+.card__action--locked {
+  pointer-events: none;
 }
 
 /* 长按入口不可见，得说一句 */
 .session__tip {
-  display: block;
-  padding: 20rpx 8rpx 0;
-  font-size: 22rpx;
-  color: $app-ink-subtle;
-}
-
-/* ── 底部固定区 ── */
-.session__pad {
-  height: 320rpx;
-}
-
-.session__bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  border-top: 1rpx solid $app-line;
-  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-}
-
-.session__summary {
   text-align: center;
   font-size: $text-sm;
   color: $app-ink-muted;
-  margin-bottom: 24rpx;
 }
 
-.session__summary-num {
+/* ── 底部汇总条（悬浮胶囊） ── */
+.dock {
+  @include glass($glass-bg-strong);
+  position: fixed;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  padding: 16rpx 16rpx 16rpx 48rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: inset 0 2rpx 0 $app-surface, 0 0 0 1rpx $tabbar-outline, $glass-shadow-float;
+}
+
+.dock__sum {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.dock__label {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.dock__label-num {
+  font-weight: $weight-heavy;
   color: $app-ink;
-  font-weight: 500;
 }
 
-.session__finish {
+.dock__value {
+  font-size: 52rpx;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
+  color: $app-ink;
+}
+
+.dock__unit {
+  margin-left: 8rpx;
+  font-size: $text-base;
+  color: $app-ink-muted;
+  letter-spacing: 0;
+}
+
+.dock__end {
   height: 104rpx;
-  font-size: $text-md;
+  padding: 0 52rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  display: flex;
+  align-items: center;
+  font-size: 30rpx;
+  font-weight: $weight-bold;
+  color: $app-ink;
+  transition: transform $dur-fast $ease-out;
+}
+
+.dock__end:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setrow__go,
+  .dock__end {
+    transition: none;
+  }
 }
 </style>

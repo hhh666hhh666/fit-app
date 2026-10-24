@@ -38,6 +38,7 @@ $app-mask: rgba(29, 29, 31, 0.32); // 弹层遮罩
 // ── 线 ──
 $app-line: rgba(60, 80, 110, 0.14); // 主分隔线
 $app-line-soft: rgba(60, 80, 110, 0.08); // 卡内细分
+$app-line-dash: #c7ccd4; // 虚线占位（会话页还没轮到的组）
 
 // ── 字（苹果系冷中性灰；12px 以下的字一律过 4.5:1）──
 $app-ink: #1d1d1f; // 正文 / 标题
@@ -58,6 +59,8 @@ $accent-shadow: inset 0 2rpx 0 rgba(255, 255, 255, 0.3), 0 20rpx 40rpx -16rpx $a
 $accent-shadow-round: inset 0 2rpx 0 rgba(255, 255, 255, 0.3), 0 24rpx 44rpx -16rpx $accent-glow; // 底栏圆钮
 $accent-comet: #ff7a3a; // 圆钮外圈流星的头
 $accent-track: rgba(217, 82, 27, 0.14); // 圆钮外圈的底轨
+$accent-row: #fcede3; // 会话页「当前组」整行的浅橙底
+$accent-ring: #f2c7aa; // 当前组输入框的内描边
 
 // ── 高亮（PR 数字）：晴窗里改为浅橙底，荧光笔退役 ──
 $app-highlight: $accent-soft;
@@ -76,6 +79,7 @@ $ring-protein-track: #f6e6d8;
 $ring-carb-track: #e4ecf6;
 $ring-fat-track: #f6e3e3;
 $ring-water-track: #dff0ee;
+$ring-kcal: linear-gradient(90deg, #f59a5b, #e5602a); // 首页「今天吃了」的大卡进度条（轨道用 $app-surface-2）
 
 // ── 餐次入口：浅色底 ＋ 同色系图标，六个入口各占一个色相 ──
 $meal-breakfast-bg: #fdefe4;

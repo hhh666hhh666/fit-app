@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import FtIcon from '@/components/FtIcon.vue'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import { computed } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { updateWorkoutNote } from '@/api/workout'
@@ -51,6 +54,11 @@ function blockMetricText(block: {
   return `${formatThousands(sum)} kg`
 }
 
+/** 单组文案：层数口径（爬楼）念层数，其余念「重量 × 次数」。 */
+function setText(block: { metric?: string | null }, s: { weight: number; reps: number; floors?: number | null }): string {
+  return block.metric === 'floors' ? `${s.floors ?? 0} 层` : `${s.weight} × ${s.reps}`
+}
+
 async function close() {
   const s = summary.value
   if (s && s.note && s.id) {
@@ -68,44 +76,44 @@ async function close() {
 <template>
   <view class="summary">
     <view class="summary__body">
-      <!-- 顶栏 -->
+      <!-- 页头：右上角关闭（＝完成），标题区跟页头一套字阶 -->
       <view class="summary__head">
-        <text class="summary__brand">fit-app</text>
-        <text class="summary__close" @click="close">×</text>
+        <view class="summary__title-wrap">
+          <text v-if="summary" class="summary__eyebrow">
+            {{ formatDateTimeLabel(summary.createdAt) }} · {{ summary.title }}
+          </text>
+          <text class="summary__title">训练完成</text>
+        </view>
+        <view class="summary__close" role="button" aria-label="关闭" @click="close">
+          <FtIcon name="close" :size="20" :stroke="2" />
+        </view>
       </view>
 
       <template v-if="summary">
-        <!-- 标题 -->
-        <view class="summary__title-wrap">
-          <text class="summary__title">训练完成</text>
-          <text class="summary__sub">{{ formatDateTimeLabel(summary.createdAt) }} · {{ summary.title }}</text>
-        </view>
-
-        <!-- 数据条：时长 / 组数 / 总容量 -->
-        <view class="metrics">
-          <view class="metrics__cell">
-            <text class="metrics__label">时长</text>
-            <text class="metrics__value ft-num">{{ formatClock(summary.durationSec) }}</text>
+        <!-- 数据卡：时长 / 组数 / 总容量，手填了消耗再多一行（ADR 0029：没填就不出现，别拿 0 占位） -->
+        <view class="glass metrics">
+          <view class="metrics__row">
+            <view class="metrics__cell">
+              <text class="metrics__label">时长</text>
+              <text class="metrics__value ft-num">{{ formatClock(summary.durationSec) }}</text>
+            </view>
+            <view class="metrics__cell">
+              <text class="metrics__label">组数</text>
+              <text class="metrics__value ft-num">{{ totalSets }}<text class="metrics__unit">组</text></text>
+            </view>
+            <view class="metrics__cell">
+              <text class="metrics__label">{{ volumeLabel }}</text>
+              <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit">{{ volumeUnit }}</text></text>
+            </view>
           </view>
-          <view class="metrics__cell">
-            <text class="metrics__label">组数</text>
-            <text class="metrics__value ft-num">{{ totalSets }}<text class="metrics__unit"> 组</text></text>
+          <view v-if="summary.calories != null" class="metrics__burn">
+            <text class="metrics__label">本次消耗</text>
+            <text class="metrics__burn-value ft-num">{{ summary.calories }}<text class="metrics__unit">大卡</text></text>
           </view>
-          <view class="metrics__cell">
-            <text class="metrics__label">{{ volumeLabel }}</text>
-            <text class="metrics__value ft-num">{{ volumeValue }}<text v-if="volumeUnit" class="metrics__unit"> {{ volumeUnit }}</text></text>
-          </view>
-        </view>
-
-        <!-- 本次消耗（ADR 0029）：没填就整行不出现，别拿 0 占位 -->
-        <view v-if="summary.calories != null" class="burnsum">
-          <text class="burnsum__label">本次消耗</text>
-          <text class="burnsum__value ft-num">{{ summary.calories }}</text>
-          <text class="burnsum__unit">大卡</text>
         </view>
 
         <!-- 本次动作明细 -->
-        <view class="detail">
+        <view class="glass detail">
           <view class="detail__head">
             <text class="detail__head-title">本次动作</text>
             <text class="detail__head-count ft-num">{{ summary.blocks.length }} 项</text>
@@ -116,16 +124,16 @@ async function close() {
               <text class="detail__block-meta ft-num">{{ b.sets.length }} 组 · {{ blockMetricText(b) }}</text>
             </view>
             <view class="detail__sets">
-              <template v-for="(s, j) in b.sets" :key="j">
-                <text v-if="j > 0" class="detail__sep">·</text>
-                <text class="detail__chip ft-num" :class="{ 'ft-marker': s.pr }">{{ s.weight }} × {{ s.reps }}</text>
-              </template>
+              <view v-for="(s, j) in b.sets" :key="j" class="detail__chip" :class="{ 'detail__chip--pr': s.pr }">
+                <text class="ft-num">{{ setText(b, s) }}</text>
+                <text v-if="s.pr" class="detail__pr">PR</text>
+              </view>
             </view>
           </view>
         </view>
 
         <!-- 备注 -->
-        <view class="note">
+        <view class="glass note">
           <textarea
             v-model="summary.note"
             class="note__input"
@@ -137,103 +145,89 @@ async function close() {
         </view>
       </template>
 
-      <view v-else class="ft-empty">
-        还没有刚结束的训练
+      <view v-else class="glass">
+        <FtEmpty title="还没有刚结束的训练" sub="结束一次训练后，这里会显示这一场的汇总。" />
       </view>
     </view>
 
-    <!-- 底部 -->
+    <!-- 底部：悬浮的主按钮，与会话页的汇总条同一位置 -->
     <view class="summary__bottom">
-      <view class="ft-btn ft-btn--primary ft-btn--block summary__done" @click="close">
+      <FtButton variant="primary" block class="summary__done" @click="close">
         {{ summary ? '完成' : '回主页' }}
-      </view>
+      </FtButton>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.burnsum {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 10rpx;
-  padding: 4rpx 0 20rpx;
-}
-
-.burnsum__label {
-  font-size: 22rpx;
-  letter-spacing: 0.06em;
-  color: $app-ink-muted;
-}
-
-.burnsum__value {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.burnsum__unit {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
-}
-
 .summary__body {
-  padding: 36rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: calc(36rpx + env(safe-area-inset-top)) 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+/* ── 页头 ── */
 .summary__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 40rpx;
-}
-
-.summary__brand {
-  font-size: $text-sm;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: $app-ink-muted;
-}
-
-.summary__close {
-  font-size: 44rpx;
-  line-height: 1;
-  color: $app-ink-muted;
-  padding: 0 8rpx;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 12rpx 8rpx 8rpx;
 }
 
 .summary__title-wrap {
-  margin-bottom: 36rpx;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.summary__eyebrow {
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .summary__title {
-  display: block;
-  font-size: 48rpx;
-  font-weight: 700;
+  font-size: $text-hero;
+  font-weight: $weight-bold;
+  line-height: 1.25;
   color: $app-ink;
 }
 
-.summary__sub {
-  display: block;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink-muted;
-  padding-top: 6rpx;
+.summary__close {
+  @include glass;
+  width: 72rpx;
+  height: 72rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1rpx solid $glass-edge;
+  box-shadow: $shadow-sm;
+  color: $app-ink-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* ── 数据条 ── */
+/* ── 数据卡 ── */
 .metrics {
+  padding: 32rpx 12rpx;
+}
+
+.metrics__row {
   display: flex;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 32rpx 0;
-  margin-bottom: 28rpx;
 }
 
 .metrics__cell {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -241,124 +235,133 @@ async function close() {
 }
 
 .metrics__cell + .metrics__cell {
-  border-left: 1rpx solid $app-line;
+  border-left: 1rpx solid $app-line-soft;
 }
 
 .metrics__label {
-  font-size: 22rpx;
-  font-weight: 500;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .metrics__value {
-  font-size: $text-lg;
-  font-weight: 600;
+  font-size: 44rpx;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
   color: $app-ink;
 }
 
 .metrics__unit {
-  font-size: $text-sm;
-  font-weight: 400;
-  color: $app-ink-muted;
   /* ⚠️ 不靠文本里的空格留间距：模板里的前导空白会被折叠，数字与单位会贴在一起 */
   margin-left: 6rpx;
+  font-size: $text-sm;
+  font-weight: $weight-bold;
+  letter-spacing: 0;
+  color: $app-ink-muted;
+}
+
+.metrics__burn {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 16rpx;
+  margin: 28rpx 24rpx 0;
+  padding-top: 24rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.metrics__burn-value {
+  font-size: $text-lg;
+  color: $app-ink;
 }
 
 /* ── 明细卡 ── */
 .detail {
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  overflow: hidden;
-  margin-bottom: 28rpx;
+  padding: 28rpx 36rpx 12rpx;
 }
 
 .detail__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 20rpx 32rpx;
-  border-bottom: 1rpx solid $app-line;
+  padding-bottom: 8rpx;
 }
 
 .detail__head-title {
-  font-size: 22rpx;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: $app-ink-muted;
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
 }
 
 .detail__head-count {
-  font-size: 22rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .detail__block {
-  padding: 28rpx 32rpx;
+  padding: 24rpx 0;
 }
 
 .detail__block + .detail__block {
-  border-top: 1rpx solid $app-line;
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .detail__block-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 14rpx;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
 }
 
 .detail__name {
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .detail__block-meta {
-  font-size: 22rpx;
+  flex-shrink: 0;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .detail__sets {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 10rpx;
-}
-
-.detail__sep {
-  color: $app-line;
-  font-weight: 700;
-  font-size: $text-sm;
+  gap: 12rpx;
 }
 
 .detail__chip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink;
-  background: $app-canvas;
-  border: 1rpx solid $app-line-soft;
-  border-radius: 8rpx;
-  padding: 8rpx 16rpx;
 }
 
-/* PR 组：scoped 属性选择器优先级压过全局 .ft-marker，需联合类名提回来 */
-.detail__chip.ft-marker {
-  background: $app-highlight;
-  border-color: $app-highlight;
+/* PR 组：浅橙底 ＋ 深橙字（PR 是「动作的结果」，归橙色） */
+.detail__chip--pr {
+  background: $accent-soft;
+  color: $accent-strong;
+}
+
+.detail__pr {
+  font-size: $text-xs;
+  font-weight: $weight-bold;
 }
 
 /* ── 备注 ── */
 .note {
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 24rpx;
-  margin-bottom: 28rpx;
+  padding: 24rpx 32rpx;
 }
 
 .note__input {
   width: 100%;
-  font-size: $text-sm;
+  min-height: 80rpx;
+  font-size: $text-md;
   line-height: 1.7;
   color: $app-ink;
 }
@@ -370,15 +373,13 @@ async function close() {
 /* ── 底部 ── */
 .summary__bottom {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  padding: 16rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
 }
 
-.summary__done {
-  height: 96rpx;
-  border-radius: 24rpx;
+.summary__bottom .summary__done {
+  height: 104rpx;
+  font-size: 30rpx;
 }
 </style>
