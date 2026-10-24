@@ -19,8 +19,16 @@
   （`E:\develop\android-sdk`：platform-tools + platforms;android-34 + build-tools;34.0.0）
 - `local.properties`（**不入库**）：`sdk.dir` 与签名四件套
   （`fitapp.storeFile` / `fitapp.storePassword` / `fitapp.keyAlias` / `fitapp.keyPassword`）。
-  keystore 在本仓 `.workbuddy/android-secrets/`（**不入库**），**异地备份在部署服务器的 `~/secrets/`**
-  （目录 `700`，内含 `fitapp.jks` 与只存三行口令的 `fitapp-signing.properties`，均 `600`）。
+- **签名文件不入库**，现有三处：
+  - 最早那台开发机的本仓 `.workbuddy/android-secrets/`（原件）；
+  - 部署服务器 `~/secrets/`（异地备份兼新机器取用点：`fitapp.jks` ＋ 只存三行口令的 `fitapp-signing.properties`，
+    目录 `700`、文件 `600`、属主 root）；
+  - 其余开发机从服务器拉的工作副本 `~/.android-keys/`。`fitapp.storeFile` 写它的绝对路径（正斜杠，
+    如 `C:/Users/<用户名>/.android-keys/fitapp.jks`），三个口令项照抄 properties：
+
+  ```bash
+  mkdir -p ~/.android-keys && scp "aliyun:~/secrets/fitapp*" ~/.android-keys/
+  ```
 
 ```bash
 # 1. 先产出内置 H5（注入 API 基址 + 复制进 assets/web + 生成自更新包与清单）
@@ -95,11 +103,8 @@ unzip -l app/build/outputs/apk/release/app-release.apk | grep -c "assets/web/"
 ## 已知边界
 
 - 安装需允许「未知来源」（自签名）；上架需换正式签名。
-- ⚠️ keystore 丢了就没法覆盖安装升级——本机原件在 `.workbuddy/android-secrets/`，
-  **异地备份在部署服务器 `~/secrets/`**（`fitapp.jks` + `fitapp-signing.properties`，目录 `700`、文件 `600`，
-  属主 root）。新机器取用：
-  `mkdir -p ~/.android-keys && scp "aliyun:~/secrets/fitapp*" ~/.android-keys/`，
-  再按上面「构建」一节把 `sdk.dir` 与 `fitapp.*` 四行写进 `local.properties`（`storeFile` 的路径用正斜杠）。
+- ⚠️ keystore 丢了就没法覆盖安装升级（只能卸载重装：本机登录态与没结束的训练会丢）。三处副本见「构建」一节；
+  服务器那份会随 VPS 重装、换服务商一起没，别让它成为唯一的一份——原件所在的开发机退役前，另在密码管理器或网盘留一份。
 - **升级后要重新登录一次**：localStorage 按 origin 隔离，原先存在线上域名下的 token 在虚拟域里读不到。只此一次。
 - WebView 的返回键语义：页面内可后退则后退，到根页退出（见 `MainActivity`）。
 - **新版不自动立刻生效**：下载完弹窗提示，点「立即重启」即刻切换、点「稍后」则下次启动生效。

@@ -13,7 +13,10 @@ alwaysApply: true
 ssh aliyun
 ```
 
-别名在 `C:\Users\lzh\.ssh\config`：`HostName 8.137.172.6`、`User root`、`IdentityFile` 指向私钥。
+别名在 `C:\Users\lzh\.ssh\config`：`HostName 8.137.172.6`、`Port 39222`、`User root`、`IdentityFile` 指向私钥。
+
+- **端口**：2026-10-24 起本机走 **39222**；sshd 目前 22 与 39222 都在听，发布流水线仍连 22，**22 不能关**——要关先改流水线与 known_hosts（见 `docs/todo/archive/2026-10-24-TODO-服务器SSH端口迁移.md`）。
+- **连不上时先分清是哪一头**：`kex_exchange_identification: Connection closed by remote host`（TCP 连上了、连 SSH 横幅都没收到就断）且 `github.com:22` 也一样，就是本机流量被透明代理接管、节点不放行 SSH——域名解析成 `198.18.x.x`（fake-ip）即是证据。在代理里把 `8.137.172.6`、`11-2.cn` 设直连；别反复重试。
 
 - **私钥位置**：`C:\Users\lzh\.ssh\agent\workbuddy.pem`。需要显式写路径时用 `~/.ssh/agent/workbuddy.pem` 的写法（git bash 的 `~` 即 `C:\Users\lzh`），**不要写反斜杠形式**。
 - 与 quizzy 共用同一把、同一台服务器；发布流水线 SSH 部署用的 `DEPLOY_SSH_KEY` 内容就是这把私钥——CI 侧怎么用看 `deploy/README.md` 与 `.github/workflows/release.yml`，本文件不复述。
