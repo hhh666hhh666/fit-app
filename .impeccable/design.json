@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T18:00:00+08:00",
+  "title": "Design System: fit-app · 晴窗",
+  "extensions": {
+    "colorMeta": {
+      "ember": { "role": "primary", "displayName": "余烬橙 Ember", "tonalRamp": ["#3d1505", "#6a240a", "#97340f", "#c44514", "#d9521b", "#e8642c", "#f2c7aa", "#fde8dc"] },
+      "ember-deep": { "role": "primary", "displayName": "深余烬 Ember Deep" },
+      "ember-top": { "role": "primary", "displayName": "主按钮渐变上端" },
+      "ember-bottom": { "role": "primary", "displayName": "主按钮渐变下端" },
+      "ember-wash": { "role": "primary", "displayName": "余烬薄雾 Ember Wash" },
+      "ember-row": { "role": "primary", "displayName": "余烬行（会话页当前组底）" },
+      "ember-ring": { "role": "primary", "displayName": "余烬圈（会话页当前组描边）" },
+      "protein": { "role": "secondary", "displayName": "蛋白质 杏橙" },
+      "carb": { "role": "secondary", "displayName": "碳水 雾蓝" },
+      "fat": { "role": "secondary", "displayName": "脂肪 玫粉" },
+      "water": { "role": "secondary", "displayName": "饮水 青绿" },
+      "danger": { "role": "tertiary", "displayName": "危险红 Danger" },
+      "star": { "role": "tertiary", "displayName": "星标金 Star" },
+      "canvas": { "role": "neutral", "displayName": "天光 Canvas", "tonalRamp": ["#1d2733", "#3a4a5c", "#5f7388", "#8fa3b8", "#bccbdb", "#e4ecf5", "#eff4f9", "#f6f9fc"] },
+      "ink": { "role": "neutral", "displayName": "墨 Ink", "tonalRamp": ["#1d1d1f", "#3a3a3c", "#545458", "#6e6e73", "#8e8e93", "#aeaeb2", "#d1d1d6", "#f2f2f7"] },
+      "surface": { "role": "neutral", "displayName": "纸白 Surface" },
+      "surface-tint": { "role": "neutral", "displayName": "灰蓝薄纱（选中态胶囊底）" },
+      "glass": { "role": "neutral", "displayName": "玻璃" },
+      "glass-strong": { "role": "neutral", "displayName": "强玻璃" },
+      "viewer-bg": { "role": "neutral", "displayName": "看图浮层深底" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "整卡主角的大数字：首页主数字、当前体重。" },
+      "headline": { "displayName": "Headline", "purpose": "页头大标题。" },
+      "title": { "displayName": "Title", "purpose": "卡片标题。" },
+      "body": { "displayName": "Body", "purpose": "正文与列表主行。" },
+      "label": { "displayName": "Label", "purpose": "副标题、说明、单位、角标。" },
+      "number": { "displayName": "Number", "purpose": "所有重量、次数、日期、时长、容量。" }
+    },
+    "shadows": [
+      { "name": "glass-card", "value": "inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 .5px rgba(30,50,80,.06), 0 12px 32px -16px rgba(30,50,80,.22)", "purpose": "所有玻璃卡片。" },
+      { "name": "lift-sm", "value": "0 4px 12px -6px rgba(30,50,80,.2)", "purpose": "页头胶囊按钮、搜索框、分段控件。" },
+      { "name": "float", "value": "0 12px 24px -8px rgba(30,50,80,.22)", "purpose": "底栏、多选操作条、会话页汇总条。" },
+      { "name": "sheet", "value": "0 -8px 24px -12px rgba(30,50,80,.25)", "purpose": "底部弹层上缘。" },
+      { "name": "ember-glow", "value": "inset 0 1px 0 rgba(255,255,255,.3), 0 10px 20px -8px rgba(217,82,27,.65)", "purpose": "橙色主按钮与圆钮。" }
+    ],
+    "motion": [
+      { "name": "dur-fast", "value": "150ms", "purpose": "状态回应：色变、按压。" },
+      { "name": "dur-base", "value": "220ms", "purpose": "位置变化：弹层滑入。" },
+      { "name": "dur-slide", "value": "260ms", "purpose": "主 tab 切页与底栏指示条。" },
+      { "name": "ease-out", "value": "cubic-bezier(0.22, 0.61, 0.36, 1)", "purpose": "全站唯一缓动，快出缓收。" }
+    ],
+    "breakpoints": [
+      { "name": "design-width", "value": "375px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "本屏唯一的主动作：开始训练、完成本组、保存。",
+      "html": "<button class=\"ds-btn-primary\">保存修改</button>",
+      "css": ".ds-btn-primary { height: 46px; padding: 0 20px; border: none; border-radius: 999px; background: linear-gradient(180deg, #e8642c, #d24b15); color: #fff; font-size: 14px; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 10px 20px -8px rgba(217,82,27,.65); transition: transform 150ms cubic-bezier(0.22,0.61,0.36,1); } .ds-btn-primary:active { transform: scale(.97); } .ds-btn-primary:focus-visible { outline: 2px solid #1d1d1f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "次级动作：强玻璃胶囊。",
+      "html": "<button class=\"ds-btn-secondary\">知道了</button>",
+      "css": ".ds-btn-secondary { height: 46px; padding: 0 20px; border: .5px solid rgba(255,255,255,.85); border-radius: 999px; background: rgba(250,252,254,.72); backdrop-filter: blur(30px) saturate(1.8); color: #3a3a3c; font-size: 14px; font-weight: 700; box-shadow: 0 4px 12px -6px rgba(30,50,80,.2); transition: transform 150ms cubic-bezier(0.22,0.61,0.36,1); } .ds-btn-secondary:active { transform: scale(.97); } .ds-btn-secondary:focus-visible { outline: 2px solid #1d1d1f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "退一步的选择：只有描边。",
+      "html": "<button class=\"ds-btn-ghost\">先不练</button>",
+      "css": ".ds-btn-ghost { height: 46px; padding: 0 20px; border: .5px solid rgba(60,80,110,.14); border-radius: 999px; background: transparent; color: #6e6e73; font-size: 14px; font-weight: 700; } .ds-btn-ghost:active { transform: scale(.97); } .ds-btn-ghost:focus-visible { outline: 2px solid #1d1d1f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Glass Card",
+      "kind": "card",
+      "refersTo": "card-glass",
+      "description": "页面上一切内容的容器。",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">个人档案</div><div class=\"ds-card-row\"><span>身高</span><b>176 cm</b></div><div class=\"ds-card-row\"><span>活动量</span><b>经常走动</b></div></div>",
+      "css": ".ds-card { padding: 16px 18px; border: .5px solid rgba(255,255,255,.85); border-radius: 24px; background: rgba(255,255,255,.62); backdrop-filter: blur(30px) saturate(1.8); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 .5px rgba(30,50,80,.06), 0 12px 32px -16px rgba(30,50,80,.22); color: #1d1d1f; font-size: 14px; } .ds-card-title { font-size: 15px; font-weight: 700; padding-bottom: 6px; } .ds-card-row { display: flex; justify-content: space-between; padding: 12px 0; border-top: .5px solid rgba(60,80,110,.08); color: #6e6e73; } .ds-card-row b { color: #1d1d1f; font-family: Nunito, sans-serif; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segment-item-on",
+      "description": "页内切换：选中＝深字 ＋ 灰蓝胶囊底，不用橙。",
+      "html": "<div class=\"ds-seg\" role=\"tablist\"><button class=\"ds-seg-item is-on\" role=\"tab\" aria-selected=\"true\">体重</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">体脂</button></div>",
+      "css": ".ds-seg { display: inline-flex; padding: 3px; border: .5px solid rgba(255,255,255,.85); border-radius: 999px; background: rgba(255,255,255,.62); box-shadow: 0 4px 12px -6px rgba(30,50,80,.2); } .ds-seg-item { padding: 6px 14px; border: none; border-radius: 999px; background: transparent; color: #6e6e73; font-size: 13px; transition: background 150ms, color 150ms; } .ds-seg-item.is-on { background: rgba(120,140,170,.12); color: #1d1d1f; font-weight: 700; } .ds-seg-item:focus-visible { outline: 2px solid #1d1d1f; outline-offset: 1px; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "玻璃卡里的白底输入框，标签在左。",
+      "html": "<label class=\"ds-field\"><span>用户名</span><input placeholder=\"字母、数字或下划线\" /></label>",
+      "css": ".ds-field { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 16px; background: #fff; } .ds-field span { color: #6e6e73; font-size: 13px; flex-shrink: 0; } .ds-field input { flex: 1; border: none; outline: none; background: transparent; color: #1d1d1f; font-size: 14px; } .ds-field input::placeholder { color: #8e8e93; } .ds-field:focus-within { box-shadow: 0 0 0 2px rgba(120,140,170,.35); }"
+    },
+    {
+      "name": "Badges",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "普通角标与 PR 角标。",
+      "html": "<span class=\"ds-badge\">自定义</span> <span class=\"ds-badge ds-badge-pr\">PR</span>",
+      "css": ".ds-badge { display: inline-block; padding: 1px 6px; border-radius: 999px; background: rgba(120,140,170,.12); color: #6e6e73; font-size: 11px; } .ds-badge-pr { background: #fde8dc; color: #b8410f; font-weight: 700; }"
+    },
+    {
+      "name": "Floating Action Bar",
+      "kind": "custom",
+      "refersTo": "tabbar",
+      "description": "多选时贴底悬浮的操作条，与主按钮同一位置。",
+      "html": "<div class=\"ds-selbar\"><span class=\"ds-selbar-count\">已选 2 项</span><button class=\"ds-selbar-all\">全选</button><button class=\"ds-selbar-del\">删除</button></div>",
+      "css": ".ds-selbar { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 6px 0 18px; border: .5px solid rgba(255,255,255,.85); border-radius: 999px; background: rgba(250,252,254,.72); backdrop-filter: blur(30px) saturate(1.8); box-shadow: 0 12px 24px -8px rgba(30,50,80,.22); } .ds-selbar-count { flex: 1; color: #1d1d1f; font-size: 14px; font-family: Nunito, sans-serif; font-weight: 700; } .ds-selbar-all { border: none; background: transparent; color: #3a3a3c; font-size: 13px; padding: 8px 10px; } .ds-selbar-del { height: 40px; padding: 0 20px; border: none; border-radius: 999px; background: #c0392b; color: #fff; font-size: 14px; font-weight: 700; } .ds-selbar-del:focus-visible, .ds-selbar-all:focus-visible { outline: 2px solid #1d1d1f; outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "晴窗（Clear-Sky Window）",
+    "overview": "晴空下的一扇扇玻璃窗：冷调浅蓝灰的天光铺满整屏，内容是浮在上面的半透明玻璃面板，透出底下几团柔和的光晕。界面本身尽量安静，冷中性灰的字、大圆角、柔和投影，唯一会「喊」的颜色是橙色，它只出现在用户要做的那个动作上：开始训练、完成本组、继续、PR、当前组。\n\n这是一个在健身房组间单手操作的工具（PRODUCT.md：一组记录约 30 秒内完成），所以密度偏松、点击区偏大、一屏只有一个焦点。数字是主角：重量、次数、容量、体重都用 Nunito 粗体，0–9 等宽，计时器跳秒不抖。中文只用 400／700 两档字重，靠字号和颜色分层，不靠中间字重。\n\n只做浅色，不做深色模式；全站唯一的深色面是全屏看图浮层（照片要压在黑底上看）。已否掉的方向：纸感墨黑加荧光笔（旧「训练日志」）、电光蓝运动风、Win11 Fluent 小圆角、深色液态玻璃、同心环营养图。",
+    "keyCharacteristics": [
+      "冷调浅蓝灰竖向渐变底 ＋ 角落光晕，钉在视口上不随内容滚动",
+      "苹果式玻璃面板：半透白 ＋ 背景模糊与饱和 ＋ 白色亮边 ＋ 极细外描边 ＋ 柔和投影",
+      "橙色只给动作，一屏最多一颗橙色主按钮",
+      "选中态一律「深字 ＋ 浅灰蓝胶囊底」，不用橙",
+      "大圆角（卡片 24px、弹层 28px、按钮与控件全胶囊）",
+      "底部弹层是实底，里面的分组是不透明白卡",
+      "悬浮件（底栏、主按钮、汇总条、多选操作条）统一贴底悬浮，左右 16px、离底 14px ＋ 安全区"
+    ],
+    "rules": [
+      { "name": "The One Ember Rule", "body": "橙色只给动作，一屏最多一颗橙色主按钮。导航选中、分段控件、装饰、图表都不用橙。", "section": "colors" },
+      { "name": "The Calm Selection Rule", "body": "选中＝深字 ＋ 灰蓝薄纱胶囊底（surface-tint），加粗；底栏、分段控件、筛选、单位切换、组号选择全站一个样子。", "section": "colors" },
+      { "name": "The Single Source Rule", "body": "色值只写在 frontend/src/uni.scss；页面与组件里写死一个色值，CI 的写死颜色守卫就失败。JS 里只能用字符串色值的地方从 utils/palette.ts 取。", "section": "colors" },
+      { "name": "The Two Weights Rule", "body": "中文只用 400 与 700；800 只给 Nunito 大数字。安卓各家中文字体的中间字重不可靠，层级靠字号和颜色拉开。", "section": "typography" },
+      { "name": "The Numbers Speak Nunito Rule", "body": "凡是数字（含日期、计时、单位符号）都加数字字体；0–9 本身等宽，不依赖 tnum。", "section": "typography" },
+      { "name": "The Sliding Glass Rule", "body": "主 tab 切页滑动的那 260ms 里，玻璃去掉背景模糊、换成更实的白（glass mixin 自动处理），安卓 WebView 才不掉帧；会动的玻璃一律用 mixin，不手写 backdrop-filter。", "section": "elevation" },
+      { "name": "The Solid Sheet Rule", "body": "底部弹层是实底，不做玻璃：底下压着遮罩，没有可透的东西。弹层里的分组用不透明白卡。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 改颜色、间距、圆角只改 frontend/src/uni.scss，新增 token 后重启 dev 服务器。",
+      "Do 会动的玻璃用 @include glass，玻璃卡统一「玻璃底 ＋ 白色亮边 ＋ 24px 圆角 ＋ 玻璃卡阴影」。",
+      "Do 每屏只留一个橙色主动作，其余动作用强玻璃胶囊、幽灵按钮或文字按钮。",
+      "Do 所有数字（含日期、计时、单位）加数字字体；数字带对比基准时，差值用 ink-2，不用红绿。",
+      "Do 悬浮件统一左右 16px、离底 14px ＋ 安全区，正文末尾让出它的高度。",
+      "Do 底部弹层用 FtSheet，里面用白卡分组；没有副标题时内容自己往下让 14px。",
+      "Do 空状态用 FtEmpty：一句标题 ＋ 一句「怎么办」，按钮放插槽里。"
+    ],
+    "donts": [
+      "Don't 在页面或组件里写死色值（CI 守卫硬失败）。",
+      "Don't 用橙色做选中态、装饰、图表线或第二颗主按钮。",
+      "Don't 中文用 500／600 这类中间字重。",
+      "Don't 做深色模式，也不把 token 迁成 CSS 变量。",
+      "Don't 用同心环表示营养素，营养素一律是「名称 ＋ 数值／目标 ＋ 进度条」。",
+      "Don't 给底部弹层做玻璃，也不要把 FtSheet 放进带 backdrop-filter／transform 的祖先里（fixed 会跟着祖先定位）。",
+      "Don't 在 scroll-view 里的卡片上用外投影画描边，会被裁掉，改用 border。",
+      "Don't 加英文装饰行（如 FIT-APP LEDGER、SEC.04_LIB 这类旧设计的上标）。"
+    ]
+  }
+}
