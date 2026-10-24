@@ -333,6 +333,7 @@ components:
 
 - **Do** 改颜色、间距、圆角只改 `frontend/src/uni.scss`，新增 token 后重启 dev 服务器。
 - **Do** 会动的玻璃用 `@include glass`，玻璃卡统一「玻璃底 ＋ 白色亮边 ＋ 24px 圆角 ＋ 玻璃卡阴影」。
+- **Do** 页面里的共用形状（玻璃卡、页头胶囊、分段控件、卡片标题、角标、多选操作条、弹层白卡）类名写在页面里，声明体 `@include` `uni.scss` 里的同名 mixin（`glass-card`、`glass-pill`、`seg-*`、`card-title`、`badge`、`selbar`、`sheet-card`），不在页面里重抄一遍。
 - **Do** 每屏只留一个橙色主动作，其余动作用强玻璃胶囊、幽灵按钮或文字按钮。
 - **Do** 所有数字（含日期、计时、单位）加数字字体；数字带对比基准时，差值用 ink-2，不用红绿。
 - **Do** 悬浮件统一左右 16px、离底 14px ＋ 安全区，正文末尾让出它的高度。
