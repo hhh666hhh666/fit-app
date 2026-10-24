@@ -55,7 +55,7 @@ export JAVA_HOME=E:/jdk21
 | **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 7 / `0.1.6` |
 | **H5 产物版本** | 构建脚本自动生成：`package.json` 的 version ＋ 短 commit | 不用手工维护；带 commit 是为了「每次提交都能触发壳的自动更新」 |
 
-改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、依赖）才需要重打 apk 并 +1。
+改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、资源如图标、依赖）才需要重打 apk 并 +1。
 
 ## 更新链路怎么走
 
@@ -89,6 +89,13 @@ export JAVA_HOME=E:/jdk21
 不直接靠 H5 的 `navigator.vibrate`：它在 WebView 里能不能震看系统版本与厂商。H5 那边先找这个桥，找不到（旧壳、浏览器）才退回 `navigator.vibrate`，再没有就不震。
 
 ⚠️ 这个对象任何加载进来的页面都能调，只放无害的能力，别往里加读写数据的口子。
+
+## 图标
+
+minSdk 26，只要一份矢量 adaptive icon（`res/mipmap-anydpi-v26/ic_launcher.xml`），不出各密度的 png。
+三层都在 `res/drawable/`：`ic_launcher_background`（天光渐变底）、`ic_launcher_foreground`（橙色圆钮＋哑铃）、
+`ic_launcher_monochrome`（Android 13 主题图标的单色层，只有哑铃）；画法与安全区写在各自的文件头注释里。
+网页标签页图标 `frontend/src/static/favicon.svg` 是前景那颗圆钮单拎出来的，改图两边一起改。
 
 ## 必须一起配的后端开关
 

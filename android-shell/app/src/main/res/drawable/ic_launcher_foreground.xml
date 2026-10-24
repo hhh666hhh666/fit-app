@@ -1,27 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  图标前景：荧光笔绿的一只哑铃（直角硬朗风，贴「训练日志」的设计语言）。
-  vector drawable 而非 png：minSdk 26 只需要 anydpi-v26 的 adaptive icon，
-  矢量在所有密度下都清晰，也省掉五套密度的 png。
-  安全区：adaptive icon 的可见区域是中心 72x72（viewPort 108 的 2/3），
-  图案刻意收在 x=23..85 / y=38..70 之间。
+  图标前景：底栏中间那颗「开始训练」橙色圆钮——点开图标就是按下开始训练（晴窗，ADR 0041）。
+  圆钮＝余烬橙竖向渐变 ＋ 顶边一道白色亮弧 ＋ 下方橙色柔光，与 FtTabBar 的圆钮同一套做法；
+  哑铃与 FtIcon 的 dumbbell 同一个字形，只是放大、手柄比配重片细一档，小尺寸下更像哑铃。
+  网页标签页图标 frontend/src/static/favicon.svg 是这颗圆钮单拎出来的版本，改图两边一起改。
+
+  安全区：adaptive icon 的可见区域是中心 72×72（视口 108 的 2/3），各家遮罩都不会裁到的是
+  中心直径 66 的圆；圆钮半径 24.5，整体收在安全圆内。柔光会往下晕出安全圆，但在边缘已淡到 0，
+  被遮罩裁掉也看不出硬边。矢量画不了模糊，柔光用一层径向渐变代替。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 横杆 -->
+    <!-- 橙色柔光：圆心比圆钮低 10，只从圆钮下沿露出来 -->
+    <path android:pathData="M28,64.3a26,26 0 1,0 52,0a26,26 0 1,0 -52,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="64.3"
+                android:gradientRadius="26">
+                <item android:offset="0" android:color="#80D9521B" />
+                <item android:offset="0.6" android:color="#46D9521B" />
+                <item android:offset="1" android:color="#00D9521B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 圆钮：余烬橙竖向渐变（uni.scss 的 $accent-top → $accent-bottom，上端提亮一点） -->
+    <path android:pathData="M29.5,54a24.5,24.5 0 1,0 49,0a24.5,24.5 0 1,0 -49,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="29.5"
+                android:endX="0"
+                android:endY="78.5">
+                <item android:offset="0" android:color="#FFEC6A31" />
+                <item android:offset="1" android:color="#FFD24B15" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 顶边亮弧：两端淡出 -->
     <path
-        android:fillColor="#D9F24B"
-        android:pathData="M37,49 L71,49 L71,59 L37,59 Z" />
-    <!-- 左配重片 -->
+        android:pathData="M33.74,42.3A23.4,23.4 0 0,1 74.26,42.3"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="29.5"
+                android:startY="0"
+                android:endX="78.5"
+                android:endY="0">
+                <item android:offset="0" android:color="#00FFFFFF" />
+                <item android:offset="0.5" android:color="#8CFFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 哑铃：内外两对配重片 -->
     <path
-        android:fillColor="#D9F24B"
-        android:pathData="M23,40 L37,40 L37,68 L23,68 Z" />
-    <!-- 右配重片 -->
+        android:pathData="M46.78,45.45V62.55M61.22,45.45V62.55M40.51,49.63V58.37M67.49,49.63V58.37"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.6"
+        android:strokeLineCap="round" />
+
+    <!-- 哑铃：手柄 -->
     <path
-        android:fillColor="#D9F24B"
-        android:pathData="M71,40 L85,40 L85,68 L71,68 Z" />
+        android:pathData="M46.78,54H61.22"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round" />
 </vector>
