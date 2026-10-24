@@ -128,6 +128,8 @@ $dur-base: 220ms;
 $dur-slide: 260ms; // 主 tab 切页位移；nav.ts 的 SLIDE_MS 是它的镜像（check-tab-config.sh 校验）
 $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
 $ease-in: cubic-bezier(0.4, 0, 1, 1);
+// 强调档：只给「完成一组 · 破纪录」那一下的角标弹出——冲得快、收得稳，不回弹
+$ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
 
 // ── 按压反馈：全站只有三种 ──
 // dim＝变暗（列表行、文字钮、胶囊）；shrink＝收缩（实心按钮、圆钮、图标块）；fill＝铺浅底（无底色的透明钮）。

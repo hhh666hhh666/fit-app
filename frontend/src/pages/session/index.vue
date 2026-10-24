@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
+import { getStats } from '@/api/stats'
 import { getPlan } from '@/api/plan'
 import { formatClock, muscleLabel } from '@/utils/format'
 import { metricKindOf, metricUnit, metricValue } from '@/utils/metric'
@@ -24,6 +25,8 @@ import {
   type SessionSet
 } from '@/utils/session'
 import { ask } from '@/utils/confirm'
+import { animateWhenConnected, prefersReducedMotion, SLIDE_EASE, SLIDE_MS } from '@/utils/nav'
+import { tickPr, tickSet } from '@/utils/haptics'
 
 // ── 训练会话（计划多动作：按目标预填 → 点勾完成 → 全组完成自动切下一个未完成动作）──
 // 会话存本机（ADR 0020）：返回＝最小化、退到后台与杀进程都能接续；计时走墙钟净时长（ADR 0022）。
@@ -185,6 +188,7 @@ async function loadPlan(pid: number) {
  * - 否则（底栏圆钮点「继续」、或直接进本页）＝有本机会话就接续，没有才新建。
  */
 async function bootstrap(q: Record<string, string | undefined>) {
+  void loadPrBase()
   const existing = q.fresh === '1' ? null : loadSession()
   if (existing && existing.blocks.length > 0) {
     session.value = existing
@@ -220,6 +224,9 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  // 离页时还在等的「换下一动作」不能再跳：页面没了，轻提示会冒到别的页面上
+  if (advanceTimer) clearTimeout(advanceTimer)
+  if (justTimer) clearTimeout(justTimer)
   if (session.value && !ended) saveSession(session.value)
 })
 
@@ -374,16 +381,19 @@ function completeSet(i: number) {
   row.doneAt = now
   row.dur = dur
 
-  // 循环组：立刻跳到序列的下一组（可能是别的动作），这是「循环」的全部意义
+  // 回执：勾弹进来、这一行的橙底退掉、下一行接上；破纪录的那一组另有一下（震动也分两种）
+  const pr = prSetsOf(s.current).has(i)
+  if (pr) tickPr()
+  else tickSet()
+  markJust(s.current, i, pr, b.sets.findIndex((x) => !x.done))
+
+  // 循环组：跳到序列的下一组（可能是别的动作），这是「循环」的全部意义
   if (b.circuitNo != null) {
     const hop = nextInCircuit(s.current, i)
     if (hop) {
-      s.current = hop.b
-      void loadLastForBlock(hop.b)
-      uni.showToast({
-        title: `轮到 ${s.blocks[hop.b]?.name ?? ''} 第 ${hop.s + 1} 组`,
-        icon: 'none'
-      })
+      if (hop.b !== s.current) {
+        advanceTo(s.current, hop.b, `轮到 ${s.blocks[hop.b]?.name ?? ''} 第 ${hop.s + 1} 组`, pr)
+      }
       return
     }
   }
@@ -391,14 +401,80 @@ function completeSet(i: number) {
   if (isBlockDone(s.current)) {
     const next = nextUnfinished(s.current)
     if (next >= 0) {
-      s.current = next
-      void loadLastForBlock(next)
-      uni.showToast({ title: `进入下一动作：${s.blocks[next]?.name ?? ''}`, icon: 'none' })
+      advanceTo(s.current, next, `进入下一动作：${s.blocks[next]?.name ?? ''}`, pr)
     } else {
       uni.showToast({ title: '全部动作已完成，可点「结束训练」', icon: 'none' })
     }
   }
 }
+
+// ── 完成一组的回执 ──
+
+/** 刚完成的那一组：驱动「勾弹入、行底色退掉、下一行接上」，动画播完就清掉 */
+const justDone = ref<{ b: number; s: number; pr: boolean; next: number } | null>(null)
+let justTimer: ReturnType<typeof setTimeout> | undefined
+
+function markJust(b: number, i: number, pr: boolean, next: number) {
+  justDone.value = { b, s: i, pr, next }
+  if (justTimer) clearTimeout(justTimer)
+  justTimer = setTimeout(() => {
+    justDone.value = null
+  }, pr ? 1100 : 600)
+}
+
+/** 组行上的回执类（只在刚完成那一下的动作里出现） */
+function rowFx(i: number): Record<string, boolean> {
+  const j = justDone.value
+  if (!j || j.b !== curIdx.value) return {}
+  return {
+    'setrow--banked': j.s === i,
+    'setrow--pr-new': j.s === i && j.pr,
+    'setrow--arrive': j.next === i
+  }
+}
+
+/**
+ * 换到别的动作前停一拍：动作的最后一组一勾就换卡，那一组的回执根本看不到。
+ * 破纪录的那一组停得更久一点。停的这一拍里手动切了动作（或会话结束了），就不再自动换。
+ */
+let advanceTimer: ReturnType<typeof setTimeout> | undefined
+
+function advanceTo(from: number, target: number, tip: string, pr: boolean) {
+  if (advanceTimer) clearTimeout(advanceTimer)
+  advanceTimer = setTimeout(() => {
+    const s = session.value
+    if (!s || ended || s.current !== from) return
+    s.current = target
+    void loadLastForBlock(target)
+    uni.showToast({ title: tip, icon: 'none' })
+  }, pr ? 900 : 450)
+}
+
+/**
+ * 换动作时录入卡从切换条上那个方向滑进来（和主 tab 切页同一条曲线）——
+ * 以前是原地瞬间换内容，只靠一条轻提示，眼睛不在屏幕上就容易没注意到已经换了。
+ * 盯的是会话里的下标而不是 `curIdx`：会话还没载入时它是兜底的 0，载入那一下不该滑。
+ */
+const cardRef = ref<unknown>(null)
+
+watch(
+  () => session.value?.current,
+  (to, from) => {
+    if (to == null || from == null || to === from) return
+    const reduce = prefersReducedMotion()
+    const dx = to > from ? 48 : -48
+    animateWhenConnected(
+      cardRef.value,
+      reduce
+        ? [{ opacity: 0 }, { opacity: 1 }]
+        : [
+            { transform: `translateX(${dx}px)`, opacity: 0 },
+            { transform: 'translateX(0)', opacity: 1 }
+          ],
+      { duration: reduce ? 150 : SLIDE_MS, easing: SLIDE_EASE }
+    )
+  }
+)
 
 /** 加一组（独立按钮）：沿用上一行的值预填。 */
 function addSet() {
@@ -489,6 +565,52 @@ const doneCount = computed(() =>
 )
 /** 有氧动作不参与容量（ADR 0023）；会话块里存的肌群是中文名（`muscleLabel` 的产物），按名比对。 */
 const CARDIO_LABEL = muscleLabel('cardio')
+
+// ── 破纪录（ADR 0024 口径：先比重量、同重量比次数，严格大于才算；有氧与层数口径不参与）──
+
+/**
+ * 各动作的历史「最重一组」。借统计页的 PR 归档——它就是按这个口径对全部动作现算的，
+ * 进会话取一次（走缓存，提交训练后作废）。
+ * `null`＝没取到（离线、出错）：这时一律不提示 PR，宁可漏报，不拿猜的冒充。
+ */
+const prBase = ref<Map<number, { w: number; r: number }> | null>(null)
+
+async function loadPrBase() {
+  try {
+    const st = await getStats('week')
+    prBase.value = new Map(st.prs.map((p) => [p.exerciseId, { w: Number(p.weight), r: Number(p.reps) }]))
+  } catch {
+    prBase.value = null
+  }
+}
+
+/**
+ * 某个动作里哪几组是 PR：按完成先后逐组比，起点是历史最重一组；没有历史时第一组就是。
+ * 和提交时服务端的判定是同一套（`WorkoutService.isPr`），汇总页上的 PR 标记对得上。
+ */
+function prSetsOf(blockIdx: number): Set<number> {
+  const out = new Set<number>()
+  const b = session.value?.blocks[blockIdx]
+  const base = prBase.value
+  if (!b || !base || !b.exerciseId || b.muscle === CARDIO_LABEL || b.metric === 'floors') return out
+  let best = base.get(b.exerciseId) ?? null
+  const done = b.sets
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => x.done)
+    .sort((p, q) => (p.x.doneAt ?? 0) - (q.x.doneAt ?? 0))
+  for (const { x, i } of done) {
+    const w = Number(x.w)
+    const r = Number(x.r)
+    if (!Number.isFinite(w) || !Number.isFinite(r) || r <= 0) continue
+    if (!best || w > best.w || (w === best.w && r > best.r)) {
+      out.add(i)
+      best = { w, r }
+    }
+  }
+  return out
+}
+
+const curPrSets = computed(() => prSetsOf(curIdx.value))
 
 const hasLift = computed(() =>
   (session.value?.blocks ?? []).some((b) => b.muscle !== CARDIO_LABEL)
@@ -690,7 +812,7 @@ function comingSoon(tip: string) {
         </view>
 
         <!-- 2. 录入卡（暂停时整块锁住并压暗） -->
-        <view class="card" :class="{ 'card--locked': paused }">
+        <view ref="cardRef" class="card" :class="{ 'card--locked': paused }">
           <view class="card__head">
             <view class="card__title-row">
               <text class="card__title">{{ curBlock.name }}</text>
@@ -710,7 +832,14 @@ function comingSoon(tip: string) {
               v-for="(s, i) in curBlock.sets"
               :key="i"
               class="setrow"
-              :class="{ 'setrow--active': isActive(i), 'setrow--todo': !s.done && !isActive(i) }"
+              :class="[
+                {
+                  'setrow--active': isActive(i),
+                  'setrow--todo': !s.done && !isActive(i),
+                  'setrow--pr': s.done && curPrSets.has(i)
+                },
+                rowFx(i)
+              ]"
               @longpress="onLongPress(i)"
             >
               <text class="setrow__idx ft-num">{{ i + 1 }}</text>
@@ -755,6 +884,7 @@ function comingSoon(tip: string) {
               <!-- 已完成：只读值 ＋ 这一组的净用时 ＋ 浅橙实心勾；还没轮到：只读值 ＋ 虚线圈 -->
               <template v-else>
                 <text class="setrow__value ft-num">{{ setValueText(s) }}</text>
+                <text v-if="s.done && curPrSets.has(i)" class="setrow__pr">PR</text>
                 <text class="setrow__dur ft-num">{{ s.done && s.dur != null ? formatClock(s.dur) : '' }}</text>
                 <view v-if="s.done" class="setrow__done">
                   <FtIcon name="check" :size="18" :stroke="2.2" />
@@ -1083,6 +1213,82 @@ function comingSoon(tip: string) {
   border: 3rpx dashed $app-line-dash;
 }
 
+/* 破纪录的组：数字换深橙 ＋ PR 角标（和首页、汇总页的角标同一个样子），整场都在 */
+.setrow--pr .setrow__value {
+  color: $accent-strong;
+}
+
+.setrow__pr {
+  @include badge($accent-soft, $accent-strong);
+  font-weight: $weight-bold;
+}
+
+/* ── 完成一组的回执 ──
+   这一行的浅橙底在 260ms 里退成透明（「这组存好了」），勾从小弹到原大；
+   下一行的浅橙底同时从透明铺上来——看上去是高亮往下走了一格。
+   破纪录的那一组：底色先亮一下（描边那档的橙）再慢慢退，PR 角标弹出来。
+   只动底色和勾、角标本身，不动行高与位置。 */
+.setrow--banked {
+  animation: setrow-bank $dur-slide $ease-out;
+}
+
+.setrow--banked .setrow__done {
+  animation: setrow-pop $dur-base $ease-out;
+}
+
+.setrow--arrive {
+  animation: setrow-arrive $dur-slide $ease-out;
+}
+
+.setrow--pr-new {
+  animation: setrow-pr 1000ms $ease-out;
+}
+
+.setrow--pr-new .setrow__pr {
+  animation: setrow-pop 320ms $ease-emphasis 120ms both;
+}
+
+@keyframes setrow-bank {
+  from {
+    background-color: $accent-row;
+  }
+}
+
+@keyframes setrow-arrive {
+  from {
+    background-color: transparent;
+  }
+}
+
+@keyframes setrow-pr {
+  0% {
+    background-color: $accent-row;
+  }
+
+  20% {
+    background-color: $accent-ring;
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes setrow-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* 减少动态效果：不弹缩放，底色的淡入淡出保留——那是「记上了」的回执本身 */
+@media (prefers-reduced-motion: reduce) {
+  .setrow--banked .setrow__done,
+  .setrow--pr-new .setrow__pr {
+    animation: none;
+  }
+}
+
 /* 当前组：浅橙整行底 ＋ 白色输入框 ＋ 橙色圆钮 */
 .setrow--active {
   padding: 24rpx;
@@ -1120,7 +1326,8 @@ function comingSoon(tip: string) {
 
 .setrow__unit {
   font-size: $text-sm;
-  color: $app-ink-muted;
+  // 只出现在当前组的浅橙底上：灰字在那里只有 4.4:1，取同色系的深橙
+  color: $accent-strong;
 }
 
 .setrow__x {

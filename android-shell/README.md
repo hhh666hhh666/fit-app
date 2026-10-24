@@ -52,7 +52,7 @@ export JAVA_HOME=E:/jdk21
 
 | 版本 | 在哪 | 怎么推 |
 |------|------|--------|
-| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 6 / `0.1.5` |
+| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 7 / `0.1.6` |
 | **H5 产物版本** | 构建脚本自动生成：`package.json` 的 version ＋ 短 commit | 不用手工维护；带 commit 是为了「每次提交都能触发壳的自动更新」 |
 
 改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、依赖）才需要重打 apk 并 +1。
@@ -79,6 +79,16 @@ export JAVA_HOME=E:/jdk21
 
 这条要 0.1.5 起的 apk 才有。旧 apk 装着新 H5 也不出错，只是返回键照旧直接后退——
 弹层开着按返回会离开页面。
+
+## 给 H5 的壳能力：`window.FitShell`
+
+`MainActivity` 用 `addJavascriptInterface` 挂了一个 `ShellBridge`，H5 里是 `window.FitShell`（0.1.6 起）：
+
+- `vibrate("12")` / `vibrate("12,80,28")`：按「震、停、震…」的毫秒序列震动，单段最长 200ms。会话页完成一组时用（`frontend/src/utils/haptics.ts`）。清单里因此多了 `VIBRATE` 权限（普通权限，安装即授予）。
+
+不直接靠 H5 的 `navigator.vibrate`：它在 WebView 里能不能震看系统版本与厂商。H5 那边先找这个桥，找不到（旧壳、浏览器）才退回 `navigator.vibrate`，再没有就不震。
+
+⚠️ 这个对象任何加载进来的页面都能调，只放无害的能力，别往里加读写数据的口子。
 
 ## 必须一起配的后端开关
 

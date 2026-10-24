@@ -20,11 +20,12 @@ android {
         targetSdk 34
         // 与线上版本对齐：git tag v0.1.4 → versionName 0.1.4；
         // versionCode 是单调递增的整数（同一 keystore 下覆盖安装才认它），
-        // 每次发版都要 +1——这里 6 对应 v0.1.5（5 是 v0.1.4，4 是 v0.1.3）。
+        // 每次发版都要 +1——这里 7 对应 v0.1.6（6 是 v0.1.5，5 是 v0.1.4）。
         // v0.1.4 的内容：新产物下好后弹窗提示重启，带「立即重启 / 稍后」。
         // v0.1.5 的内容：返回键先问 H5 关弹层（window.__ftBack），关掉了就不后退。
-        versionCode 6
-        versionName "0.1.5"
+        // v0.1.6 的内容：window.FitShell.vibrate——会话页完成一组时轻震（加 VIBRATE 权限）。
+        versionCode 7
+        versionName "0.1.6"
     }
 
     signingConfigs {

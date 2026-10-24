@@ -100,6 +100,9 @@ public class MainActivity extends Activity {
         // 本地产物 + 静态资源基本都是瞬时的，这一层只影响兜底时的线上加载
         webView.setBackgroundColor(0xFFFFFFFF);
 
+        // H5 可调的壳能力（目前只有震动），见 ShellBridge
+        webView.addJavascriptInterface(new ShellBridge(this), "FitShell");
+
         // 站点内的跳转留在 App 内，不抛去系统浏览器；虚拟域的请求交给 LocalWeb
         assetLoader = LocalWeb.loader(this);
         webView.setWebViewClient(new WebViewClient() {
