@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
@@ -202,7 +203,7 @@ function doDelete() {
     title: '删除训练记录',
     content: `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
     confirmText: '删除',
-    confirmColor: '#C4453C',
+    confirmColor: PALETTE.danger,
     success: async ({ confirm }) => {
       if (!confirm) return
       try {

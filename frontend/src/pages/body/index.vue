@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 import FtIcon from '@/components/FtIcon.vue'
 import { computed, ref } from 'vue'
 import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
@@ -229,7 +230,7 @@ function doDelete() {
         ? '删除这条记录？删除后不可恢复。'
         : `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
     confirmText: '删除',
-    confirmColor: '#C4453C',
+    confirmColor: PALETTE.danger,
     success: async ({ confirm }) => {
       if (!confirm) return
       try {

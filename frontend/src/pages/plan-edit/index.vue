@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createPlan, deletePlan, getPlan, updatePlan } from '@/api/plan'
@@ -371,7 +372,7 @@ function removePlan() {
     title: '删除计划',
     content: '删除后，周表里引用它的安排也会一并移除。',
     confirmText: '删除',
-    confirmColor: '#C4453C',
+    confirmColor: PALETTE.danger,
     success: async ({ confirm }) => {
       if (!confirm) return
       try {

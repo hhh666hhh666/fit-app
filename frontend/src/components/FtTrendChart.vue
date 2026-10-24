@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 import { getCurrentInstance, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 // ── 可缩放趋势图（ADR 0015）：横轴是**精确日期**、逐日绘制 ──
@@ -172,12 +173,12 @@ function draw() {
 
   // 网格 + 左侧刻度
   ctx.setFontSize(10)
-  ctx.setFillStyle('#9aa0a8')
+  ctx.setFillStyle(PALETTE.inkSubtle)
   for (const t of [hi, (lo + hi) / 2, lo]) {
     const gy = y(t)
     ctx.beginPath()
     ctx.setLineDash([4, 5])
-    ctx.setStrokeStyle('#d8dad6')
+    ctx.setStrokeStyle(PALETTE.line)
     ctx.moveTo(PL, gy)
     ctx.lineTo(w - PR, gy)
     ctx.stroke()
@@ -190,7 +191,7 @@ function draw() {
     const ty = y(target)
     ctx.beginPath()
     ctx.setLineDash([6, 6])
-    ctx.setStrokeStyle('#9aa0a8')
+    ctx.setStrokeStyle(PALETTE.inkSubtle)
     ctx.moveTo(PL, ty)
     ctx.lineTo(w - PR, ty)
     ctx.stroke()
@@ -199,7 +200,7 @@ function draw() {
 
   // 折线（只画视口内的点；缩到一年时点很密，靠线宽与抗锯齿撑住可读性）
   ctx.beginPath()
-  ctx.setStrokeStyle('#17191d')
+  ctx.setStrokeStyle(PALETTE.ink)
   ctx.setLineWidth(1.5)
   for (let i = i0; i <= i1; i++) {
     const px = x(i)
@@ -213,7 +214,7 @@ function draw() {
   const info = uni.getSystemInfoSync()
   const maxLabels = info.windowWidth > info.windowHeight ? 12 : 6
   const count = Math.max(2, Math.min(maxLabels, Math.floor((w - PL - PR) / 64)))
-  ctx.setFillStyle('#9aa0a8')
+  ctx.setFillStyle(PALETTE.inkSubtle)
   ctx.setFontSize(10)
   for (let k = 0; k < count; k++) {
     const i = from + ((to - from) * k) / (count - 1)
@@ -232,7 +233,7 @@ function draw() {
 
     ctx.beginPath()
     ctx.setLineDash([3, 4])
-    ctx.setStrokeStyle('#9aa0a8')
+    ctx.setStrokeStyle(PALETTE.inkSubtle)
     ctx.moveTo(cx, PT)
     ctx.lineTo(cx, h - PB)
     ctx.stroke()
@@ -240,7 +241,7 @@ function draw() {
 
     ctx.beginPath()
     ctx.arc(cx, cy, 4.5, 0, 2 * Math.PI)
-    ctx.setFillStyle('#17191d')
+    ctx.setFillStyle(PALETTE.ink)
     ctx.fill()
 
     const d = dateAt(ci)
@@ -250,9 +251,9 @@ function draw() {
     const tw = text.length * 6.2 + 16
     const bx = clamp(cx - tw / 2, 2, w - tw - 2)
     const by = clamp(cy - 30, PT, h - PB - 22)
-    ctx.setFillStyle('#17191d')
+    ctx.setFillStyle(PALETTE.ink)
     ctx.fillRect(bx, by, tw, 22)
-    ctx.setFillStyle('#ffffff')
+    ctx.setFillStyle(PALETTE.surface)
     ctx.fillText(text, bx + 8, by + 15)
   }
 

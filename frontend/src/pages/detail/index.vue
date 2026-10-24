@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 // 训练详情（从日志页点进来；接 GET /api/workouts/{id}）。
 // 右上角「编辑」进入就地编辑：标题、各组重量/次数、备注可改；按钮变 ✓，点 ✓ 保存（PUT /api/workouts/{id}）。
 import { computed, ref } from 'vue'
@@ -281,7 +282,7 @@ function back() {
       title: '放弃修改？',
       content: '当前改动尚未保存，返回将丢弃。',
       confirmText: '放弃',
-      confirmColor: '#C4453C',
+      confirmColor: PALETTE.danger,
       success: ({ confirm }) => {
         if (confirm) {
           editing.value = false

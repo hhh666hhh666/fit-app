@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
@@ -127,7 +128,7 @@ function doDelete() {
     title: '删除自定义动作',
     content: `删除选中的 ${ids.length} 个动作？动作会从动作库下架，历史训练记录仍会保留。`,
     confirmText: '删除',
-    confirmColor: '#C4453C',
+    confirmColor: PALETTE.danger,
     success: async ({ confirm }) => {
       if (!confirm) return
       try {
