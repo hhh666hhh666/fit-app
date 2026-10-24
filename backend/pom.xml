@@ -15,7 +15,7 @@
     <artifactId>fit-app-server</artifactId>
     <!-- 与 git tag 对齐（唯一真相源），但保留 -SNAPSHOT：两个 tag 之间 HEAD 必然领先，
          那个状态下这个 Maven 坐标其实还没发布过。校验时由 scripts/check-version.sh 剥掉后缀比对。 -->
-    <version>0.27.0-SNAPSHOT</version>
+    <version>0.27.1-SNAPSHOT</version>
     <name>fit-app-server</name>
 
     <properties>
