@@ -46,14 +46,14 @@ uni-app（Vue 3 ＋ TypeScript，编译为 H5）＋ Spring Boot 后端。Android
 
 ## Brand Commitments
 
-应用名 fit-app；界面语言中文。视觉语言「晴窗」已定稿（`docs/adr/0041-design-language-qingchuang.md`），视觉的真相源是 `frontend/src/uni.scss` 与 `frontend/src/components/Ft*.vue`，不在本文件里复述。没有 logo 或其他品牌素材。
+应用名 fit-app；界面语言中文。视觉语言「晴窗」已定稿（`docs/adr/0041-design-language-qingchuang.md`），视觉的真相源是 `frontend/src/uni.scss` 与 `frontend/src/components/Ft*.vue`，不在本文件里复述。App 图标是底栏那颗橙色「开始训练」圆钮配白色哑铃，放在晴窗的浅蓝天光底上（安卓壳 `android-shell/app/src/main/res/drawable/ic_launcher_*.xml`；网页标签页 `frontend/src/static/favicon.svg` 只取圆钮）；除此之外没有 logo 或其他品牌素材。
 
 ## Evidence on Hand
 
 - 需求与范围：`docs/requirements/scope.md`、`docs/adr/`、`CONTEXT.md`；
 - 原始功能规划稿（输入素材，已被后续 ADR 多处修正）：`docs/requirements/产品设计稿.md`；
 - 真实数据只在主人自己的服务器上，仓库里没有；
-- 缺席（未来工作不得凭空编造）：真实用户评价、品牌素材、第三方数据、运营内容——N=1 自用工具，这类内容天然不存在。
+- 缺席（未来工作不得凭空编造）：真实用户评价、品牌素材（App 图标之外）、第三方数据、运营内容——N=1 自用工具，这类内容天然不存在。
 
 ## Product Principles
 
