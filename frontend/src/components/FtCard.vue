@@ -15,9 +15,7 @@ defineEmits<{ click: [] }>()
 
 <style lang="scss" scoped>
 .ft-glass {
-  background: $glass-bg;
-  -webkit-backdrop-filter: $glass-blur;
-  backdrop-filter: $glass-blur;
+  @include glass;
   border: 1rpx solid $glass-edge;
   border-radius: $radius-lg;
   box-shadow: $glass-shadow;

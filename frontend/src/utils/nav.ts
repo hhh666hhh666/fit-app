@@ -113,18 +113,60 @@ function copyCanvases(from: HTMLElement, to: HTMLElement) {
   })
 }
 
-/** 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行 */
-let heldOut: (() => void) | null = null
+/**
+ * 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行。
+ * 参数 `withEnter`：新页正在同一帧滑进来（`playTabEnter` 放行）＝ true；
+ * 新页没来、超时或没有方向（兜底放行）＝ false，见 startSlide 里两种滑法的区别。
+ */
+let heldOut: ((withEnter: boolean) => void) | null = null
 
-function releaseOut() {
+function releaseOut(withEnter = false) {
   const go = heldOut
   heldOut = null
-  go?.()
+  go?.(withEnter)
 }
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/** 滑动期间挂在 <html> 上：玻璃去掉背景模糊（`uni.scss` 的 glass mixin） */
+const SLIDING_CLASS = 'is-tab-sliding'
+/** 连点时上一层还没摘、下一层又铺上，用计数而不是开关，最后一层摘掉才撤类 */
+let slidingCount = 0
+
+/**
+ * 副本里的 SVG id 必须改名：同一个 id 在文档里出现两次时，`url(#id)` 解析到**文档顺序里
+ * 第一个**——那是旧页里的原件，旧页一切走就被藏起来，副本的投影跟着消失。
+ */
+function renameSvgIds(root: HTMLElement) {
+  root.querySelectorAll('[id]').forEach((el) => {
+    const old = el.id
+    const fresh = `${old}-pin`
+    el.id = fresh
+    root.querySelectorAll(`[filter="url(#${old})"]`).forEach((ref) => {
+      ref.setAttribute('filter', `url(#${fresh})`)
+    })
+  })
+}
+
+/** 把一块原件按它此刻在视口里的位置克隆进 `into`（绝对定位，滚动不用另算） */
+function cloneAt(src: HTMLElement, into: HTMLElement): HTMLElement {
+  const r = src.getBoundingClientRect()
+  const clone = src.cloneNode(true) as HTMLElement
+  copyInherited(src.parentElement, clone)
+  Object.assign(clone.style, {
+    position: 'absolute',
+    left: `${r.left}px`,
+    top: `${r.top}px`,
+    width: `${r.width}px`,
+    margin: '0',
+    boxSizing: 'border-box'
+  })
+  into.appendChild(clone)
+  copyCanvases(src, clone)
+  return clone
 }
 
 /**
@@ -142,15 +184,24 @@ function prefersReducedMotion() {
  * 现在克隆层铺好后**先不动**（层有底色，把底下的新页挡住），由 `playTabEnter` 放行；
  * 新页迟迟不来就在 `HOLD_MAX_MS` 后自己滑。
  *
+ * **层不动、只滑里面的内容**（2026-10-24）：层的底色是和页面同一层钉在视口的渐变，
+ * 以前整层一起滑，光晕就跟着横移，看得出「背景也在走」。现在放行那一帧新页正好在屏幕外，
+ * 层把底色撤掉、只滑里面的克隆内容，背景纹丝不动。兜底放行（新页没来）时新页还停在原位，
+ * 那时仍得整层带底色滑走，否则两页叠影。
+ *
+ * **底栏副本**（2026-10-24）：底栏是每页各一份，旧页一切走它就跟着藏了，新页的底栏要等新页
+ * 挂上才出现——中间那几帧屏幕上没有底栏（真机连拍两帧实锤）。所以把当前底栏（`pinned`）
+ * 也克隆一份钉在「克隆层之上、真底栏之下」（z-index 15，介于 10 与 20 之间）：新底栏一画出来
+ * 就把副本原样盖住，指示条从那一刻起照常滑；副本随克隆层一起摘掉。
+ *
  * `dir` 是旧页滑出的方向；`fromSelectors` 是当前页要跟着滑的块（正文 `.log__body` 等，
- * 每页一块）。每块按它此刻在视口里的位置钉进克隆层，所以页面滚动
- * 不用另算。tabbar 不在这些块里，且四页的 `__bottom` 都是 `z-index: 20`，
- * 克隆层（10）压不到它——只有 tabbar 钉住不动。
+ * 每页一块）；`pinned` 是钉住不动、只需要补位的块（底栏）。
  */
 export function startSlide(
   dir: 'left' | 'right',
   navigate: () => void,
-  fromSelectors: readonly string[]
+  fromSelectors: readonly string[],
+  pinned: readonly HTMLElement[] = []
 ) {
   const srcs = fromSelectors
     .map((s) => document.querySelector(s) as HTMLElement | null)
@@ -160,37 +211,49 @@ export function startSlide(
     return
   }
 
+  // 先挂类再克隆：克隆体一进文档就是「不模糊」的样子，不会先模糊一帧再撤
+  const html = document.documentElement
+  slidingCount++
+  html.classList.add(SLIDING_CLASS)
+
   const layer = document.createElement('div')
   layer.className = 'tab-slide-layer'
-  for (const src of srcs) {
-    const r = src.getBoundingClientRect()
-    const clone = src.cloneNode(true) as HTMLElement
-    copyInherited(src.parentElement, clone)
-    copyCanvases(src, clone)
-    Object.assign(clone.style, {
-      position: 'absolute',
-      left: `${r.left}px`,
-      top: `${r.top}px`,
-      width: `${r.width}px`,
-      margin: '0',
-      boxSizing: 'border-box'
-    })
-    layer.appendChild(clone)
-  }
+  const content = document.createElement('div')
+  content.className = 'tab-slide-layer__content'
+  layer.appendChild(content)
+  for (const src of srcs) cloneAt(src, content)
   document.body.appendChild(layer)
+
+  let pin: HTMLElement | null = null
+  const bars = pinned.filter((el) => el.isConnected && el.getBoundingClientRect().width > 0)
+  if (bars.length) {
+    pin = document.createElement('div')
+    pin.className = 'tab-slide-pin'
+    for (const bar of bars) renameSvgIds(cloneAt(bar, pin))
+    document.body.appendChild(pin)
+  }
 
   let removed = false
   const drop = () => {
     if (removed) return
     removed = true
     layer.remove()
+    pin?.remove()
+    slidingCount = Math.max(0, slidingCount - 1)
+    if (slidingCount === 0) html.classList.remove(SLIDING_CLASS)
   }
 
   // 上一次还没放行的层（连点）立刻放它滑走，不排队
   releaseOut()
   const dx = dir === 'left' ? -100 : 100
-  heldOut = () => {
-    const anim = layer.animate(
+  heldOut = (withEnter) => {
+    // 新页同帧滑进来：层撤底色、只滑内容；兜底：整层带底色滑走（新页还停在原位，要挡住它）
+    let target: HTMLElement = layer
+    if (withEnter) {
+      layer.classList.add('is-released')
+      target = content
+    }
+    const anim = target.animate(
       [{ transform: 'translateX(0)' }, { transform: `translateX(${dx}%)` }],
       { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' }
     )
@@ -226,7 +289,8 @@ export function playTabEnter(selectors: string | readonly string[], dir: 'left' 
     const el = document.querySelector(list[0]) as HTMLElement | null
     if (el && el.isConnected) {
       if (typeof el.animate !== 'function') return releaseOut()
-      releaseOut()
+      // 新页这一帧开始从屏幕外滑进来：旧页克隆层可以撤底色、只滑内容
+      releaseOut(true)
       for (const s of list) {
         const target = document.querySelector(s) as HTMLElement | null
         if (!target?.isConnected) continue

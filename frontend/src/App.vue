@@ -77,9 +77,7 @@ page::before {
 
 /* 玻璃卡片 */
 .ft-card {
-  background: $glass-bg;
-  -webkit-backdrop-filter: $glass-blur;
-  backdrop-filter: $glass-blur;
+  @include glass;
   border: 1rpx solid $glass-edge;
   border-radius: $radius-lg;
   box-shadow: $glass-shadow;
@@ -197,11 +195,13 @@ page::before {
 }
 
 /* ── 切页转场：旧页克隆层滑出（ADR 0040）──
-   utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层，切换后整层滑出；
-   新页同时从另一侧滑入。底栏不在正文里，且 `__bottom` 都是 z-index: 20，
-   所以这一层（10）压不到底栏——底栏钉住不动。
+   utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层的 __content，
+   新页就绪的那一帧放行：层撤掉底色、只滑 __content，新页同时从另一侧滑入。
    底色必须铺满：层铺上后要等新页就绪才起跑，这段时间新页已在底下原位，
-   透明的话两页会叠成重影。
+   透明的话两页会叠成重影。层本身不动——底色是和 page::before 同一层钉在视口的渐变，
+   一起滑的话光晕会跟着横移。
+   层级：克隆层 10 ＜ 底栏副本 15 ＜ 真底栏（各页 __bottom）20。底栏每页一份，旧页一藏
+   它就没了，新页的要等挂上才出现；副本就补这几帧，新底栏一画出来就把它盖住。
    ⚠️ 别把 View Transitions 那套（::view-transition-*）加回来：主人设备的 WebView
    不支持（要 Chrome 111+），当时一直走兜底硬切，表现为「中间一帧整页空白」。 */
 .tab-slide-layer {
@@ -210,11 +210,27 @@ page::before {
   overflow: hidden;
   pointer-events: none;
   z-index: 10;
-  /* 和 page::before 同一层渐变、同样钉在视口：滑动期间底色严丝合缝 */
+  /* 和 page::before 同一层渐变、同样钉在视口：撤掉的那一刻底下看不出接缝 */
   background: $app-canvas-bg;
-  will-change: transform;
   /* 克隆体可能比视口高，滑出时不能让它撑出滚动条 */
   contain: paint;
+}
+
+.tab-slide-layer.is-released {
+  background: transparent;
+}
+
+.tab-slide-layer__content {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.tab-slide-pin {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
 }
 
 /* ── 内置 tabBar 必须自己压掉（ADR 0038）──

@@ -25,6 +25,10 @@ $app-surface-2: rgba(120, 140, 170, 0.12); // 次级面：tag 底 / 进度条轨
 $glass-bg: rgba(255, 255, 255, 0.62);
 $glass-bg-strong: rgba(250, 252, 254, 0.72); // 底栏 / 悬浮条：底下压着内容，要再实一点
 $glass-blur: blur(30px) saturate(1.8);
+// 切页滑动期间玻璃不做背景模糊（见下面的 glass mixin），换成这层更实的白；
+// 底下是均匀渐变，模糊前后本来就差不多：实测同一点只差 ≤5/255（模糊带的饱和让玻璃略偏蓝，
+// 白色叠层补不回饱和度），滑动的 260ms 里看不出来
+$glass-bg-sliding: rgba(255, 255, 255, 0.62);
 $glass-edge: rgba(255, 255, 255, 0.85);
 $glass-shadow: inset 0 2rpx 0 rgba(255, 255, 255, 0.95), 0 0 0 1rpx rgba(30, 50, 80, 0.06),
   0 24rpx 64rpx -32rpx rgba(30, 50, 80, 0.22);
@@ -108,6 +112,22 @@ $tabbar-outline: rgba(30, 50, 80, 0.1); // 底栏外描边
 $dur-fast: 150ms;
 $dur-base: 220ms;
 $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+// ── 玻璃面板：会动的玻璃一律用这个 mixin ──
+// 切页那一下两整页都在滑，每块玻璃底下的内容每帧都在变，背景模糊得逐帧重算——
+// 安卓 WebView 最容易掉帧的就是这一刻。所以滑动期间（nav.ts 给 <html> 挂 is-tab-sliding）
+// 去掉模糊、换成更实的白。⚠️ 底栏玻璃不用它：底栏钉着不动，一直模糊，滑动时去掉反而一闪。
+@mixin glass($bg: $glass-bg) {
+  background: $bg;
+  -webkit-backdrop-filter: $glass-blur;
+  backdrop-filter: $glass-blur;
+
+  .is-tab-sliding & {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: $glass-bg-sliding;
+  }
+}
 
 // ── 字体 ──
 // 中文走系统字体，只用 400 / 700 两档（安卓各家中文字体的中间字重不可靠）；

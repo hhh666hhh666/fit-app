@@ -64,6 +64,8 @@ const activeCol = computed(() => tabs[activeIdx.value].col)
 //    与顶边之间用半径 8 的圆角过渡。宽度随屏宽变，所以路径在运行时按实测宽度生成。──
 const BAR_H = 62
 const barRef = ref<unknown>(null)
+/** 整个底栏（含圆钮）：切页时克隆一份钉住，补上新页底栏还没画出来的那几帧 */
+const rootRef = ref<unknown>(null)
 const barW = ref(0)
 
 const notchPath = computed(() => {
@@ -222,7 +224,9 @@ function go(t: (typeof tabs)[number]) {
   // 去右边的 tab：旧页往左滑出、新页从右进来（反过来同理）
   const toIdx = tabs.findIndex((x) => x.key === t.key)
   const dir: 'left' | 'right' = toIdx > activeIdx.value ? 'left' : 'right'
-  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].slide)
+  const raw = rootRef.value as { $el?: HTMLElement } | HTMLElement | null
+  const root = ((raw as { $el?: HTMLElement } | null)?.$el ?? raw) as HTMLElement | null
+  startSlide(dir, () => uni.switchTab({ url: t.url }), tabs[activeIdx.value].slide, root ? [root] : [])
 }
 
 // 首次挂载：冷启动没有方向信号，直接落在当前格；从别的 tab 切来的首访则带着方向——
@@ -251,7 +255,7 @@ watch(
 </script>
 
 <template>
-  <view class="ft-tabbar">
+  <view ref="rootRef" class="ft-tabbar">
     <view ref="barRef" class="ft-tabbar__bar">
       <!-- 投影：按凹口路径画的模糊影子，垫在玻璃下面 -->
       <svg v-if="notchPath" class="ft-tabbar__svg" :viewBox="`0 0 ${barW} ${BAR_H}`" aria-hidden="true">

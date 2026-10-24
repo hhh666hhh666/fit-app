@@ -68,9 +68,7 @@ function onClick() {
 }
 
 .ft-button--secondary {
-  background: $glass-bg-strong;
-  -webkit-backdrop-filter: $glass-blur;
-  backdrop-filter: $glass-blur;
+  @include glass($glass-bg-strong);
   border-color: $glass-edge;
   color: $app-ink-2;
   box-shadow: $shadow-sm;
