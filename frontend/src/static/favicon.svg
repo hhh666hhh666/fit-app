@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- 网页标签页图标：App 图标里那颗橙色圆钮单独拿出来（安卓壳 res/drawable/ic_launcher_foreground.xml），
+       标签页只有 16～32px，天光底与柔光都省掉。改图两边一起改。 -->
+  <defs>
+    <linearGradient id="ember" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ec6a31"/>
+      <stop offset="1" stop-color="#d24b15"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="24" cy="24" r="24" fill="url(#ember)"/>
+  <path d="M4.15 12.54A22.92 22.92 0 0 1 43.85 12.54" fill="none" stroke="url(#rim)" stroke-width="1.2" stroke-linecap="round"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <path stroke-width="4.5" d="M16.93 15.62v16.76M31.07 15.62v16.76M10.79 19.72v8.56M37.21 19.72v8.56"/>
+    <path stroke-width="3.13" d="M16.93 24h14.14"/>
+  </g>
+</svg>
