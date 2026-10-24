@@ -453,102 +453,106 @@ function removePlan() {
     </view>
 
     <!-- 目标组次弹层（逐组，ADR 0027／0031） -->
-    <FtSheet
-      v-if="targetSheet.show"
-      guard
-      title="目标组次"
-      :sub="rows[targetSheet.index]?.name"
-      @close="targetSheet.show = false"
-    >
-      <scroll-view scroll-y class="ts__scroll">
-        <view class="field">
-          <text class="field__label">组数</text>
-          <input
-            :value="targetSheet.count"
-            type="number"
-            class="field__input ft-num"
-            placeholder="不设"
-            placeholder-class="ph"
-            @input="onCountInput"
-          />
-        </view>
-
-        <!-- 逐组次数／重量：行数由上面的组数决定 -->
-        <view v-if="targetSheet.rows.length > 0" class="sets">
-          <view class="sets__head">
-            <text class="sets__title">每组目标</text>
-            <view class="sets__fill" role="button" @click="fillAllSets">按第 1 组填满</view>
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="targetSheet.show"
+        guard
+        title="目标组次"
+        :sub="rows[targetSheet.index]?.name"
+        @close="targetSheet.show = false"
+      >
+        <scroll-view scroll-y class="ts__scroll">
+          <view class="field">
+            <text class="field__label">组数</text>
+            <input
+              :value="targetSheet.count"
+              type="number"
+              class="field__input ft-num"
+              placeholder="不设"
+              placeholder-class="ph"
+              @input="onCountInput"
+            />
           </view>
-          <view v-for="(s, i) in targetSheet.rows" :key="i" class="setrow">
-            <text class="setrow__idx ft-num">第 {{ i + 1 }} 组</text>
-            <!-- 爬楼：一层一栏（ADR 0031）；力量：次数／重量两栏 -->
-            <view v-if="editingIsFloors" class="setrow__field">
-              <input v-model="s.floors" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
-              <text class="setrow__unit">层</text>
+
+          <!-- 逐组次数／重量：行数由上面的组数决定 -->
+          <view v-if="targetSheet.rows.length > 0" class="sets">
+            <view class="sets__head">
+              <text class="sets__title">每组目标</text>
+              <view class="sets__fill" role="button" @click="fillAllSets">按第 1 组填满</view>
             </view>
-            <template v-else>
-              <view class="setrow__field">
-                <input v-model="s.reps" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
-                <text class="setrow__unit">次</text>
+            <view v-for="(s, i) in targetSheet.rows" :key="i" class="setrow">
+              <text class="setrow__idx ft-num">第 {{ i + 1 }} 组</text>
+              <!-- 爬楼：一层一栏（ADR 0031）；力量：次数／重量两栏 -->
+              <view v-if="editingIsFloors" class="setrow__field">
+                <input v-model="s.floors" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+                <text class="setrow__unit">层</text>
               </view>
-              <view class="setrow__field">
-                <input v-model="s.weight" type="digit" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
-                <text class="setrow__unit">kg</text>
-              </view>
-            </template>
+              <template v-else>
+                <view class="setrow__field">
+                  <input v-model="s.reps" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+                  <text class="setrow__unit">次</text>
+                </view>
+                <view class="setrow__field">
+                  <input v-model="s.weight" type="digit" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+                  <text class="setrow__unit">kg</text>
+                </view>
+              </template>
+            </view>
           </view>
-        </view>
 
-        <text v-if="editingIsFloors" class="ts__hint">
-          每组层数可留空（全空＝只记组数）；开始训练时按各组目标预填
-        </text>
-        <text v-else-if="editingIsCardio" class="ts__hint">有氧动作只记组数，不设每组次数与重量</text>
-        <text v-else class="ts__hint">组数留空＝不设目标；开始训练时按各组目标预填</text>
-      </scroll-view>
-      <FtButton variant="primary" block class="ts__btn" @click="confirmTarget">确定</FtButton>
-    </FtSheet>
+          <text v-if="editingIsFloors" class="ts__hint">
+            每组层数可留空（全空＝只记组数）；开始训练时按各组目标预填
+          </text>
+          <text v-else-if="editingIsCardio" class="ts__hint">有氧动作只记组数，不设每组次数与重量</text>
+          <text v-else class="ts__hint">组数留空＝不设目标；开始训练时按各组目标预填</text>
+        </scroll-view>
+        <FtButton variant="primary" block class="ts__btn" @click="confirmTarget">确定</FtButton>
+      </FtSheet>
+    </Transition>
 
     <!-- 高级设置：循环组（ADR 0028） -->
-    <FtSheet
-      v-if="circuitSheet.show"
-      title="循环组"
-      sub="组号相同的动作轮流做：做完 A 第 1 组马上做 B 第 1 组，一轮走完再进下一轮。轮数按组内最多的组数算。"
-      @close="circuitSheet.show = false"
-    >
-      <scroll-view scroll-y class="ts__scroll">
-        <view class="cs">
-          <view v-for="(r, i) in rows" :key="r.exerciseId" class="cs__row">
-            <view class="cs__main">
-              <text class="cs__name">{{ r.name }}</text>
-              <text v-if="isCardio(r)" class="cs__sub">有氧动作不参与循环</text>
-              <view v-else-if="r.circuitNo != null" class="cs__nos" role="radiogroup" aria-label="循环组号">
-                <view
-                  v-for="no in MAX_CIRCUIT"
-                  :key="no"
-                  class="cs__no ft-num"
-                  :class="{ 'cs__no--on': r.circuitNo === no }"
-                  role="radio"
-                  :aria-checked="r.circuitNo === no"
-                  @click.stop="setCircuitNo(i, no)"
-                >
-                  {{ CIRCUIT_LABELS[no - 1] }}
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="circuitSheet.show"
+        title="循环组"
+        sub="组号相同的动作轮流做：做完 A 第 1 组马上做 B 第 1 组，一轮走完再进下一轮。轮数按组内最多的组数算。"
+        @close="circuitSheet.show = false"
+      >
+        <scroll-view scroll-y class="ts__scroll">
+          <view class="cs">
+            <view v-for="(r, i) in rows" :key="r.exerciseId" class="cs__row">
+              <view class="cs__main">
+                <text class="cs__name">{{ r.name }}</text>
+                <text v-if="isCardio(r)" class="cs__sub">有氧动作不参与循环</text>
+                <view v-else-if="r.circuitNo != null" class="cs__nos" role="radiogroup" aria-label="循环组号">
+                  <view
+                    v-for="no in MAX_CIRCUIT"
+                    :key="no"
+                    class="cs__no ft-num"
+                    :class="{ 'cs__no--on': r.circuitNo === no }"
+                    role="radio"
+                    :aria-checked="r.circuitNo === no"
+                    @click.stop="setCircuitNo(i, no)"
+                  >
+                    {{ CIRCUIT_LABELS[no - 1] }}
+                  </view>
                 </view>
               </view>
-            </view>
-            <view
-              class="cs__toggle"
-              :class="{ 'cs__toggle--on': r.circuitNo != null, 'is-off': isCardio(r) }"
-              role="switch"
-              :aria-checked="r.circuitNo != null"
-              @click.stop="toggleCircuit(i)"
-            >
-              {{ r.circuitNo != null ? '退出循环' : '加入循环' }}
+              <view
+                class="cs__toggle"
+                :class="{ 'cs__toggle--on': r.circuitNo != null, 'is-off': isCardio(r) }"
+                role="switch"
+                :aria-checked="r.circuitNo != null"
+                @click.stop="toggleCircuit(i)"
+              >
+                {{ r.circuitNo != null ? '退出循环' : '加入循环' }}
+              </view>
             </view>
           </view>
-        </view>
-      </scroll-view>
-      <FtButton variant="primary" block class="ts__btn" @click="circuitSheet.show = false">完成</FtButton>
-    </FtSheet>
+        </scroll-view>
+        <FtButton variant="primary" block class="ts__btn" @click="circuitSheet.show = false">完成</FtButton>
+      </FtSheet>
+    </Transition>
   </view>
 </template>
 
@@ -579,14 +583,11 @@ function removePlan() {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  @include press(dim);
 }
 
 .pill--danger {
   color: $app-danger;
-}
-
-.pill:active {
-  opacity: 0.7;
 }
 
 /* ── 名称 ── */
@@ -651,10 +652,7 @@ function removePlan() {
   background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink-2;
-}
-
-.adv:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .adv__n {
@@ -676,10 +674,7 @@ function removePlan() {
   gap: 16rpx;
   padding: 24rpx 8rpx;
   border-top: 1rpx solid $app-line-soft;
-}
-
-.erow:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .erow__idx {
@@ -748,10 +743,7 @@ function removePlan() {
   border-radius: $radius-md;
   font-size: $text-base;
   color: $app-ink-muted;
-}
-
-.addbtn:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 /* ── 底部保存 ── */
@@ -836,10 +828,7 @@ function removePlan() {
   background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink-2;
-}
-
-.sets__fill:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .setrow {
@@ -950,6 +939,7 @@ function removePlan() {
   border-radius: $radius-pill;
   font-size: $text-sm;
   color: $app-ink-2;
+  @include press(dim);
 }
 
 .cs__toggle--on {
@@ -960,7 +950,4 @@ function removePlan() {
   opacity: 0.4;
 }
 
-.cs__toggle:active {
-  opacity: 0.6;
-}
 </style>

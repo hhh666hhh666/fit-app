@@ -107,14 +107,11 @@ function editDay(idx: number) {
   align-items: center;
   gap: 16rpx;
   padding: 28rpx 0;
+  @include press(dim);
 }
 
 .dayrow + .dayrow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.dayrow:active {
-  opacity: 0.6;
 }
 
 /* 今天：浅底胶囊（与首页「今天的计划」同一个高亮），上下细线让开 */

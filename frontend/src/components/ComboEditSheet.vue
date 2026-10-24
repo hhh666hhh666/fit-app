@@ -148,82 +148,85 @@ async function save() {
 
 <template>
   <!-- touchmove 截在弹层自己身上：冒到页面上会被当成「下拉刷新」（不截 touchstart，uni 的长按靠它） -->
-  <view class="cs-mask" @click="requestClose" @touchmove.stop.prevent />
-  <view
-    class="cs"
-    role="dialog"
-    :aria-label="isNew ? '新建组合' : '编辑组合'"
-    @touchmove.stop
-  >
-    <view class="cs__handle" />
-    <view class="cs__head">
-      <text class="cs__title">{{ isNew ? '新建组合' : '编辑组合' }}</text>
-      <view class="cs__close" role="button" aria-label="关闭" @click="requestClose">
-        <FtIcon name="close" :size="18" :stroke="2" />
-      </view>
-    </view>
-
-    <scroll-view scroll-y class="cs__body">
-      <view class="field">
-        <text class="field__label">组合名</text>
-        <input
-          v-model="name"
-          class="field__input"
-          placeholder="如：减脂早餐"
-          placeholder-class="field__ph"
-        />
-      </view>
-
-      <view class="dlist">
-        <view v-if="draft.length === 0" class="dlist__empty">还没有添加食物</view>
-        <view v-for="(it, i) in draft" :key="i" class="drow">
-          <text class="drow__name">{{ it.foodName }}</text>
-          <view class="drow__grams">
-            <input v-model="it.grams" type="digit" class="drow__input ft-num" />
-            <text class="drow__unit">{{ it.unit }}</text>
-          </view>
-          <view class="drow__del" role="button" aria-label="删除这一样" @click="removeAt(i)">
-            <FtIcon name="close" :size="14" :stroke="2" />
-          </view>
+  <!-- 遮罩是根、面板是它的子元素（父组件的 Transition 只认单根，进出场样式在 App.vue「弹层进出」）；点遮罩＝点垫在面板底下的 __hit 层（uni 包装过的事件上 .self 永远不触发） -->
+  <view class="cs-mask ft-overlay" @touchmove.stop.prevent>
+    <view class="ft-overlay__hit" @click="requestClose" />
+    <view
+      class="cs ft-overlay__panel"
+      role="dialog"
+      :aria-label="isNew ? '新建组合' : '编辑组合'"
+      @touchmove.stop
+    >
+      <view class="cs__handle" />
+      <view class="cs__head">
+        <text class="cs__title">{{ isNew ? '新建组合' : '编辑组合' }}</text>
+        <view class="cs__close" role="button" aria-label="关闭" @click="requestClose">
+          <FtIcon name="close" :size="18" :stroke="2" />
         </view>
       </view>
 
-      <view v-if="!picking" class="addbtn" role="button" @click="startPick">
-        <FtIcon name="plus" :size="16" :stroke="2" />
-        <text>添加食物</text>
-      </view>
-
-      <view v-else class="picker">
-        <view class="psearch">
-          <FtIcon name="search" :size="16" tone="subtle" />
+      <scroll-view scroll-y class="cs__body">
+        <view class="field">
+          <text class="field__label">组合名</text>
           <input
-            v-model="keyword"
-            class="psearch__input"
-            placeholder="搜索食物库"
-            placeholder-class="psearch__ph"
-            confirm-type="search"
-            @input="onKeyword"
+            v-model="name"
+            class="field__input"
+            placeholder="如：减脂早餐"
+            placeholder-class="field__ph"
           />
-          <text class="psearch__cancel" @click="picking = false">收起</text>
         </view>
-        <view class="plist">
-          <view v-for="f in foods" :key="f.id" class="prow" @click="pickFood(f)">
-            <view class="prow__mid">
-              <text class="prow__name">{{ f.name }}</text>
-              <text class="prow__sub ft-num">每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g</text>
+
+        <view class="dlist">
+          <view v-if="draft.length === 0" class="dlist__empty">还没有添加食物</view>
+          <view v-for="(it, i) in draft" :key="i" class="drow">
+            <text class="drow__name">{{ it.foodName }}</text>
+            <view class="drow__grams">
+              <input v-model="it.grams" type="digit" class="drow__input ft-num" />
+              <text class="drow__unit">{{ it.unit }}</text>
             </view>
-            <text class="prow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
-          </view>
-          <view v-if="foods.length === 0" class="plist__empty">
-            没有找到匹配的食物——可去「食物库」新增
+            <view class="drow__del" role="button" aria-label="删除这一样" @click="removeAt(i)">
+              <FtIcon name="close" :size="14" :stroke="2" />
+            </view>
           </view>
         </view>
-      </view>
 
-      <view class="cs__pad" />
-    </scroll-view>
+        <view v-if="!picking" class="addbtn" role="button" @click="startPick">
+          <FtIcon name="plus" :size="16" :stroke="2" />
+          <text>添加食物</text>
+        </view>
 
-    <FtButton variant="primary" block :disabled="saving" class="cs__save" @click="save">保存</FtButton>
+        <view v-else class="picker">
+          <view class="psearch">
+            <FtIcon name="search" :size="16" tone="subtle" />
+            <input
+              v-model="keyword"
+              class="psearch__input"
+              placeholder="搜索食物库"
+              placeholder-class="psearch__ph"
+              confirm-type="search"
+              @input="onKeyword"
+            />
+            <text class="psearch__cancel" @click="picking = false">收起</text>
+          </view>
+          <view class="plist">
+            <view v-for="f in foods" :key="f.id" class="prow" @click="pickFood(f)">
+              <view class="prow__mid">
+                <text class="prow__name">{{ f.name }}</text>
+                <text class="prow__sub ft-num">每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g</text>
+              </view>
+              <text class="prow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
+            </view>
+            <view v-if="foods.length === 0" class="plist__empty">
+              没有找到匹配的食物——可去「食物库」新增
+            </view>
+          </view>
+        </view>
+
+        <view class="cs__pad" />
+      </scroll-view>
+
+      <FtButton variant="primary" block :disabled="saving" class="cs__save" @click="save">保存</FtButton>
+    </view>
   </view>
 </template>
 
@@ -234,7 +237,6 @@ async function save() {
   inset: 0;
   background: $app-mask;
   z-index: 90;
-  animation: cs-fade $dur-base $ease-out;
 }
 
 .cs {
@@ -251,7 +253,6 @@ async function save() {
   background: $app-canvas-bottom;
   border-radius: $radius-xl $radius-xl 0 0;
   box-shadow: $shadow-sheet;
-  animation: cs-up $dur-base $ease-out;
 }
 
 .cs__handle {
@@ -412,10 +413,7 @@ async function save() {
   border-radius: $radius-lg;
   font-size: $text-base;
   color: $app-ink-2;
-}
-
-.addbtn:active {
-  background: $app-surface-2;
+  @include press(fill);
 }
 
 .picker {
@@ -461,14 +459,11 @@ async function save() {
   display: flex;
   align-items: center;
   padding: 22rpx 0;
+  @include press(dim);
 }
 
 .prow + .prow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.prow:active {
-  opacity: 0.6;
 }
 
 .prow__mid {
@@ -509,30 +504,5 @@ async function save() {
 .cs .cs__save {
   flex-shrink: 0;
   margin-top: 20rpx;
-}
-
-@keyframes cs-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes cs-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cs,
-  .cs-mask {
-    animation: none;
-  }
 }
 </style>

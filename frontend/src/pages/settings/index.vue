@@ -219,10 +219,7 @@ async function save() {
   gap: 16rpx;
   padding: 22rpx 0;
   border-top: 1rpx solid $app-line-soft;
-}
-
-.opt:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .opt__mid {

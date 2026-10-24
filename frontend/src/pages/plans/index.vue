@@ -164,39 +164,43 @@ function startOver() {
     </view>
 
     <!-- 计划预览弹层：先看清编排骨再开练（ADR 0032） -->
-    <FtSheet
-      v-if="preview.open"
-      :title="preview.plan?.name ?? '训练计划'"
-      :sub="preview.loading ? '读取编排…' : `${preview.plan?.exercises.length ?? 0} 个动作 · 开始前先看清练什么`"
-      @close="closePreview"
-    >
-      <scroll-view v-if="preview.plan" scroll-y class="pv__scroll">
-        <view class="pv">
-          <view v-for="(e, i) in preview.plan.exercises" :key="e.exerciseId" class="pvrow">
-            <text class="pvrow__idx ft-num">{{ i + 1 }}</text>
-            <view class="pvrow__mid">
-              <view class="pvrow__line">
-                <text class="pvrow__name">{{ e.name }}</text>
-                <text v-if="e.circuitNo != null" class="badge">{{ previewCircuitOf(e.circuitNo) }}</text>
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="preview.open"
+        :title="preview.plan?.name ?? '训练计划'"
+        :sub="preview.loading ? '读取编排…' : `${preview.plan?.exercises.length ?? 0} 个动作 · 开始前先看清练什么`"
+        @close="closePreview"
+      >
+        <scroll-view v-if="preview.plan" scroll-y class="pv__scroll">
+          <view class="pv">
+            <view v-for="(e, i) in preview.plan.exercises" :key="e.exerciseId" class="pvrow">
+              <text class="pvrow__idx ft-num">{{ i + 1 }}</text>
+              <view class="pvrow__mid">
+                <view class="pvrow__line">
+                  <text class="pvrow__name">{{ e.name }}</text>
+                  <text v-if="e.circuitNo != null" class="badge">{{ previewCircuitOf(e.circuitNo) }}</text>
+                </view>
+                <text class="pvrow__goal ft-num">{{ previewGoalOf(e) }}</text>
               </view>
-              <text class="pvrow__goal ft-num">{{ previewGoalOf(e) }}</text>
             </view>
           </view>
+        </scroll-view>
+        <view class="pv__actions">
+          <FtButton v-if="preview.plan" variant="primary" block @click="startPreviewPlan">开始训练</FtButton>
+          <FtButton variant="ghost" block @click="closePreview">先不练</FtButton>
         </view>
-      </scroll-view>
-      <view class="pv__actions">
-        <FtButton v-if="preview.plan" variant="primary" block @click="startPreviewPlan">开始训练</FtButton>
-        <FtButton variant="ghost" block @click="closePreview">先不练</FtButton>
-      </view>
-    </FtSheet>
+      </FtSheet>
+    </Transition>
 
-    <SessionConflictSheet
-      v-if="conflict"
-      :session="conflict.session"
-      @resume="resumeLast"
-      @fresh="startOver"
-      @close="conflict = null"
-    />
+    <Transition name="ft-sheet">
+      <SessionConflictSheet
+        v-if="conflict"
+        :session="conflict.session"
+        @resume="resumeLast"
+        @fresh="startOver"
+        @close="conflict = null"
+      />
+    </Transition>
   </view>
 </template>
 
@@ -219,10 +223,7 @@ function startOver() {
   display: flex;
   align-items: center;
   gap: 6rpx;
-}
-
-.pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 .plans__meta {
@@ -236,11 +237,7 @@ function startOver() {
   display: flex;
   flex-direction: column;
   gap: 8rpx;
-  transition: opacity $dur-fast $ease-out;
-}
-
-.pcard:active {
-  opacity: 0.75;
+  @include press(dim);
 }
 
 .pcard__head {
@@ -267,10 +264,7 @@ function startOver() {
   background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink-2;
-}
-
-.pcard__edit:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .pcard__summary {
@@ -382,11 +376,5 @@ function startOver() {
   flex-direction: column;
   gap: 16rpx;
   padding-top: 28rpx;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pcard {
-    transition: none;
-  }
 }
 </style>

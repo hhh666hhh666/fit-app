@@ -47,10 +47,7 @@ function goBack() {
   justify-content: center;
   border-radius: $radius-pill;
   color: $app-ink;
-}
-
-.ft-head__back:active {
-  background: $app-surface-2;
+  @include press(fill);
 }
 
 .ft-head__main {

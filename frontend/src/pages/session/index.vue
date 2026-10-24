@@ -1139,11 +1139,7 @@ function comingSoon(tip: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform $dur-fast $ease-out;
-}
-
-.setrow__go:active {
-  transform: scale(0.94);
+  @include press(shrink);
 }
 
 /* ── 加一组 ／ 添加动作 ── */
@@ -1164,10 +1160,7 @@ function comingSoon(tip: string) {
   gap: 8rpx;
   font-size: $text-md;
   color: $app-ink-2;
-}
-
-.card__action:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 .card__action--locked {
@@ -1239,17 +1232,6 @@ function comingSoon(tip: string) {
   font-size: 30rpx;
   font-weight: $weight-bold;
   color: $app-ink;
-  transition: transform $dur-fast $ease-out;
-}
-
-.dock__end:active {
-  transform: scale(0.97);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .setrow__go,
-  .dock__end {
-    transition: none;
-  }
+  @include press(shrink);
 }
 </style>

@@ -436,63 +436,67 @@ const fullHeight = computed(() => {
     </view>
 
     <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029） -->
-    <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
-      <scroll-view scroll-y class="esheet">
-        <template v-if="energy?.complete">
-          <view class="eq">
-            <view class="eq__row">
-              <text class="eq__k">基础代谢</text>
-              <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+    <Transition name="ft-sheet">
+      <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
+        <scroll-view scroll-y class="esheet">
+          <template v-if="energy?.complete">
+            <view class="eq">
+              <view class="eq__row">
+                <text class="eq__k">基础代谢</text>
+                <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+              </view>
+              <text class="eq__note">
+                按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
+                {{ energy.age }} · {{ sexLabel(energy.sex) }}
+              </text>
+              <view class="eq__row">
+                <text class="eq__k">× 生活活动系数</text>
+                <text class="eq__v ft-num"
+                  >{{ energy.activityFactor }}（{{ activityLabel(energy.activityLevel) }}）</text
+                >
+              </view>
+              <view class="eq__row">
+                <text class="eq__k">= 基础消耗</text>
+                <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
+              </view>
+              <view class="eq__row">
+                <text class="eq__k">+ 今日训练消耗</text>
+                <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
+              </view>
+              <view class="eq__row eq__row--sum">
+                <text class="eq__k">= 今日总消耗</text>
+                <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
+              </view>
+              <view class="eq__row">
+                <text class="eq__k">− 今日摄入</text>
+                <text class="eq__v ft-num">{{ kcalNow }} 大卡</text>
+              </view>
+              <view class="eq__row eq__row--sum">
+                <text class="eq__k">= {{ gapLabel }}</text>
+                <text class="eq__v ft-num">{{ overview?.gap ?? '–' }} 大卡</text>
+              </view>
             </view>
-            <text class="eq__note">
-              按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
-              {{ energy.age }} · {{ sexLabel(energy.sex) }}
+            <text class="eq__hint">
+              生活活动系数只算日常活动（工作、走动），专门训练不在里面——训练消耗是单独加上去的，不会重复计算。
             </text>
-            <view class="eq__row">
-              <text class="eq__k">× 生活活动系数</text>
-              <text class="eq__v ft-num"
-                >{{ energy.activityFactor }}（{{ activityLabel(energy.activityLevel) }}）</text
-              >
-            </view>
-            <view class="eq__row">
-              <text class="eq__k">= 基础消耗</text>
-              <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
-            </view>
-            <view class="eq__row">
-              <text class="eq__k">+ 今日训练消耗</text>
-              <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
-            </view>
-            <view class="eq__row eq__row--sum">
-              <text class="eq__k">= 今日总消耗</text>
-              <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
-            </view>
-            <view class="eq__row">
-              <text class="eq__k">− 今日摄入</text>
-              <text class="eq__v ft-num">{{ kcalNow }} 大卡</text>
-            </view>
-            <view class="eq__row eq__row--sum">
-              <text class="eq__k">= {{ gapLabel }}</text>
-              <text class="eq__v ft-num">{{ overview?.gap ?? '–' }} 大卡</text>
-            </view>
-          </view>
-          <text class="eq__hint">
-            生活活动系数只算日常活动（工作、走动），专门训练不在里面——训练消耗是单独加上去的，不会重复计算。
-          </text>
-          <text class="eq__hint">
-            目标热量仍是自己设的那个数（设置页），跟这里的消耗是两回事：目标是想达成的量，缺口是今天实际的状态。
-          </text>
-        </template>
-      </scroll-view>
-      <FtButton block class="esheet__ok" @click="energySheet.show = false">知道了</FtButton>
-    </FtSheet>
+            <text class="eq__hint">
+              目标热量仍是自己设的那个数（设置页），跟这里的消耗是两回事：目标是想达成的量，缺口是今天实际的状态。
+            </text>
+          </template>
+        </scroll-view>
+        <FtButton block class="esheet__ok" @click="energySheet.show = false">知道了</FtButton>
+      </FtSheet>
+    </Transition>
 
-    <MealSheet
-      v-if="sheetMeal"
-      :date="dateStr"
-      :meal="sheetMeal"
-      @close="sheetMeal = null"
-      @changed="onChanged"
-    />
+    <Transition name="ft-sheet">
+      <MealSheet
+        v-if="sheetMeal"
+        :date="dateStr"
+        :meal="sheetMeal"
+        @close="sheetMeal = null"
+        @changed="onChanged"
+      />
+    </Transition>
   </view>
 </template>
 
@@ -559,10 +563,7 @@ const fullHeight = computed(() => {
   align-items: center;
   justify-content: center;
   color: $app-ink-2;
-}
-
-.datebar__arrow:active {
-  background: $app-surface-2;
+  @include press(fill);
 }
 
 .datebar__arrow--off {
@@ -679,14 +680,11 @@ const fullHeight = computed(() => {
   align-items: center;
   gap: 20rpx;
   padding: 20rpx 0;
+  @include press(dim);
 }
 
 .meal + .meal {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.meal:active {
-  opacity: 0.6;
 }
 
 .meal__ico,
@@ -835,11 +833,7 @@ const fullHeight = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform $dur-fast $ease-out;
-}
-
-.water__btn:active {
-  transform: scale(0.94);
+  @include press(shrink);
 }
 
 .water__btn--add {
@@ -998,12 +992,5 @@ const fullHeight = computed(() => {
 .dietpg .esheet__ok {
   flex-shrink: 0;
   margin-top: 28rpx;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item,
-  .water__btn {
-    transition: none;
-  }
 }
 </style>

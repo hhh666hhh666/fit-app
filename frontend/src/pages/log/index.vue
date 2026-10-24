@@ -368,10 +368,7 @@ function doDelete() {
   align-items: center;
   justify-content: center;
   color: $app-ink-2;
-}
-
-.monthbar__arrow:active {
-  background: $app-surface-2;
+  @include press(fill);
 }
 
 .monthbar__arrow--off {
@@ -474,15 +471,11 @@ function doDelete() {
   margin: 0 -12rpx;
   padding: 24rpx 12rpx;
   border-radius: $radius-md;
-  transition: background $dur-fast $ease-out;
+  @include press(fill);
 }
 
 .lrow + .lrow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.lrow:active {
-  background: $app-surface-2;
 }
 
 /* 多选态：选中行浅底 */
@@ -570,11 +563,5 @@ function doDelete() {
   text-align: center;
   font-size: $text-sm;
   color: $app-ink-muted;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lrow {
-    transition: none;
-  }
 }
 </style>

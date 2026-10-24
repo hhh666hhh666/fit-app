@@ -366,10 +366,7 @@ function doDelete() {
   font-size: $text-md;
   font-weight: $weight-bold;
   color: $app-danger;
-}
-
-.fd__del:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 .fd__bar .fd__edit {

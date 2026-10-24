@@ -270,6 +270,103 @@ uni-toast .uni-simple-toast__text {
   pointer-events: none;
 }
 
+/* ── 弹层进出：FtSheet、MealSheet、ComboEditSheet、PhotoViewer 共用 ──
+   结构约定：遮罩是组件的**根**（类 `ft-overlay`），面板是它的子元素（类 `ft-overlay__panel`）。
+   - 进场：挂载即播（keyframes）——遮罩底色从透明淡进、面板从底部升起，父组件包不包 Transition 都有；
+   - 离场：父组件用 `<Transition name="ft-sheet">` 包住 `v-if`。点遮罩、返回键、保存成功……
+     不管从哪关，都是父组件把 v-if 置 false，Transition 先播完再卸载；
+   - Vue 只量**根元素**的时长，所以根上那条底色过渡是计时用的，面板的位移和它同长。
+   全屏看图没有面板，用 `ft-overlay--fade` 整层淡进淡出。
+   减少动态效果时不位移、只淡（确认「关上了」的那一下还在）。 */
+.ft-overlay {
+  animation: ft-overlay-in $dur-base $ease-out;
+}
+
+.ft-overlay__panel {
+  animation: ft-panel-up $dur-base $ease-out;
+}
+
+/* 点遮罩关闭的那一层：铺满遮罩、垫在面板底下（面板是 fixed ＋ z-index，盖在它上面） */
+.ft-overlay__hit {
+  position: absolute;
+  inset: 0;
+}
+
+/* 退场中不再接点击：正在离开的弹层上连点两下，不能把同一个动作再触发一次 */
+.ft-overlay.ft-sheet-leave-active {
+  animation: none;
+  pointer-events: none;
+  transition: background-color $dur-leave $ease-in, opacity $dur-leave $ease-in;
+}
+
+.ft-overlay.ft-sheet-leave-active .ft-overlay__panel {
+  animation: none;
+  transition: transform $dur-leave $ease-in;
+}
+
+/* 只在正常动效下撤底色：减少动态效果时整层只淡 opacity，底色一撤就成了「遮罩先没、面板后淡」 */
+@media (prefers-reduced-motion: no-preference) {
+  .ft-overlay:not(.ft-overlay--fade).ft-sheet-leave-to {
+    background-color: transparent;
+  }
+}
+
+/* 盖过下拉时的行内 translateY：从手指松开的位置接着往下走 */
+.ft-overlay.ft-sheet-leave-to .ft-overlay__panel {
+  transform: translateY(100%) !important;
+}
+
+.ft-overlay--fade {
+  animation: ft-fade-in $dur-base $ease-out;
+}
+
+.ft-overlay--fade.ft-sheet-leave-to {
+  opacity: 0;
+}
+
+@keyframes ft-overlay-in {
+  from {
+    background-color: transparent;
+  }
+}
+
+@keyframes ft-panel-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes ft-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-overlay,
+  .ft-overlay--fade {
+    animation: ft-fade-in $dur-fast linear;
+  }
+
+  .ft-overlay__panel,
+  .ft-overlay.ft-sheet-leave-active .ft-overlay__panel {
+    animation: none;
+    transition: none;
+  }
+
+  .ft-overlay.ft-sheet-leave-active {
+    transition: opacity $dur-fast linear;
+  }
+
+  .ft-overlay.ft-sheet-leave-to {
+    opacity: 0;
+  }
+
+  .ft-overlay.ft-sheet-leave-to .ft-overlay__panel {
+    transform: none !important;
+  }
+}
+
 /* ── 内置 tabBar 必须自己压掉（ADR 0038）──
    四个主页面已在 pages.json 注册成 tabBar 页（为的是 switchTab 的保活），但 H5 运行期
    **不认 `custom: true`**：只要 `route.meta.isTabBar` 为真且 `tabBar.shown` 为真，它就会

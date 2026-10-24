@@ -342,52 +342,58 @@ function copyExport() {
     </view>
 
     <!-- 导入弹层 -->
-    <FtSheet
-      v-if="importSheet.show"
-      guard
-      title="导入 JSON"
-      sub="粘贴食物数组：数值按「每 100g/100ml」，也可给 kj 自动换算；同名会跳过"
-      @close="importSheet.show = false"
-    >
-      <scroll-view scroll-y class="fs__scroll">
-        <textarea
-          v-model="importSheet.text"
-          class="fs__area"
-          placeholder='[{"name":"鸡蛋","kcal":139,"protein":13.1,"fat":8.6,"carb":2.4,"sodium":131}]'
-          placeholder-class="fs__ph"
-          maxlength="-1"
-        />
-        <view v-if="importSheet.result" class="fs__result">
-          <text class="fs__line ft-num">
-            成功 {{ importSheet.result.imported }} · 跳过 {{ importSheet.result.skipped.length }} ·
-            失败 {{ importSheet.result.failed.length }}
-          </text>
-          <text v-for="(s, i) in importSheet.result.skipped" :key="'s' + i" class="fs__skip">
-            跳过（同名）：{{ s }}
-          </text>
-          <text v-for="(fl, i) in importSheet.result.failed" :key="'f' + i" class="fs__fail">
-            失败：{{ fl.name }} —— {{ fl.reason }}
-          </text>
-        </view>
-      </scroll-view>
-      <FtButton variant="primary" block :disabled="importSheet.busy" class="fs__btn" @click="doImport">
-        导入
-      </FtButton>
-    </FtSheet>
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="importSheet.show"
+        guard
+        title="导入 JSON"
+        sub="粘贴食物数组：数值按「每 100g/100ml」，也可给 kj 自动换算；同名会跳过"
+        @close="importSheet.show = false"
+      >
+        <scroll-view scroll-y class="fs__scroll">
+          <textarea
+            v-model="importSheet.text"
+            class="fs__area"
+            placeholder='[{"name":"鸡蛋","kcal":139,"protein":13.1,"fat":8.6,"carb":2.4,"sodium":131}]'
+            placeholder-class="fs__ph"
+            maxlength="-1"
+          />
+          <view v-if="importSheet.result" class="fs__result">
+            <text class="fs__line ft-num">
+              成功 {{ importSheet.result.imported }} · 跳过 {{ importSheet.result.skipped.length }} ·
+              失败 {{ importSheet.result.failed.length }}
+            </text>
+            <text v-for="(s, i) in importSheet.result.skipped" :key="'s' + i" class="fs__skip">
+              跳过（同名）：{{ s }}
+            </text>
+            <text v-for="(fl, i) in importSheet.result.failed" :key="'f' + i" class="fs__fail">
+              失败：{{ fl.name }} —— {{ fl.reason }}
+            </text>
+          </view>
+        </scroll-view>
+        <FtButton variant="primary" block :disabled="importSheet.busy" class="fs__btn" @click="doImport">
+          导入
+        </FtButton>
+      </FtSheet>
+    </Transition>
 
     <!-- 导出弹层 -->
-    <FtSheet v-if="exportSheet.show" title="导出 JSON" sub="已复制到剪贴板" @close="exportSheet.show = false">
-      <textarea :value="exportSheet.text" class="fs__area" maxlength="-1" />
-      <FtButton block class="fs__btn" @click="copyExport">再复制一次</FtButton>
-    </FtSheet>
+    <Transition name="ft-sheet">
+      <FtSheet v-if="exportSheet.show" title="导出 JSON" sub="已复制到剪贴板" @close="exportSheet.show = false">
+        <textarea :value="exportSheet.text" class="fs__area" maxlength="-1" />
+        <FtButton block class="fs__btn" @click="copyExport">再复制一次</FtButton>
+      </FtSheet>
+    </Transition>
 
     <!-- 组合编辑弹层（新建 / 编辑共用） -->
-    <ComboEditSheet
-      v-if="comboSheet.show"
-      :combo="comboSheet.editing"
-      @close="comboSheet.show = false"
-      @saved="onComboSaved"
-    />
+    <Transition name="ft-sheet">
+      <ComboEditSheet
+        v-if="comboSheet.show"
+        :combo="comboSheet.editing"
+        @close="comboSheet.show = false"
+        @saved="onComboSaved"
+      />
+    </Transition>
   </view>
 </template>
 
@@ -410,10 +416,7 @@ function copyExport() {
   display: flex;
   align-items: center;
   gap: 6rpx;
-}
-
-.pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* ── 食物／组合 分段 ── */
@@ -482,10 +485,7 @@ function copyExport() {
   justify-content: center;
   font-size: $text-base;
   color: $app-ink-2;
-}
-
-.ops__btn:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* ── 列表 ── */
@@ -507,15 +507,12 @@ function copyExport() {
   align-items: center;
   gap: 16rpx;
   padding: 24rpx 0;
+  @include press(dim);
 }
 
 .frow + .frow,
 .flist__head + .frow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.frow:active {
-  opacity: 0.6;
 }
 
 .frow__mid {
@@ -619,11 +616,5 @@ function copyExport() {
 .foods .fs__btn {
   flex-shrink: 0;
   margin-top: 28rpx;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item {
-    transition: none;
-  }
 }
 </style>

@@ -296,13 +296,15 @@ function goLibrary() {
     </view>
 
     <!-- 饮食记录弹层 -->
-    <MealSheet
-        v-if="sheetMeal"
-        :date="todayKey"
-        :meal="sheetMeal"
-        @close="sheetMeal = null"
-        @changed="refreshDiet"
-    />
+    <Transition name="ft-sheet">
+      <MealSheet
+          v-if="sheetMeal"
+          :date="todayKey"
+          :meal="sheetMeal"
+          @close="sheetMeal = null"
+          @changed="refreshDiet"
+      />
+    </Transition>
   </FtTabPage>
 </template>
 
@@ -361,10 +363,7 @@ function goLibrary() {
   font-size: $text-base;
   font-weight: $weight-bold;
   color: $app-ink-2;
-}
-
-.home__pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* ── 今天吃了 ── */
@@ -436,8 +435,10 @@ function goLibrary() {
   gap: 12rpx;
 }
 
+/* 按的是整格、缩的是图标块：press(shrink) 的同一套数值，只是作用在子元素上 */
 .diet__shortcut:active .diet__ico {
-  transform: scale(0.94);
+  transform: scale(0.96);
+  transition-duration: 0s;
 }
 
 .diet__ico {

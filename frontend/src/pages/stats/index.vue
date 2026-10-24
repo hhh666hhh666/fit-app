@@ -354,10 +354,4 @@ function barHeight(count: number): string {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item {
-    transition: none;
-  }
-}
 </style>

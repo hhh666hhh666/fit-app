@@ -715,203 +715,209 @@ function fatText(v: number | null | undefined): string {
     </view>
 
     <!-- 录入 / 编辑弹层 -->
-    <FtSheet
-      v-if="sheet.show"
-      guard
-      :title="sheet.editId == null ? '记录身体数据' : '编辑记录'"
-      :sub="lastHint ? `${lastHint}的数据已预填，没量的项清空即可` : undefined"
-      @close="sheet.show = false"
-    >
-      <scroll-view scroll-y class="sh__scroll" :class="{ 'is-bare': !lastHint }">
-        <view class="group">
-          <view class="row">
-            <text class="row__k">日期</text>
-            <picker mode="date" :value="sheet.date" @change="onDateChange">
-              <view class="row__picker ft-num">{{ sheet.date }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
-            </picker>
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="sheet.show"
+        guard
+        :title="sheet.editId == null ? '记录身体数据' : '编辑记录'"
+        :sub="lastHint ? `${lastHint}的数据已预填，没量的项清空即可` : undefined"
+        @close="sheet.show = false"
+      >
+        <scroll-view scroll-y class="sh__scroll" :class="{ 'is-bare': !lastHint }">
+          <view class="group">
+            <view class="row">
+              <text class="row__k">日期</text>
+              <picker mode="date" :value="sheet.date" @change="onDateChange">
+                <view class="row__picker ft-num">{{ sheet.date }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
+              </picker>
+            </view>
+            <view class="row">
+              <text class="row__k">时刻</text>
+              <picker mode="time" :value="sheet.time" @change="onTimeChange">
+                <view class="row__picker ft-num">{{ sheet.time }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
+              </picker>
+            </view>
           </view>
-          <view class="row">
-            <text class="row__k">时刻</text>
-            <picker mode="time" :value="sheet.time" @change="onTimeChange">
-              <view class="row__picker ft-num">{{ sheet.time }}<FtIcon name="chevron-right" :size="16" tone="subtle" /></view>
-            </picker>
-          </view>
-        </view>
 
-        <view class="group">
-          <view class="row">
-            <text class="row__k">体重</text>
-            <view class="units" role="radiogroup" aria-label="体重单位">
-              <view
-                class="units__item"
-                :class="{ 'units__item--on': weightUnit === 'jin' }"
-                role="radio"
-                :aria-checked="weightUnit === 'jin'"
-                @click="unitChange('jin')"
-              >
-                斤
+          <view class="group">
+            <view class="row">
+              <text class="row__k">体重</text>
+              <view class="units" role="radiogroup" aria-label="体重单位">
+                <view
+                  class="units__item"
+                  :class="{ 'units__item--on': weightUnit === 'jin' }"
+                  role="radio"
+                  :aria-checked="weightUnit === 'jin'"
+                  @click="unitChange('jin')"
+                >
+                  斤
+                </view>
+                <view
+                  class="units__item"
+                  :class="{ 'units__item--on': weightUnit === 'kg' }"
+                  role="radio"
+                  :aria-checked="weightUnit === 'kg'"
+                  @click="unitChange('kg')"
+                >
+                  千克
+                </view>
               </view>
-              <view
-                class="units__item"
-                :class="{ 'units__item--on': weightUnit === 'kg' }"
-                role="radio"
-                :aria-checked="weightUnit === 'kg'"
-                @click="unitChange('kg')"
-              >
-                千克
+              <input
+                v-model="sheet.weight"
+                class="row__input ft-num"
+                type="digit"
+                :step="weightInputStep()"
+                :placeholder="weightUnit === 'jin' ? '如 145.0' : '如 72.50'"
+                placeholder-class="ph"
+              />
+            </view>
+            <!-- 体脂率：跟体重并列的一项，只记录不参与任何计算（ADR 0030） -->
+            <view class="row">
+              <view class="row__k-col">
+                <text class="row__k">体脂率（%）</text>
+                <text class="row__aside">只做记录，不参与计算</text>
+              </view>
+              <input v-model="sheet.bodyFat" class="row__input ft-num" type="digit" step="0.1" placeholder="如 18.4" placeholder-class="ph" />
+            </view>
+          </view>
+
+          <view class="group">
+            <text class="group__label">围度（cm）</text>
+            <view class="girths">
+              <view v-for="p in GIRTH_PARTS" :key="p.key" class="girths__cell">
+                <text class="girths__k">{{ p.label }}</text>
+                <input v-model="sheet[p.key]" class="girths__input ft-num" type="digit" placeholder="–" placeholder-class="ph" />
               </view>
             </view>
-            <input
-              v-model="sheet.weight"
-              class="row__input ft-num"
-              type="digit"
-              :step="weightInputStep()"
-              :placeholder="weightUnit === 'jin' ? '如 145.0' : '如 72.50'"
-              placeholder-class="ph"
-            />
           </view>
-          <!-- 体脂率：跟体重并列的一项，只记录不参与任何计算（ADR 0030） -->
-          <view class="row">
-            <view class="row__k-col">
-              <text class="row__k">体脂率（%）</text>
-              <text class="row__aside">只做记录，不参与计算</text>
-            </view>
-            <input v-model="sheet.bodyFat" class="row__input ft-num" type="digit" step="0.1" placeholder="如 18.4" placeholder-class="ph" />
-          </view>
-        </view>
 
-        <view class="group">
-          <text class="group__label">围度（cm）</text>
-          <view class="girths">
-            <view v-for="p in GIRTH_PARTS" :key="p.key" class="girths__cell">
-              <text class="girths__k">{{ p.label }}</text>
-              <input v-model="sheet[p.key]" class="girths__input ft-num" type="digit" placeholder="–" placeholder-class="ph" />
+          <view class="group">
+            <view class="row">
+              <text class="row__k">备注</text>
+              <input
+                v-model="sheet.note"
+                class="row__input row__input--text"
+                placeholder="晨起空腹 / 练后称重…"
+                placeholder-class="ph"
+                maxlength="64"
+              />
             </view>
           </view>
-        </view>
-
-        <view class="group">
-          <view class="row">
-            <text class="row__k">备注</text>
-            <input
-              v-model="sheet.note"
-              class="row__input row__input--text"
-              placeholder="晨起空腹 / 练后称重…"
-              placeholder-class="ph"
-              maxlength="64"
-            />
-          </view>
-        </view>
-      </scroll-view>
-      <FtButton variant="primary" block :disabled="sheet.saving" class="sh__btn" @click="save">保存</FtButton>
-    </FtSheet>
+        </scroll-view>
+        <FtButton variant="primary" block :disabled="sheet.saving" class="sh__btn" @click="save">保存</FtButton>
+      </FtSheet>
+    </Transition>
 
     <!-- 个人档案弹层（ADR 0030） -->
-    <FtSheet
-      v-if="profileSheet.show"
-      guard
-      title="个人档案"
-      sub="填一次就行；体重始终取「身体档案」里最新的一条"
-      @close="profileSheet.show = false"
-    >
-      <scroll-view scroll-y class="sh__scroll">
-        <view class="group">
-          <view class="row">
-            <text class="row__k">性别</text>
-            <view class="units" role="radiogroup" aria-label="性别">
-              <view
-                v-for="o in SEX_OPTIONS"
-                :key="o.key"
-                class="units__item"
-                :class="{ 'units__item--on': profileSheet.sex === o.key }"
-                role="radio"
-                :aria-checked="profileSheet.sex === o.key"
-                @click="profileSheet.sex = o.key"
-              >
-                {{ o.label }}
+    <Transition name="ft-sheet">
+      <FtSheet
+        v-if="profileSheet.show"
+        guard
+        title="个人档案"
+        sub="填一次就行；体重始终取「身体档案」里最新的一条"
+        @close="profileSheet.show = false"
+      >
+        <scroll-view scroll-y class="sh__scroll">
+          <view class="group">
+            <view class="row">
+              <text class="row__k">性别</text>
+              <view class="units" role="radiogroup" aria-label="性别">
+                <view
+                  v-for="o in SEX_OPTIONS"
+                  :key="o.key"
+                  class="units__item"
+                  :class="{ 'units__item--on': profileSheet.sex === o.key }"
+                  role="radio"
+                  :aria-checked="profileSheet.sex === o.key"
+                  @click="profileSheet.sex = o.key"
+                >
+                  {{ o.label }}
+                </view>
               </view>
             </view>
+            <view class="row">
+              <text class="row__k">出生日期</text>
+              <picker mode="date" :value="profileSheet.birthDate" @change="onBirthChange">
+                <view class="row__picker ft-num" :class="{ 'is-empty': !profileSheet.birthDate }">
+                  {{ profileSheet.birthDate || '选择日期' }}<FtIcon name="chevron-right" :size="16" tone="subtle" />
+                </view>
+              </picker>
+            </view>
+            <view class="row">
+              <text class="row__k">身高（cm）</text>
+              <input v-model="profileSheet.height" class="row__input ft-num" type="digit" step="0.1" placeholder="如 175" placeholder-class="ph" />
+            </view>
           </view>
-          <view class="row">
-            <text class="row__k">出生日期</text>
-            <picker mode="date" :value="profileSheet.birthDate" @change="onBirthChange">
-              <view class="row__picker ft-num" :class="{ 'is-empty': !profileSheet.birthDate }">
-                {{ profileSheet.birthDate || '选择日期' }}<FtIcon name="chevron-right" :size="16" tone="subtle" />
-              </view>
-            </picker>
-          </view>
-          <view class="row">
-            <text class="row__k">身高（cm）</text>
-            <input v-model="profileSheet.height" class="row__input ft-num" type="digit" step="0.1" placeholder="如 175" placeholder-class="ph" />
-          </view>
-        </view>
 
-        <view class="group">
-          <view class="group__head">
-            <text class="group__label">平时活动量</text>
-            <text class="row__aside">只算日常，训练另记</text>
-          </view>
-          <view
-            v-for="o in LEVEL_OPTIONS"
-            :key="o.key"
-            class="opt"
-            role="radio"
-            :aria-checked="profileSheet.activityLevel === o.key"
-            @click="profileSheet.activityLevel = o.key"
-          >
-            <view class="opt__mid">
-              <text class="opt__label">{{ o.label }}</text>
-              <text class="opt__desc">{{ o.desc }}</text>
+          <view class="group">
+            <view class="group__head">
+              <text class="group__label">平时活动量</text>
+              <text class="row__aside">只算日常，训练另记</text>
             </view>
-            <view class="check" :class="{ 'check--on': profileSheet.activityLevel === o.key }">
-              <FtIcon v-if="profileSheet.activityLevel === o.key" name="check" :size="13" :stroke="2.4" tone="inverse" />
+            <view
+              v-for="o in LEVEL_OPTIONS"
+              :key="o.key"
+              class="opt"
+              role="radio"
+              :aria-checked="profileSheet.activityLevel === o.key"
+              @click="profileSheet.activityLevel = o.key"
+            >
+              <view class="opt__mid">
+                <text class="opt__label">{{ o.label }}</text>
+                <text class="opt__desc">{{ o.desc }}</text>
+              </view>
+              <view class="check" :class="{ 'check--on': profileSheet.activityLevel === o.key }">
+                <FtIcon v-if="profileSheet.activityLevel === o.key" name="check" :size="13" :stroke="2.4" tone="inverse" />
+              </view>
             </view>
           </view>
-        </view>
-      </scroll-view>
-      <FtButton variant="primary" block :disabled="profileSheet.saving" class="sh__btn" @click="saveProfileSheet">
-        保存
-      </FtButton>
-    </FtSheet>
+        </scroll-view>
+        <FtButton variant="primary" block :disabled="profileSheet.saving" class="sh__btn" @click="saveProfileSheet">
+          保存
+        </FtButton>
+      </FtSheet>
+    </Transition>
 
     <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029）；与饮食页同一套排版 -->
-    <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
-      <scroll-view scroll-y class="sh__scroll is-bare">
-        <template v-if="energy?.complete">
-          <view class="eq">
-            <view class="eq__row">
-              <text class="eq__k">基础代谢</text>
-              <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+    <Transition name="ft-sheet">
+      <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
+        <scroll-view scroll-y class="sh__scroll is-bare">
+          <template v-if="energy?.complete">
+            <view class="eq">
+              <view class="eq__row">
+                <text class="eq__k">基础代谢</text>
+                <text class="eq__v ft-num">{{ energy.bmr }} 大卡</text>
+              </view>
+              <text class="eq__note">
+                按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
+                {{ energy.age }} · {{ sexLabel(energy.sex) }}
+              </text>
+              <view class="eq__row">
+                <text class="eq__k">× 生活活动系数</text>
+                <text class="eq__v ft-num">{{ energy.activityFactor }}（{{ levelLabel(energy.activityLevel) }}）</text>
+              </view>
+              <view class="eq__row">
+                <text class="eq__k">= 基础消耗</text>
+                <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
+              </view>
+              <view class="eq__row">
+                <text class="eq__k">+ 今日训练消耗</text>
+                <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
+              </view>
+              <view class="eq__row eq__row--sum">
+                <text class="eq__k">= 今日总消耗</text>
+                <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
+              </view>
             </view>
-            <text class="eq__note">
-              按 Mifflin-St Jeor：体重 {{ energy.weightKg }} kg · 身高 {{ energy.heightCm }} cm · 年龄
-              {{ energy.age }} · {{ sexLabel(energy.sex) }}
+            <text class="eq__hint">
+              生活活动系数只算日常活动（工作、走动），专门训练不在里面——所以训练消耗是单独加上去的，不会重复计算。
             </text>
-            <view class="eq__row">
-              <text class="eq__k">× 生活活动系数</text>
-              <text class="eq__v ft-num">{{ energy.activityFactor }}（{{ levelLabel(energy.activityLevel) }}）</text>
-            </view>
-            <view class="eq__row">
-              <text class="eq__k">= 基础消耗</text>
-              <text class="eq__v ft-num">{{ energy.baseKcal }} 大卡</text>
-            </view>
-            <view class="eq__row">
-              <text class="eq__k">+ 今日训练消耗</text>
-              <text class="eq__v ft-num">{{ energy.trainingKcal }} 大卡</text>
-            </view>
-            <view class="eq__row eq__row--sum">
-              <text class="eq__k">= 今日总消耗</text>
-              <text class="eq__v ft-num">{{ energy.totalKcal }} 大卡</text>
-            </view>
-          </view>
-          <text class="eq__hint">
-            生活活动系数只算日常活动（工作、走动），专门训练不在里面——所以训练消耗是单独加上去的，不会重复计算。
-          </text>
-          <text class="eq__hint">体重取身体档案里最新一条{{ weightDateHint }}，换体重后数字会跟着变。</text>
-        </template>
-      </scroll-view>
-      <FtButton block class="sh__btn" @click="energySheet.show = false">知道了</FtButton>
-    </FtSheet>
+            <text class="eq__hint">体重取身体档案里最新一条{{ weightDateHint }}，换体重后数字会跟着变。</text>
+          </template>
+        </scroll-view>
+        <FtButton block class="sh__btn" @click="energySheet.show = false">知道了</FtButton>
+      </FtSheet>
+    </Transition>
   </view>
 </template>
 
@@ -954,10 +960,7 @@ function fatText(v: number | null | undefined): string {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-}
-
-.pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* ── 卡头：标题 ＋ 右侧小字或小胶囊 ── */
@@ -986,10 +989,7 @@ function fatText(v: number | null | undefined): string {
   background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink-2;
-}
-
-.chip-btn:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .muted-line {
@@ -1084,10 +1084,7 @@ function fatText(v: number | null | undefined): string {
   border-top: 1rpx solid $app-line-soft;
   font-size: $text-base;
   color: $app-ink-2;
-}
-
-.link-row:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 /* PR：浅橙底 ＋ 深橙字（PR 是「动作的结果」，归橙色） */
@@ -1199,10 +1196,7 @@ function fatText(v: number | null | undefined): string {
   gap: 16rpx;
   padding: 22rpx 4rpx;
   border-top: 1rpx solid $app-line-soft;
-}
-
-.mrow:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .mrow__main {
@@ -1465,14 +1459,11 @@ function fatText(v: number | null | undefined): string {
   gap: 16rpx;
   padding: 22rpx 0;
   border-top: 1rpx solid $app-line-soft;
+  @include press(dim);
 }
 
 .group__head + .opt {
   border-top: none;
-}
-
-.opt:active {
-  opacity: 0.6;
 }
 
 .opt__mid {
@@ -1542,11 +1533,5 @@ function fatText(v: number | null | undefined): string {
   font-size: $text-sm;
   line-height: 1.7;
   color: $app-ink-muted;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item {
-    transition: none;
-  }
 }
 </style>

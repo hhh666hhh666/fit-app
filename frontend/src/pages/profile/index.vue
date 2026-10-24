@@ -420,8 +420,8 @@ function logout() {
   gap: 8rpx;
 }
 
-.storage--tap:active {
-  opacity: 0.7;
+.storage--tap {
+  @include press(dim);
 }
 
 .storage__bar {

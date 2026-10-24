@@ -509,10 +509,7 @@ function back() {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-}
-
-.pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 .detail .detail__empty-back {
@@ -782,10 +779,7 @@ function back() {
   border-radius: $radius-md;
   font-size: $text-base;
   color: $app-ink-muted;
-}
-
-.addbtn:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 /* ── 备注 ── */

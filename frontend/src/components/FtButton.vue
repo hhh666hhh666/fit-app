@@ -42,11 +42,7 @@ function onClick() {
   border: 1rpx solid transparent;
   font-weight: $weight-bold;
   line-height: 1;
-  transition: transform $dur-fast $ease-out, opacity $dur-fast $ease-out;
-}
-
-.ft-button:active {
-  transform: scale(0.97);
+  @include press(shrink);
 }
 
 .ft-button--md {
@@ -97,11 +93,5 @@ function onClick() {
 
 .is-disabled:active {
   transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ft-button {
-    transition: none;
-  }
 }
 </style>

@@ -132,7 +132,8 @@ function releaseOut(mode: ReleaseMode = 'plain') {
   go?.(mode)
 }
 
-function prefersReducedMotion() {
+/** 系统要求「减少动态效果」：位移类动画一律不播（切页、指示条、会话页换动作都看它） */
+export function prefersReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }

@@ -196,16 +196,18 @@ function dateText(iso: string): string {
       </template>
     </view>
 
-    <PhotoViewer
-      v-if="viewer.show"
-      :urls="viewer.urls"
-      :index="viewer.index"
-      :caption="viewerCaption"
-      @close="closeViewer"
-      @change="onViewerChange"
-    >
-      <view class="vw-del" role="button" @click="removeCurrent">删除</view>
-    </PhotoViewer>
+    <Transition name="ft-sheet">
+      <PhotoViewer
+        v-if="viewer.show"
+        :urls="viewer.urls"
+        :index="viewer.index"
+        :caption="viewerCaption"
+        @close="closeViewer"
+        @change="onViewerChange"
+      >
+        <view class="vw-del" role="button" @click="removeCurrent">删除</view>
+      </PhotoViewer>
+    </Transition>
   </view>
 </template>
 
@@ -260,10 +262,7 @@ function dateText(iso: string): string {
   border-radius: $radius-sm;
   overflow: hidden;
   background: $app-surface-2;
-}
-
-.cell:active {
-  opacity: 0.8;
+  @include press(dim);
 }
 
 .cell__img {
@@ -314,9 +313,7 @@ function dateText(iso: string): string {
   font-size: $text-base;
   font-weight: $weight-bold;
   color: $viewer-ink;
+  @include press(dim);
 }
 
-.vw-del:active {
-  opacity: 0.6;
-}
 </style>

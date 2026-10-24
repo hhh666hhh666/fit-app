@@ -36,15 +36,11 @@ defineEmits<{ click: [] }>()
   gap: 20rpx;
   padding: 24rpx 0;
   border-top: 1rpx solid $app-line-soft;
-  transition: opacity $dur-fast $ease-out;
+  @include press(dim);
 }
 
 .ft-row:first-child {
   border-top: none;
-}
-
-.ft-row:active {
-  opacity: 0.6;
 }
 
 .is-highlight {

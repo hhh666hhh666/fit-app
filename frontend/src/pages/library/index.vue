@@ -287,41 +287,43 @@ async function confirmCreate() {
     </view>
 
     <!-- 新增动作弹层 -->
-    <FtSheet v-if="sheet.show" title="新增动作" guard @close="sheet.show = false">
-      <view class="ns">
-        <view class="field">
-          <text class="field__label">动作名称</text>
-          <input
-            v-model="sheet.name"
-            class="field__input"
-            placeholder="如：保加利亚深蹲"
-            placeholder-class="field__ph"
-            maxlength="32"
-          />
-        </view>
+    <Transition name="ft-sheet">
+      <FtSheet v-if="sheet.show" title="新增动作" guard @close="sheet.show = false">
+        <view class="ns">
+          <view class="field">
+            <text class="field__label">动作名称</text>
+            <input
+              v-model="sheet.name"
+              class="field__input"
+              placeholder="如：保加利亚深蹲"
+              placeholder-class="field__ph"
+              maxlength="32"
+            />
+          </view>
 
-        <view class="group">
-          <text class="group__label">肌群</text>
-          <view class="chips">
-            <view
-              v-for="m in MUSCLES"
-              :key="m.code"
-              class="chip"
-              :class="{ 'chip--on': sheet.muscle === m.code }"
-              role="radio"
-              :aria-checked="sheet.muscle === m.code"
-              @click="sheet.muscle = m.code"
-            >
-              {{ m.label }}
+          <view class="group">
+            <text class="group__label">肌群</text>
+            <view class="chips">
+              <view
+                v-for="m in MUSCLES"
+                :key="m.code"
+                class="chip"
+                :class="{ 'chip--on': sheet.muscle === m.code }"
+                role="radio"
+                :aria-checked="sheet.muscle === m.code"
+                @click="sheet.muscle = m.code"
+              >
+                {{ m.label }}
+              </view>
             </view>
           </view>
         </view>
-      </view>
 
-      <FtButton variant="primary" block :disabled="sheet.saving" class="ns__btn" @click="confirmCreate">
-        创建
-      </FtButton>
-    </FtSheet>
+        <FtButton variant="primary" block :disabled="sheet.saving" class="ns__btn" @click="confirmCreate">
+          创建
+        </FtButton>
+      </FtSheet>
+    </Transition>
   </view>
 </template>
 
@@ -349,10 +351,7 @@ async function confirmCreate() {
   display: flex;
   align-items: center;
   gap: 6rpx;
-}
-
-.pill:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* ── 搜索 ── */
@@ -446,15 +445,12 @@ async function confirmCreate() {
   align-items: center;
   gap: 16rpx;
   padding: 24rpx 0;
+  @include press(dim);
 }
 
 .erow + .erow,
 .elist__head + .erow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.erow:active {
-  opacity: 0.6;
 }
 
 /* 多选时预设动作不能删：压淡，免得以为漏了勾 */
@@ -611,11 +607,5 @@ async function confirmCreate() {
 .lib .ns__btn {
   flex-shrink: 0;
   margin-top: 28rpx;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item {
-    transition: none;
-  }
 }
 </style>

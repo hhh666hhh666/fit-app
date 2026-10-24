@@ -327,181 +327,188 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 <template>
   <!-- touchmove 截在弹层自己身上：冒到首页的 uni-page-wrapper 会被当成「下拉刷新」（列表滑到顶再往下拉就触发）；
        不截 touchstart，uni 的长按靠 window 上的 touchstart 模拟 -->
-  <view class="ms-mask" @click="emit('close')" @touchmove.stop.prevent />
-  <view class="ms" role="dialog" :aria-label="MEAL_LABEL[meal]" @touchmove.stop>
-    <view class="ms__handle" />
-    <view class="ms__head">
-      <view class="ms__ico" :class="'ms__ico--' + meal">
-        <FtIcon :name="meal" :size="20" />
-      </view>
-      <text class="ms__title">{{ MEAL_LABEL[meal] }}</text>
-      <text class="ms__date ft-num">{{ date }}</text>
-      <view class="ms__close" role="button" aria-label="关闭" @click="emit('close')">
-        <FtIcon name="close" :size="18" :stroke="2" />
-      </view>
-    </view>
-
-    <scroll-view scroll-y class="ms__body">
-      <view v-if="loading" class="ms__loading">加载中…</view>
-
-      <template v-else>
-        <!-- 照片：点图看大图；角标给「更换」「删除」（ADR 0014） -->
-        <view class="photo">
-          <view v-if="photoUrl" class="photo__box">
-            <image class="photo__img" :src="photoUrl" mode="aspectFit" @click="viewPhoto" />
-            <view class="photo__ops">
-              <text class="photo__op" @click.stop="shoot">更换</text>
-              <text class="photo__op" @click.stop="removePhoto">删除</text>
-            </view>
-          </view>
-          <view v-else class="photo__empty" role="button" @click="shoot">
-            <FtIcon name="plus" :size="18" :stroke="2" />
-            <text>拍照记录这一餐</text>
-          </view>
+  <!-- 遮罩是根、面板是它的子元素（父组件的 Transition 只认单根，进出场样式在 App.vue「弹层进出」）；点遮罩＝点垫在面板底下的 __hit 层（uni 包装过的事件上 .self 永远不触发） -->
+  <view class="ms-mask ft-overlay" @touchmove.stop.prevent>
+    <view class="ft-overlay__hit" @click="emit('close')" />
+    <view class="ms ft-overlay__panel" role="dialog" :aria-label="MEAL_LABEL[meal]" @touchmove.stop>
+      <view class="ms__handle" />
+      <view class="ms__head">
+        <view class="ms__ico" :class="'ms__ico--' + meal">
+          <FtIcon :name="meal" :size="20" />
         </view>
+        <text class="ms__title">{{ MEAL_LABEL[meal] }}</text>
+        <text class="ms__date ft-num">{{ date }}</text>
+        <view class="ms__close" role="button" aria-label="关闭" @click="emit('close')">
+          <FtIcon name="close" :size="18" :stroke="2" />
+        </view>
+      </view>
 
-        <!-- 组合横滑条：点一下整份加入（可撤销） -->
-        <scroll-view v-if="combos.length" scroll-x class="combar">
-          <view class="combar__inner">
-            <view v-for="c in combos" :key="c.id" class="combar__chip" @click="applyCombo(c)">
-              <text class="combar__name">{{ c.name }}</text>
-              <text class="combar__sub ft-num">
-                {{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡
-              </text>
+      <scroll-view scroll-y class="ms__body">
+        <view v-if="loading" class="ms__loading">加载中…</view>
+
+        <template v-else>
+          <!-- 照片：点图看大图；角标给「更换」「删除」（ADR 0014） -->
+          <view class="photo">
+            <view v-if="photoUrl" class="photo__box">
+              <image class="photo__img" :src="photoUrl" mode="aspectFit" @click="viewPhoto" />
+              <view class="photo__ops">
+                <text class="photo__op" @click.stop="shoot">更换</text>
+                <text class="photo__op" @click.stop="removePhoto">删除</text>
+              </view>
             </view>
-          </view>
-        </scroll-view>
-
-        <!-- 添加区 -->
-        <view class="add">
-          <view v-if="!selected" class="asearch">
-            <FtIcon name="search" :size="16" tone="subtle" />
-            <input
-              v-model="keyword"
-              class="asearch__input"
-              placeholder="搜索食物库"
-              placeholder-class="asearch__ph"
-              confirm-type="search"
-            />
-            <view v-if="keyword" class="asearch__clear" role="button" aria-label="清空" @click="keyword = ''">
-              <FtIcon name="close" :size="14" :stroke="2" />
+            <view v-else class="photo__empty" role="button" @click="shoot">
+              <FtIcon name="plus" :size="18" :stroke="2" />
+              <text>拍照记录这一餐</text>
             </view>
           </view>
 
-          <!-- 选中食物 → 份量行；「添加」是这一屏唯一的橙色动作 -->
-          <view v-if="selected" class="pick">
-            <view class="pick__head">
-              <text class="pick__name">{{ selected.name }}</text>
-              <text class="pick__cancel" @click="cancelSelect">取消</text>
-            </view>
-            <view class="pick__sub ft-num">
-              每100{{ unitText(selected) }} · {{ Math.round(selected.kcal) }} 大卡 · 蛋白
-              {{ selected.protein }}g
-            </view>
-            <view class="pick__row">
-              <view v-if="selected.portionGrams" class="pick__portions">
-                <text class="pick__portion" @click="usePortion(1)">
-                  {{ selected.portionLabel || '1份' }}
-                </text>
-                <text class="pick__portion ft-num" @click="usePortion(2)">×2</text>
-              </view>
-              <view class="pick__input">
-                <input v-model="grams" type="digit" class="pick__input-field ft-num" />
-                <text class="pick__unit">{{ unitText(selected) }}</text>
-              </view>
-              <view
-                class="pick__btn"
-                :class="{ 'pick__btn--disabled': saving }"
-                role="button"
-                @click="confirmAdd"
-              >
-                添加
-              </view>
-            </view>
-          </view>
-
-          <!-- 食物列表 -->
-          <view v-else class="foods">
-            <view v-for="f in foods" :key="f.id" class="frow" @click="selectFood(f)">
-              <view class="frow__mid">
-                <view class="frow__line">
-                  <text class="frow__name">{{ f.name }}</text>
-                  <text v-if="f.preset" class="frow__badge">预设</text>
-                </view>
-                <text class="frow__sub ft-num">
-                  每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g
+          <!-- 组合横滑条：点一下整份加入（可撤销） -->
+          <scroll-view v-if="combos.length" scroll-x class="combar">
+            <view class="combar__inner">
+              <view v-for="c in combos" :key="c.id" class="combar__chip" @click="applyCombo(c)">
+                <text class="combar__name">{{ c.name }}</text>
+                <text class="combar__sub ft-num">
+                  {{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡
                 </text>
               </view>
-              <text class="frow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
             </view>
-            <view v-if="foods.length === 0" class="foods__empty">
-              没有找到匹配的食物——可去「食物库」新增
-            </view>
-          </view>
-        </view>
+          </scroll-view>
 
-        <!-- 本餐条目 -->
-        <view class="list">
-          <view class="list__head">
-            <text class="list__title">这一餐</text>
-            <text class="list__sum ft-num">合计 {{ mealKcal }} 大卡</text>
-          </view>
-          <view v-if="items.length === 0" class="list__empty">还没有记录</view>
-          <view v-for="it in items" :key="it.id" class="irow" @click="onItemTap(it)">
-            <template v-if="editingId === it.id">
-              <text class="irow__name">{{ it.foodName }}</text>
-              <view class="irow__edit">
-                <input v-model="editGrams" type="digit" :focus="true" class="irow__edit-input ft-num" @focus="revealEdit" />
-                <text class="irow__edit-unit">g</text>
-                <view class="irow__ok" role="button" aria-label="保存份量" @click.stop="confirmEdit">
-                  <FtIcon name="check" :size="16" :stroke="2.4" />
+          <!-- 添加区 -->
+          <view class="add">
+            <view v-if="!selected" class="asearch">
+              <FtIcon name="search" :size="16" tone="subtle" />
+              <input
+                v-model="keyword"
+                class="asearch__input"
+                placeholder="搜索食物库"
+                placeholder-class="asearch__ph"
+                confirm-type="search"
+              />
+              <view v-if="keyword" class="asearch__clear" role="button" aria-label="清空" @click="keyword = ''">
+                <FtIcon name="close" :size="14" :stroke="2" />
+              </view>
+            </view>
+
+            <!-- 选中食物 → 份量行；「添加」是这一屏唯一的橙色动作 -->
+            <view v-if="selected" class="pick">
+              <view class="pick__head">
+                <text class="pick__name">{{ selected.name }}</text>
+                <text class="pick__cancel" @click="cancelSelect">取消</text>
+              </view>
+              <view class="pick__sub ft-num">
+                每100{{ unitText(selected) }} · {{ Math.round(selected.kcal) }} 大卡 · 蛋白
+                {{ selected.protein }}g
+              </view>
+              <view class="pick__row">
+                <view v-if="selected.portionGrams" class="pick__portions">
+                  <text class="pick__portion" @click="usePortion(1)">
+                    {{ selected.portionLabel || '1份' }}
+                  </text>
+                  <text class="pick__portion ft-num" @click="usePortion(2)">×2</text>
+                </view>
+                <view class="pick__input">
+                  <input v-model="grams" type="digit" class="pick__input-field ft-num" />
+                  <text class="pick__unit">{{ unitText(selected) }}</text>
+                </view>
+                <view
+                  class="pick__btn"
+                  :class="{ 'pick__btn--disabled': saving }"
+                  role="button"
+                  @click="confirmAdd"
+                >
+                  添加
                 </view>
               </view>
-            </template>
-            <template v-else>
-              <view class="irow__mid">
+            </view>
+
+            <!-- 食物列表 -->
+            <view v-else class="foods">
+              <view v-for="f in foods" :key="f.id" class="frow" @click="selectFood(f)">
+                <view class="frow__mid">
+                  <view class="frow__line">
+                    <text class="frow__name">{{ f.name }}</text>
+                    <text v-if="f.preset" class="frow__badge">预设</text>
+                  </view>
+                  <text class="frow__sub ft-num">
+                    每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g
+                  </text>
+                </view>
+                <text class="frow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
+              </view>
+              <view v-if="foods.length === 0" class="foods__empty">
+                没有找到匹配的食物——可去「食物库」新增
+              </view>
+            </view>
+          </view>
+
+          <!-- 本餐条目 -->
+          <view class="list">
+            <view class="list__head">
+              <text class="list__title">这一餐</text>
+              <text class="list__sum ft-num">合计 {{ mealKcal }} 大卡</text>
+            </view>
+            <view v-if="items.length === 0" class="list__empty">还没有记录</view>
+            <view v-for="it in items" :key="it.id" class="irow" @click="onItemTap(it)">
+              <template v-if="editingId === it.id">
                 <text class="irow__name">{{ it.foodName }}</text>
-                <text class="irow__sub ft-num">
-                  {{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
-                </text>
-              </view>
-              <text class="irow__kcal ft-num">{{ Math.round(it.kcal) }} 大卡</text>
-            </template>
+                <view class="irow__edit">
+                  <input v-model="editGrams" type="digit" :focus="true" class="irow__edit-input ft-num" @focus="revealEdit" />
+                  <text class="irow__edit-unit">g</text>
+                  <view class="irow__ok" role="button" aria-label="保存份量" @click.stop="confirmEdit">
+                    <FtIcon name="check" :size="16" :stroke="2.4" />
+                  </view>
+                </view>
+              </template>
+              <template v-else>
+                <view class="irow__mid">
+                  <text class="irow__name">{{ it.foodName }}</text>
+                  <text class="irow__sub ft-num">
+                    {{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
+                  </text>
+                </view>
+                <text class="irow__kcal ft-num">{{ Math.round(it.kcal) }} 大卡</text>
+              </template>
+            </view>
           </view>
-        </view>
 
-        <view v-if="items.length > 0" class="savecombo">
-          <view class="savecombo__btn" role="button" @click="saveAsCombo">
-            <FtIcon name="plus" :size="16" :stroke="2" />
-            <text>把这一餐存为组合</text>
+          <view v-if="items.length > 0" class="savecombo">
+            <view class="savecombo__btn" role="button" @click="saveAsCombo">
+              <FtIcon name="plus" :size="16" :stroke="2" />
+              <text>把这一餐存为组合</text>
+            </view>
           </view>
-        </view>
 
-        <view class="ms__pad" />
-      </template>
-    </scroll-view>
+          <view class="ms__pad" />
+        </template>
+      </scroll-view>
 
-    <!-- 整份加入后的撤销条 -->
-    <view v-if="lastBatch.length" class="undo">
-      <text class="undo__text ft-num">已加入 {{ lastBatch.length }} 条</text>
-      <text class="undo__btn" @click="undoBatch">撤销</text>
+      <!-- 整份加入后的撤销条 -->
+      <view v-if="lastBatch.length" class="undo">
+        <text class="undo__text ft-num">已加入 {{ lastBatch.length }} 条</text>
+        <text class="undo__btn" @click="undoBatch">撤销</text>
+      </view>
+
+      <!-- 「存为组合」与「新建 / 编辑组合」共用同一弹层 -->
+      <Transition name="ft-sheet">
+        <ComboEditSheet
+          v-if="comboSheet.show"
+          :preset-items="comboSheet.preset"
+          @close="comboSheet.show = false"
+          @saved="onComboSaved"
+        />
+      </Transition>
+
+      <!-- 全屏看图（单张；与相册共用同一组件） -->
+      <Transition name="ft-sheet">
+        <PhotoViewer
+          v-if="viewer && photoUrl"
+          :urls="[photoUrl]"
+          :caption="`${date} · ${MEAL_LABEL[meal]}`"
+          @close="viewer = false"
+        />
+      </Transition>
     </view>
-
-    <!-- 「存为组合」与「新建 / 编辑组合」共用同一弹层 -->
-    <ComboEditSheet
-      v-if="comboSheet.show"
-      :preset-items="comboSheet.preset"
-      @close="comboSheet.show = false"
-      @saved="onComboSaved"
-    />
-
-    <!-- 全屏看图（单张；与相册共用同一组件） -->
-    <PhotoViewer
-      v-if="viewer && photoUrl"
-      :urls="[photoUrl]"
-      :caption="`${date} · ${MEAL_LABEL[meal]}`"
-      @close="viewer = false"
-    />
   </view>
 </template>
 
@@ -513,7 +520,6 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   inset: 0;
   background: $app-mask;
   z-index: 90;
-  animation: ms-fade $dur-base $ease-out;
 }
 
 .ms {
@@ -530,7 +536,6 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-canvas-bottom;
   border-radius: $radius-xl $radius-xl 0 0;
   box-shadow: $shadow-sheet;
-  animation: ms-up $dur-base $ease-out;
 }
 
 .ms__handle {
@@ -663,10 +668,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   gap: 8rpx;
   font-size: $text-base;
   color: $app-ink-muted;
-}
-
-.photo__empty:active {
-  background: $app-surface-2;
+  @include press(fill);
 }
 
 /* ── 组合横滑条 ── */
@@ -689,10 +691,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-surface;
   border-radius: $radius-md;
   box-shadow: $shadow-sm;
-}
-
-.combar__chip:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 .combar__name {
@@ -829,10 +828,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   font-size: $text-md;
   font-weight: $weight-bold;
   color: $app-surface;
-}
-
-.pick__btn:active {
-  transform: scale(0.97);
+  @include press(shrink);
 }
 
 .pick__btn--disabled {
@@ -852,14 +848,11 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   display: flex;
   align-items: center;
   padding: 22rpx 0;
+  @include press(dim);
 }
 
 .frow + .frow {
   border-top: 1rpx solid $app-line-soft;
-}
-
-.frow:active {
-  opacity: 0.6;
 }
 
 .frow__mid {
@@ -952,10 +945,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   align-items: center;
   padding: 22rpx 0;
   border-top: 1rpx solid $app-line-soft;
-}
-
-.irow:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .irow__mid {
@@ -1035,10 +1025,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-surface-2;
   font-size: $text-base;
   color: $app-ink-2;
-}
-
-.savecombo__btn:active {
-  opacity: 0.7;
+  @include press(dim);
 }
 
 /* 撤销条：深底白字，像一条 toast 钉在弹层底部 */
@@ -1062,30 +1049,5 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   font-size: $text-base;
   font-weight: $weight-bold;
   color: $accent-soft;
-}
-
-@keyframes ms-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes ms-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ms,
-  .ms-mask {
-    animation: none;
-  }
 }
 </style>

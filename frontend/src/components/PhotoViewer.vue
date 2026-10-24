@@ -161,7 +161,7 @@ function onTap() {
 
 <template>
   <view
-    class="pv"
+    class="pv ft-overlay ft-overlay--fade"
     @click="onTap"
     @touchstart="onTouchStart"
     @touchmove.stop.prevent="onTouchMove"
@@ -225,10 +225,7 @@ function onTap() {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.pv__close:active {
-  opacity: 0.6;
+  @include press(dim);
 }
 
 .pv__foot {

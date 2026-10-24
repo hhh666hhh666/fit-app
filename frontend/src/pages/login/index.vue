@@ -188,10 +188,4 @@ async function submit() {
   height: 104rpx;
   font-size: 30rpx;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .seg__item {
-    transition: none;
-  }
-}
 </style>

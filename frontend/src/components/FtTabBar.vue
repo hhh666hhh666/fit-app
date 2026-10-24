@@ -28,6 +28,7 @@ import {
   animateWhenConnected,
   lastTabFromIndex,
   markTabNav,
+  prefersReducedMotion,
   SLIDE_EASE,
   SLIDE_MS,
   startSlide
@@ -95,10 +96,7 @@ const indRef = ref<unknown>(null)
 function slideIndicator(dir: 'left' | 'right' | null) {
   const el = indRef.value
   if (!dir || !el) return
-  if (typeof window !== 'undefined' && window.matchMedia
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    return
-  }
+  if (prefersReducedMotion()) return
   // 从真正的来源格出发：首页→统计要滑过两格（中间那列圆钮被跨过去），不能只从邻格冒出来
   const fromIdx = lastTabFromIndex() ?? activeIdx.value + (dir === 'right' ? -1 : 1)
   const fromCol = tabs[Math.min(Math.max(fromIdx, 0), tabs.length - 1)].col
@@ -307,41 +305,52 @@ watch(
     </view>
 
     <!-- 选计划弹层：放在玻璃层外面（带 backdrop-filter 的祖先会改掉 fixed 的定位基准） -->
-    <view v-if="picker" class="ft-tabbar__sheet">
-      <FtSheet title="选择训练计划" :sub="pickerHint" @close="picker = false">
-        <!-- 计划列表放进白卡：今天那行的浅底往两边伸 20rpx，伸进卡片的内边距里；
-             别让它贴着 scroll-view 的边——scroll-view 会把伸出去的部分连同圆角一起裁掉 -->
-        <view v-if="plansOrdered.length" class="ft-tabbar__plans">
-          <scroll-view scroll-y class="ft-tabbar__plans-scroll">
-            <view class="ft-tabbar__plans-list">
-              <FtListRow
-                v-for="p in plansOrdered"
-                :key="p.id"
-                :title="p.name"
-                :sub="`${p.exerciseCount} 个动作${p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''}`"
-                :highlight="p.id === schedule.todayPlan?.id"
-                arrow
-                @click="startPlan(p.id)"
-              >
-                <template #badge>
-                  <text v-if="p.id === schedule.todayPlan?.id" class="ft-tabbar__badge">今天 · 建议</text>
-                </template>
-              </FtListRow>
-            </view>
-          </scroll-view>
-        </view>
+    <!-- 包装层常驻：Transition 要在 v-if 外面，退出动画才放得出来 -->
+    <view class="ft-tabbar__sheet">
+      <Transition name="ft-sheet">
+        <FtSheet v-if="picker" title="选择训练计划" :sub="pickerHint" @close="picker = false">
+          <!-- 计划列表放进白卡：今天那行的浅底往两边伸 20rpx，伸进卡片的内边距里；
+               别让它贴着 scroll-view 的边——scroll-view 会把伸出去的部分连同圆角一起裁掉 -->
+          <view v-if="plansOrdered.length" class="ft-tabbar__plans">
+            <scroll-view scroll-y class="ft-tabbar__plans-scroll">
+              <view class="ft-tabbar__plans-list">
+                <FtListRow
+                  v-for="p in plansOrdered"
+                  :key="p.id"
+                  :title="p.name"
+                  :sub="`${p.exerciseCount} 个动作${p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''}`"
+                  :highlight="p.id === schedule.todayPlan?.id"
+                  arrow
+                  @click="startPlan(p.id)"
+                >
+                  <template #badge>
+                    <text v-if="p.id === schedule.todayPlan?.id" class="ft-tabbar__badge">今天 · 建议</text>
+                  </template>
+                </FtListRow>
+              </view>
+            </scroll-view>
+          </view>
 
-        <FtEmpty v-else title="还没有训练计划" sub="在「我的 → 训练计划」里建一个，之后就能在这里选。" />
+          <FtEmpty v-else title="还没有训练计划" sub="在「我的 → 训练计划」里建一个，之后就能在这里选。" />
 
-        <view class="ft-tabbar__actions">
-          <FtButton v-if="!plansOrdered.length" variant="primary" block @click="goPlans">去新建计划</FtButton>
-          <FtButton variant="ghost" block @click="freeTrain">自由训练</FtButton>
-        </view>
-      </FtSheet>
+          <view class="ft-tabbar__actions">
+            <FtButton v-if="!plansOrdered.length" variant="primary" block @click="goPlans">去新建计划</FtButton>
+            <FtButton variant="ghost" block @click="freeTrain">自由训练</FtButton>
+          </view>
+        </FtSheet>
+      </Transition>
     </view>
 
-    <view v-if="conflict && session" class="ft-tabbar__sheet">
-      <SessionConflictSheet :session="session" @resume="resumeLast" @fresh="startOver" @close="conflict = false" />
+    <view class="ft-tabbar__sheet">
+      <Transition name="ft-sheet">
+        <SessionConflictSheet
+          v-if="conflict && session"
+          :session="session"
+          @resume="resumeLast"
+          @fresh="startOver"
+          @close="conflict = false"
+        />
+      </Transition>
     </view>
   </view>
 </template>
@@ -436,11 +445,7 @@ watch(
   justify-content: center;
   gap: 2px;
   color: $app-ink-muted;
-  transition: color $dur-fast $ease-out, transform $dur-fast $ease-out;
-}
-
-.ft-tabbar__item:active {
-  transform: scale(0.94);
+  @include press(shrink);
 }
 
 .ft-tabbar__label {
@@ -476,15 +481,11 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform $dur-fast $ease-out;
   /* 长按要用来弹二选一：别让系统弹「复制 / 选择」菜单 */
   -webkit-touch-callout: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-}
-
-.ft-tabbar__btn:active {
-  transform: scale(0.93);
+  @include press(shrink);
 }
 
 .ft-tabbar__sheet {
@@ -519,12 +520,5 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16rpx;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ft-tabbar__item,
-  .ft-tabbar__btn {
-    transition: none;
-  }
 }
 </style>

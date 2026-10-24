@@ -117,13 +117,41 @@ $shadow-sheet: 0 -16rpx 48rpx -24rpx rgba(30, 50, 80, 0.25); // 底部弹层（�
 $tabbar-shadow-color: rgba(30, 50, 80, 0.22); // 底栏投影（SVG 里按凹口路径画，见 FtTabBar）
 $tabbar-outline: rgba(30, 50, 80, 0.1); // 底栏外描边
 
-// ── 动效（三档时长 ＋ 一条缓动；ADR 0037）──
-// 快档给「状态回应」（色变、按压），标准档给「位置变化」（弹层），切页档只给主 tab 切页与指示条。
-// 缓动是 iOS 式快出缓收——起步立刻有反馈、尾巴收得住，避免线性动画的机械感。
+// ── 动效（四档时长 ＋ 进出两条缓动；ADR 0037）──
+// 快档给「状态回应」（色变、按压），标准档给「位置变化」（弹层进场），离场档给弹层退出，
+// 切页档只给主 tab 切页与指示条。
+// 进场用快出缓收（起步立刻有反馈、尾巴收得住）；离场反过来用加速——东西要走就干脆走，
+// 而且离场比进场短，别让人等着看它退。
 $dur-fast: 150ms;
+$dur-leave: 180ms;
 $dur-base: 220ms;
 $dur-slide: 260ms; // 主 tab 切页位移；nav.ts 的 SLIDE_MS 是它的镜像（check-tab-config.sh 校验）
 $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+$ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+// ── 按压反馈：全站只有三种 ──
+// dim＝变暗（列表行、文字钮、胶囊）；shrink＝收缩（实心按钮、圆钮、图标块）；fill＝铺浅底（无底色的透明钮）。
+// 按下立即生效、松手才缓 150ms：手指落下那一刻要零延迟，回弹慢一点才看得出「按到了」。
+// 过渡写在常态上，所以别在同一个元素上另写 transition（会被这里盖掉，或者盖掉这里）。
+@mixin press($kind: dim) {
+  transition: opacity $dur-fast $ease-out, transform $dur-fast $ease-out,
+    background-color $dur-fast $ease-out, color $dur-fast $ease-out;
+
+  &:active {
+    transition-duration: 0s;
+    @if $kind == dim {
+      opacity: 0.7;
+    } @else if $kind == shrink {
+      transform: scale(0.96);
+    } @else if $kind == fill {
+      background-color: $app-surface-2;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
 
 // ── 玻璃面板：会动的玻璃一律用这个 mixin ──
 // 切页那一下两整页都在滑，每块玻璃底下的内容每帧都在变，背景模糊得逐帧重算——
@@ -193,6 +221,10 @@ $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   font-size: $text-base;
   color: $app-ink-muted;
   transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 }
 
 @mixin seg-item-on {
@@ -259,13 +291,15 @@ $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
     color: $app-surface;
   }
 
-  &__del.is-off {
-    opacity: 0.35;
+  &__all,
+  &__del {
+    @include press(dim);
   }
 
-  &__all:active,
-  &__del:active {
-    opacity: 0.7;
+  // 放在 press 后面：禁用的删除钮按住不能变亮
+  &__del.is-off,
+  &__del.is-off:active {
+    opacity: 0.35;
   }
 }
 
