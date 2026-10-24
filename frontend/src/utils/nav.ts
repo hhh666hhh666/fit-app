@@ -151,10 +151,79 @@ function renameSvgIds(root: HTMLElement) {
   })
 }
 
+/** 只对「从上往下依次排」的容器剪枝：删掉一段子块后，剩下的块位置算得出来 */
+function stacksVertically(cs: CSSStyleDeclaration): boolean {
+  if (cs.display === 'block' || cs.display === 'flow-root') return true
+  const flex = cs.display === 'flex' || cs.display === 'inline-flex'
+  return flex && cs.flexDirection === 'column'
+    && ['normal', 'flex-start', 'start'].includes(cs.justifyContent)
+}
+
+const isPositioned = (el: Element) => /^(absolute|fixed)$/.test(getComputedStyle(el).position)
+const isInlineLevel = (el: Element) => /^(inline|contents)/.test(getComputedStyle(el).display)
+const hasLooseText = (el: Element) =>
+  Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim())
+
+/**
+ * 克隆体只留看得见的那一屏（2026-10-24）。
+ *
+ * 为什么：`cloneNode(true)` 复制整页，日志页翻过几页之后几百行全在里面，点下去那一刻
+ * 要插进文档、算样式、排版——直接变成点击延迟。而滑出去的只有视口里那一屏。
+ *
+ * 怎么剪（对照原件的位置，逐层往下，最多 6 层）：
+ * - 视口**下方**的子块直接删——它们排在后面，删了不影响前面的块；
+ * - 视口**上方**的一段子块换成一个等高的占位块——直接删会让下面的内容整体上移。
+ *   占位高度＝第一个可见块的顶 − 第一个块的顶 − 行间距 − 可见块的上外边距，
+ *   块级（外边距折叠）和纵向 flex（gap 不折叠）两种排法都对得上。
+ * 只剪「从上往下依次排」的容器（块级、纵向且从头排的 flex）；居中、反向、网格、横排、
+ * 内部滚动的容器原样保留，剪了位置就不对了。
+ */
+function pruneOffscreen(src: HTMLElement, clone: HTMLElement, depth = 0) {
+  if (depth > 6) return
+  const kids = Array.from(src.children) as HTMLElement[]
+  const twins = Array.from(clone.children) as HTMLElement[]
+  if (!kids.length || kids.length !== twins.length) return
+  const cs = getComputedStyle(src)
+  if (/(auto|scroll)/.test(cs.overflowX + cs.overflowY)) return
+
+  const vh = window.innerHeight
+  const rects = kids.map((k) => k.getBoundingClientRect())
+
+  // 先往下钻：横跨视口的块里面可能还是一长串
+  rects.forEach((r, i) => {
+    if (r.bottom > 0 && r.top < vh && kids[i].children.length) pruneOffscreen(kids[i], twins[i], depth + 1)
+  })
+
+  if (!stacksVertically(cs)) return
+
+  for (let i = kids.length - 1; i >= 0; i--) {
+    if (rects[i].top > vh) twins[i].remove()
+  }
+
+  const first = rects.findIndex((r) => r.bottom > 0)
+  if (first <= 0) return
+  // 占位公式只对块级盒子成立：行内元素的框比它所在的行框矮（实测差 2px，后面整串跟着上移），
+  // 夹着的裸文本节点也不在 children 里、删不掉；定位元素不占文档流。这三种都不剪上方。
+  if (hasLooseText(src)) return
+  if (kids.slice(0, first + 1).some((k) => isPositioned(k) || isInlineLevel(k))) return
+  const gap = cs.display.includes('flex') ? parseFloat(cs.rowGap) || 0 : 0
+  const mt0 = parseFloat(getComputedStyle(kids[0]).marginTop) || 0
+  const mtFirst = parseFloat(getComputedStyle(kids[first]).marginTop) || 0
+  const h = rects[first].top - rects[0].top - gap - mtFirst
+  if (h < 0) return
+  const spacer = document.createElement('div')
+  Object.assign(spacer.style, { height: `${h}px`, marginTop: `${mt0}px`, flex: 'none' })
+  clone.insertBefore(spacer, twins[0])
+  for (let i = 0; i < first; i++) twins[i].remove()
+}
+
 /** 把一块原件按它此刻在视口里的位置克隆进 `into`（绝对定位，滚动不用另算） */
-function cloneAt(src: HTMLElement, into: HTMLElement): HTMLElement {
+function cloneAt(src: HTMLElement, into: HTMLElement, prune = false): HTMLElement {
   const r = src.getBoundingClientRect()
   const clone = src.cloneNode(true) as HTMLElement
+  // 先拷画布再剪枝：copyCanvases 按顺序一一对应，剪过之后序号就对不上了
+  copyCanvases(src, clone)
+  if (prune) pruneOffscreen(src, clone)
   copyInherited(src.parentElement, clone)
   Object.assign(clone.style, {
     position: 'absolute',
@@ -165,7 +234,6 @@ function cloneAt(src: HTMLElement, into: HTMLElement): HTMLElement {
     boxSizing: 'border-box'
   })
   into.appendChild(clone)
-  copyCanvases(src, clone)
   return clone
 }
 
@@ -221,7 +289,7 @@ export function startSlide(
   const content = document.createElement('div')
   content.className = 'tab-slide-layer__content'
   layer.appendChild(content)
-  for (const src of srcs) cloneAt(src, content)
+  for (const src of srcs) cloneAt(src, content, true)
   document.body.appendChild(layer)
 
   let pin: HTMLElement | null = null
