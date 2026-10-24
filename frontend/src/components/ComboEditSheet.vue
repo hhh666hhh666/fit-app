@@ -2,6 +2,7 @@
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import { ref } from 'vue'
+import { useBackClose } from '@/utils/backStack'
 import {
   createCombo,
   listFoods,
@@ -21,6 +22,9 @@ const props = defineProps<{
   presetItems?: ComboItem[] | null
 }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
+
+// 安卓返回键 / Esc 先关这一层
+useBackClose(() => emit('close'))
 
 type DraftRow = { foodId: number; foodName: string; grams: string; unit: 'g' | 'ml' }
 

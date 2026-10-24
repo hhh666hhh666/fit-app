@@ -344,6 +344,7 @@ function copyExport() {
     <!-- 导入弹层 -->
     <FtSheet
       v-if="importSheet.show"
+      guard
       title="导入 JSON"
       sub="粘贴食物数组：数值按「每 100g/100ml」，也可给 kj 自动换算；同名会跳过"
       @close="importSheet.show = false"

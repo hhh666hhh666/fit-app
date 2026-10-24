@@ -717,6 +717,7 @@ function fatText(v: number | null | undefined): string {
     <!-- 录入 / 编辑弹层 -->
     <FtSheet
       v-if="sheet.show"
+      guard
       :title="sheet.editId == null ? '记录身体数据' : '编辑记录'"
       :sub="lastHint ? `${lastHint}的数据已预填，没量的项清空即可` : undefined"
       @close="sheet.show = false"
@@ -808,6 +809,7 @@ function fatText(v: number | null | undefined): string {
     <!-- 个人档案弹层（ADR 0030） -->
     <FtSheet
       v-if="profileSheet.show"
+      guard
       title="个人档案"
       sub="填一次就行；体重始终取「身体档案」里最新的一条"
       @close="profileSheet.show = false"

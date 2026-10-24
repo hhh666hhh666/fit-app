@@ -1,11 +1,11 @@
 <!--
   按钮（晴窗）：primary＝橙色渐变，**只给动作**，一屏最多一个；secondary＝玻璃胶囊；
-  ghost＝只有描边。按下统一轻微下沉。
+  ghost＝只有描边；danger＝描边 ＋ 危险红字，给「结束并开新的」这类会丢数据的次要选项。按下统一轻微下沉。
 -->
 <script setup lang="ts">
 const props = withDefaults(
   defineProps<{
-    variant?: 'primary' | 'secondary' | 'ghost'
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
     block?: boolean
     disabled?: boolean
     size?: 'md' | 'sm'
@@ -78,6 +78,12 @@ function onClick() {
   background: transparent;
   border-color: $app-line;
   color: $app-ink-muted;
+}
+
+.ft-button--danger {
+  background: transparent;
+  border-color: $app-line;
+  color: $app-danger;
 }
 
 .is-block {

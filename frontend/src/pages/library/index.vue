@@ -287,7 +287,7 @@ async function confirmCreate() {
     </view>
 
     <!-- 新增动作弹层 -->
-    <FtSheet v-if="sheet.show" title="新增动作" @close="sheet.show = false">
+    <FtSheet v-if="sheet.show" title="新增动作" guard @close="sheet.show = false">
       <view class="ns">
         <view class="field">
           <text class="field__label">动作名称</text>

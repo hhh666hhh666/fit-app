@@ -455,6 +455,7 @@ function removePlan() {
     <!-- 目标组次弹层（逐组，ADR 0027／0031） -->
     <FtSheet
       v-if="targetSheet.show"
+      guard
       title="目标组次"
       :sub="rows[targetSheet.index]?.name"
       @close="targetSheet.show = false"

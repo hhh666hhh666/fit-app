@@ -3,15 +3,16 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
 import { getPlan, type PlanDetail, type PlanListItem } from '@/api/plan'
-import { formatClock, formatDateLabel, formatThousands } from '@/utils/format'
+import { formatDateLabel, formatThousands } from '@/utils/format'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
-import { clearSession, loadSession, netElapsedSec } from '@/utils/session'
+import { clearSession, loadSession, type Session } from '@/utils/session'
 import { ensureLogin } from '@/utils/guard'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import SessionConflictSheet from '@/components/SessionConflictSheet.vue'
 
 // ── 训练计划列表（晴窗，ADR 0041）──
 const schedule = useScheduleStore()
@@ -89,28 +90,26 @@ function startPreviewPlan() {
   const id = preview.value.id
   if (id == null) return
   const s = loadSession()
+  preview.value.open = false
   if (s && s.blocks.length > 0) {
-    const done = s.blocks.reduce((n, b) => n + b.sets.filter((x) => x.done).length, 0)
-    uni.showModal({
-      title: '上一次训练还没结束',
-      content: `已记 ${done} 组 · 已进行 ${formatClock(
-        netElapsedSec(s, Date.now())
-      )}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
-      confirmText: '继续上次',
-      cancelText: '开新的',
-      success: ({ confirm }) => {
-        preview.value.open = false
-        if (confirm) {
-          uni.navigateTo({ url: '/pages/session/index' })
-          return
-        }
-        clearSession()
-        uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
-      }
-    })
+    conflict.value = { session: s, planId: id }
     return
   }
-  preview.value.open = false
+  uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
+}
+
+/** 撞上本机没结束的会话：先问「继续上次 / 结束并开新的」（SessionConflictSheet） */
+const conflict = ref<{ session: Session; planId: number } | null>(null)
+
+function resumeLast() {
+  conflict.value = null
+  uni.navigateTo({ url: '/pages/session/index' })
+}
+
+function startOver() {
+  const id = conflict.value?.planId
+  conflict.value = null
+  clearSession()
   uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
 }
 </script>
@@ -190,6 +189,14 @@ function startPreviewPlan() {
         <FtButton variant="ghost" block @click="closePreview">先不练</FtButton>
       </view>
     </FtSheet>
+
+    <SessionConflictSheet
+      v-if="conflict"
+      :session="conflict.session"
+      @resume="resumeLast"
+      @fresh="startOver"
+      @close="conflict = null"
+    />
   </view>
 </template>
 

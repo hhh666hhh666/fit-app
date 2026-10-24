@@ -19,12 +19,16 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import { useBackClose } from '@/utils/backStack'
 import { ask } from '@/utils/confirm'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
 const props = defineProps<{ date: string; meal: MealKey }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'changed'): void }>()
+
+// 安卓返回键 / Esc 先关这一层（里面的组合编辑、看大图开着时先关它们）
+useBackClose(() => emit('close'))
 
 const MEAL_LABEL: Record<MealKey, string> = {
   breakfast: '早餐',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app'
 import { hydrateCache } from '@/api/cache'
+import { installBackHandler } from '@/utils/backStack'
 
 // 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
 // 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
@@ -9,6 +10,9 @@ onLaunch(() => {
   // 冷启动同步灌回上个进程的数据快照（ADR 0036）：页面 onShow 里的取数直接命中，零请求。
   // 同步是对的——异步就要在 read() 里加「等就绪」的闸门，忘了 await 就是「偶尔多拉一轮」。
   hydrateCache()
+
+  // 返回键 / Esc 先关最上面的弹层（安卓壳的 onBackPressed 会先问 window.__ftBack）
+  installBackHandler()
 
   // 主 tab 的页面 chunk 按页懒加载（各页产物 `pages-*-index.js`）。页面虽然保活了
   // （`switchTab`，ADR 0038），但**第一次**切过去仍要现拉 chunk，那一拍里页面还挂不上，

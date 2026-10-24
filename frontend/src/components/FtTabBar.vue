@@ -8,7 +8,7 @@
   - 胶囊顶边正中是**真凹口**：玻璃层用 `clip-path: path()` 裁，亮边和投影用同一条路径在 SVG 里另画。
     投影不能挂 `filter` 在玻璃层的父级上——那会让 backdrop-filter 失效。
   - 中间圆钮：没有进行中的训练＝哑铃，点开选计划；有＝播放图标，点一下直接继续，
-    **长按**才弹「继续上次／开新的」（ADR 0020 的二选一，文案沿用）。外圈动效见 FtMeteorTrace。
+    **长按**才弹「继续上次／结束并开新的」（ADR 0020 的二选一，SessionConflictSheet）。外圈动效见 FtMeteorTrace。
   - 选计划弹层随训练入口从首页挪到这里，四个主页面都能直接开练。
 -->
 <script setup lang="ts">
@@ -19,9 +19,10 @@ import FtSheet from '@/components/FtSheet.vue'
 import FtListRow from '@/components/FtListRow.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
+import SessionConflictSheet from '@/components/SessionConflictSheet.vue'
 import { useScheduleStore } from '@/stores/schedule'
-import { formatClock, formatDateLabel } from '@/utils/format'
-import { clearSession, loadSession, netElapsedSec, type Session } from '@/utils/session'
+import { formatDateLabel } from '@/utils/format'
+import { clearSession, loadSession, type Session } from '@/utils/session'
 import { getResumeFx, type ResumeFx } from '@/utils/resume-fx'
 import {
   animateWhenConnected,
@@ -188,21 +189,22 @@ function onCenterLongPress() {
   if (!s) return
   swallowClick = true
   setTimeout(() => (swallowClick = false), 800)
-  uni.showModal({
-    title: '上一次训练还没结束',
-    content: `已记 ${doneCount.value} 组 · 已进行 ${formatClock(netElapsedSec(s, Date.now()))}。继续上一次，还是结束它并开新的？开新训练会让上一次未保存的组次丢失。`,
-    confirmText: '继续上次',
-    cancelText: '开新的',
-    success: ({ confirm }) => {
-      if (confirm) {
-        uni.navigateTo({ url: '/pages/session/index' })
-        return
-      }
-      clearSession()
-      session.value = null
-      openPicker()
-    }
-  })
+  conflict.value = true
+}
+
+/** 「继续上次 / 结束并开新的」弹层（SessionConflictSheet） */
+const conflict = ref(false)
+
+function resumeLast() {
+  conflict.value = false
+  uni.navigateTo({ url: '/pages/session/index' })
+}
+
+function startOver() {
+  conflict.value = false
+  clearSession()
+  session.value = null
+  openPicker()
 }
 
 function go(t: (typeof tabs)[number]) {
@@ -236,6 +238,7 @@ watch(
     measure()
     refreshSession()
     picker.value = false
+    conflict.value = false
     slideIndicator(props.enterDir ?? null)
   }
 )
@@ -327,6 +330,10 @@ watch(
           <FtButton variant="ghost" block @click="freeTrain">自由训练</FtButton>
         </view>
       </FtSheet>
+    </view>
+
+    <view v-if="conflict && session" class="ft-tabbar__sheet">
+      <SessionConflictSheet :session="session" @resume="resumeLast" @fresh="startOver" @close="conflict = false" />
     </view>
   </view>
 </template>
