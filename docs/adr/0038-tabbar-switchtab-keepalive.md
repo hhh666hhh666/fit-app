@@ -23,7 +23,7 @@ Status: accepted · 2026-10-21
 - **切页动效改成 `onShow` 驱动**（WAAPI，`utils/nav.ts` 的 `playTabEnter`）：页面不再重建，靠「挂载时带 class」只能播一次；WAAPI 可以每次 `onShow` 直接重放，也不用读 `offsetWidth` 强制重排。`fill: backwards` 保证结束后不残留 `transform`（0.17.3 的教训）。指示条同理，由页面把 `enterSeq` 传下去触发重放。
 - **跳转 API 的边界变了**：`navigateTo` / `redirectTo` 指向 tabBar 页会被框架直接拒掉（`can not navigateTo a tabbar page`）；**跳这四个页面一律 `switchTab`（不能带参数）**，跳非 tab 页仍用 `reLaunch` / `navigateTo`。本轮同步改了三处：登录成功、会话页返回失败兜底、汇总页回首页。
 - **`getCurrentPages()` 只返回当前 active 的那个 tab 页**（框架对 tabBar 页做了过滤），依赖页面栈的判断要避开这条。
-- **滚动位置与日志页月份天然保留**——它们不再丢，是因为页面没被销毁，不需要任何「存了再复原」的代码。`docs/todo/2026-10-21-TODO-切页体验后续.md` 里的方案甲/丙因此作废。
+- **滚动位置与日志页月份天然保留**——它们不再丢，是因为页面没被销毁，不需要任何「存了再复原」的代码。`docs/todo/archive/2026-10-21-TODO-切页体验后续.md` 里的方案甲/丙因此作废。
 - **本地冒烟结论**（headless Chrome + 打桩 `/api`）：点日志后 hash 变 `#/pages/log/index` 且日志页渲染；点回首页后 `.home` 是**同一个 DOM 节点**（切走前打的标记还在）——保活成立；`uni-tabbar` 计算样式为 `display: none`；无 console 报错。
 - **明知的代价**：首次切到某个 tab 仍要现拉 chunk（预热只是缩短，不是消除）；`switchTab` 丢 query，将来若要带参数得走 store。
 
