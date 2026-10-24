@@ -42,7 +42,7 @@ export JAVA_HOME=E:/jdk21
 
 | 版本 | 在哪 | 怎么推 |
 |------|------|--------|
-| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 4 / `0.1.3` |
+| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 6 / `0.1.5` |
 | **H5 产物版本** | 构建脚本自动生成：`package.json` 的 version ＋ 短 commit | 不用手工维护；带 commit 是为了「每次提交都能触发壳的自动更新」 |
 
 改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、依赖）才需要重打 apk 并 +1。
@@ -60,6 +60,15 @@ export JAVA_HOME=E:/jdk21
 
 ⚠️ 弹窗里的「立即重启」用的是**全新实例**而不是 `recreate()`：后者会把 `savedInstanceState` 带回来、
 走 `restoreState()`，结果是「资源是新的、页面快照是旧的」，看起来像没更新。
+
+## 返回键：先关弹层，再后退
+
+`onBackPressed` 先 `evaluateJavascript` 调 H5 的 `window.__ftBack()`（`frontend/src/utils/backStack.ts`）：
+有底部弹层、确认框、操作菜单开着，它关掉最上面一层并返回 `true`，壳就到此为止；返回 `false`
+（或 H5 是没有这个函数的旧版）才走「页面内可后退就后退、到根页退出」。
+
+这条要 0.1.5 起的 apk 才有。旧 apk 装着新 H5 也不出错，只是返回键照旧直接后退——
+弹层开着按返回会离开页面。
 
 ## 必须一起配的后端开关
 

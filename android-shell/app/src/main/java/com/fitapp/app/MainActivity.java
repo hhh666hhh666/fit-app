@@ -50,6 +50,7 @@ import java.util.Locale;
  *
  * H5 是 hash 路由（src/manifest.json 的 h5.router.mode），
  * 所以返回键的 canGoBack 语义天然贴合「页面内后退、到根页退出」。
+ * 后退之前先问 H5 一句 {@code window.__ftBack()}：有弹层开着就只关弹层（onBackPressed）。
  *
  * ⚠️ 文件选择器（2026-10-13）：H5 的 `uni.chooseImage` 底层是
  * 「创建一个隐藏的 <input type="file"> 再 click()」。**浏览器**会接管这个点击弹出系统选择器；
@@ -279,8 +280,23 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // 页面内可后退就后退（H5 是 hash 路由，WebView 会认），到根页再退出
-        if (webView != null && webView.canGoBack()) {
+        if (webView == null) {
+            super.onBackPressed();
+            return;
+        }
+        // 先问 H5 有没有开着的弹层（frontend/src/utils/backStack.ts）：它关掉了一层就到此为止，
+        // 否则页面一退，弹层里填到一半的内容跟着丢。旧版 H5 没有 __ftBack，表达式得 false，照常后退。
+        webView.evaluateJavascript(
+                "(function(){try{return !!(window.__ftBack&&window.__ftBack());}catch(e){return false;}})()",
+                value -> {
+                    if ("true".equals(value)) return;
+                    goBackOrExit();
+                });
+    }
+
+    /** 页面内可后退就后退（H5 是 hash 路由，WebView 会认），到根页再退出 */
+    private void goBackOrExit() {
+        if (webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
