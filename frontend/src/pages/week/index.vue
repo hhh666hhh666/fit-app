@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useScheduleStore } from '@/stores/schedule'
 import { ensureLogin } from '@/utils/guard'
+import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
 
 const schedule = useScheduleStore()
 const WEEK_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
@@ -22,14 +24,11 @@ const rows = computed(() =>
       label,
       name: slot === 'rest' ? '休息' : plan ? plan.name : '未安排',
       isRest: slot === 'rest',
-      isEmpty: slot === null
+      isEmpty: slot === null,
+      isToday: idx === schedule.todayIndex
     }
   })
 )
-
-function goBack() {
-  uni.navigateBack()
-}
 
 function editDay(idx: number) {
   const itemList = [...schedule.plans.map((p) => p.name), '休息', '清除安排']
@@ -51,80 +50,89 @@ function editDay(idx: number) {
 
 <template>
   <view class="week">
-    <view class="week__head">
-      <text class="week__back" @click="goBack">‹</text>
-      <text class="week__title">训练安排</text>
-      <view class="week__head-space" />
-    </view>
+    <view class="week__body">
+      <FtPageHeader title="训练安排" back />
 
-    <view class="week__intro">设置每周安排，开始训练时自动按当天执行</view>
+      <text class="note">设置每周安排，开始训练时自动按当天执行</text>
 
-    <view class="ft-card week__card">
-      <view v-for="row in rows" :key="row.idx" class="dayrow" @click="editDay(row.idx)">
+      <view class="glass days">
         <view
-          class="dayrow__dot"
-          :class="{ 'dayrow__dot--hollow': row.isRest || row.isEmpty }"
-        />
-        <text class="dayrow__label">{{ row.label }}</text>
-        <text class="dayrow__name" :class="{ 'dayrow__name--muted': row.isRest || row.isEmpty }">
-          {{ row.name }}
-        </text>
-        <text class="dayrow__chevron">›</text>
+          v-for="row in rows"
+          :key="row.idx"
+          class="dayrow"
+          :class="{ 'is-today': row.isToday }"
+          role="button"
+          @click="editDay(row.idx)"
+        >
+          <view class="dayrow__dot" :class="{ 'dayrow__dot--hollow': row.isRest || row.isEmpty }" />
+          <text class="dayrow__label">{{ row.label }}</text>
+          <text v-if="row.isToday" class="badge">今天</text>
+          <text class="dayrow__name" :class="{ 'dayrow__name--muted': row.isRest || row.isEmpty }">
+            {{ row.name }}
+          </text>
+          <FtIcon name="chevron-right" :size="18" tone="subtle" />
+        </view>
       </view>
-    </view>
 
-    <view class="week__hint">计划内容在「训练计划」里编辑</view>
+      <text class="note">计划内容在「训练计划」里编辑</text>
+    </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.week {
-  padding: 28rpx 32rpx 0;
-}
-
-.week__head {
+.week__body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8rpx 0 24rpx;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(64rpx + env(safe-area-inset-bottom));
 }
 
-.week__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  padding: 0 24rpx 8rpx 0;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
-.week__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.week__head-space {
-  width: 48rpx;
-}
-
-.week__intro {
+.note {
+  padding: 0 8rpx;
   font-size: $text-sm;
+  line-height: 1.6;
   color: $app-ink-muted;
-  padding: 0 4rpx 24rpx;
 }
 
-.week__card {
+.days {
   padding: 8rpx 28rpx;
-  margin-bottom: 24rpx;
 }
 
 .dayrow {
   display: flex;
   align-items: center;
-  padding: 26rpx 0;
+  gap: 16rpx;
+  padding: 28rpx 0;
 }
 
 .dayrow + .dayrow {
   border-top: 1rpx solid $app-line-soft;
+}
+
+.dayrow:active {
+  opacity: 0.6;
+}
+
+/* 今天：浅底胶囊（与首页「今天的计划」同一个高亮），上下细线让开 */
+.dayrow.is-today {
+  margin: 0 -16rpx;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+  border-radius: $radius-md;
+  border-top-color: transparent;
+  background: $app-surface-2;
+}
+
+.dayrow.is-today + .dayrow {
+  border-top-color: transparent;
 }
 
 .dayrow__dot {
@@ -132,45 +140,43 @@ function editDay(idx: number) {
   height: 14rpx;
   border-radius: 50%;
   background: $app-ink;
-  margin-right: 20rpx;
   flex-shrink: 0;
 }
 
 .dayrow__dot--hollow {
-  background: $app-canvas;
-  border: 2rpx solid $app-line;
+  background: transparent;
+  border: 2rpx solid $app-line-dash;
   box-sizing: border-box;
 }
 
 .dayrow__label {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-  width: 120rpx;
   flex-shrink: 0;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .dayrow__name {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
   font-size: $text-md;
   color: $app-ink;
-  margin-right: 16rpx;
 }
 
 .dayrow__name--muted {
   color: $app-ink-muted;
-}
-
-.dayrow__chevron {
-  font-size: 40rpx;
-  color: $app-ink-subtle;
-  line-height: 1;
-}
-
-.week__hint {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  padding: 0 4rpx;
 }
 </style>

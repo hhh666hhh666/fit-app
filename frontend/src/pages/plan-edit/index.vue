@@ -8,9 +8,13 @@ import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
+import FtSheet from '@/components/FtSheet.vue'
 
-// ── 计划编辑/新建（设计稿：.workbuddy/stitch/screen/plan-edit.png）──
+// ── 计划编辑/新建（晴窗，ADR 0041）──
 
 /** 一组的目标：三项都可空（只记次数、只记重量、只记层数都合法）。 */
 interface SetTarget {
@@ -117,8 +121,6 @@ onShow(() => {
 })
 
 const totalSets = computed(() => rows.value.reduce((sum, r) => sum + r.sets.length, 0))
-
-const pad2 = (n: number) => String(n).padStart(2, '0')
 
 /** 有氧动作（按层数录或纯有氧肌群）：不参与循环组（ADR 0028）。 */
 function isCardio(r: Row): boolean {
@@ -385,609 +387,537 @@ function removePlan() {
     }
   })
 }
-
-function goBack() {
-  uni.navigateBack()
-}
 </script>
 
 <template>
   <view class="pe">
     <view class="pe__body">
-      <!-- 顶部栏 -->
-      <view class="pe__head">
-        <text class="pe__back" @click="goBack">‹</text>
-        <text class="pe__head-title">{{ isEdit ? '编辑计划' : '新建计划' }}</text>
-        <text v-if="isEdit" class="pe__del" @click="removePlan">删除</text>
-        <view v-else class="pe__head-space" />
+      <FtPageHeader :title="isEdit ? '编辑计划' : '新建计划'" back>
+        <template #right>
+          <view v-if="isEdit" class="pill pill--danger" role="button" @click="removePlan">删除</view>
+        </template>
+      </FtPageHeader>
+
+      <!-- 名称 -->
+      <view class="glass block">
+        <text class="block__label">计划名称</text>
+        <input
+          v-model="name"
+          class="name-input"
+          placeholder="如：胸 & 三头"
+          placeholder-class="ph"
+          maxlength="32"
+        />
+        <text class="block__stat ft-num">{{ rows.length }} 个动作 · 共 {{ totalSets }} 组</text>
       </view>
 
-      <!-- meta 行 -->
-      <view class="pe__meta">
-        <text class="ft-num">ROUTINE_ENTRY // {{ pad2(rows.length) }}</text>
-        <text class="ft-num">LOG.REV 2026</text>
-      </view>
-
-      <!-- 名称卡 -->
-      <view class="namecard">
-        <text class="namecard__label">计划名称</text>
-        <view class="namecard__input-row">
-          <input
-            v-model="name"
-            class="namecard__input"
-            placeholder="如：胸 & 三头"
-            placeholder-class="namecard__ph"
-            maxlength="32"
-          />
-          <text class="namecard__pen">✎</text>
+      <!-- 编排：标题行右端是高级设置（循环组）入口 -->
+      <view class="glass elist">
+        <view class="elist__head">
+          <view class="elist__title">
+            <text class="card-title">动作编排</text>
+            <text class="elist__hint">按顺序执行 · 点一行调整</text>
+          </view>
+          <view class="adv" role="button" @click="openCircuit">
+            <FtIcon name="sliders" :size="15" tone="muted" />
+            <text>循环组</text>
+            <text v-if="circuitCount > 0" class="adv__n ft-num">{{ circuitCount }}</text>
+          </view>
         </view>
-        <view class="namecard__stats">
-          <text class="ft-num">EXERCISES: {{ pad2(rows.length) }}</text>
-          <text class="ft-num">EST. VOLUME: ~{{ totalSets }} SETS</text>
-        </view>
-      </view>
 
-      <!-- 编排标题：右端是高级设置入口（齿轮） -->
-      <view class="pe__sect">
-        <text class="pe__sect-l"
-          >动作编排 <text class="pe__sect-sub">[按顺序执行]</text></text
-        >
-        <view class="pe__gear" @click="openCircuit">
-          <FtIcon name="sliders" :size="15" tone="subtle" />
-          <text class="pe__gear-text">高级</text>
-          <text v-if="circuitCount > 0" class="pe__gear-dot ft-num">{{ circuitCount }}</text>
-        </view>
-      </view>
-
-      <!-- 动作行 -->
-      <view v-if="rows.length > 0" class="elist">
-        <view v-for="(r, i) in rows" :key="r.exerciseId" class="erow" @click="onRowTap(i)">
+        <view v-for="(r, i) in rows" :key="r.exerciseId" class="erow" role="button" @click="onRowTap(i)">
           <text class="erow__idx ft-num">{{ i + 1 }}</text>
           <view class="erow__mid">
-            <view class="erow__name-row">
+            <view class="erow__line">
               <text class="erow__name">{{ r.name }}</text>
-              <text v-if="r.circuitNo != null" class="erow__circuit ft-num">
-                循环{{ circuitLabel(r.circuitNo) }}
-              </text>
+              <text v-if="r.circuitNo != null" class="badge">循环{{ circuitLabel(r.circuitNo) }}</text>
             </view>
             <text class="erow__sub">{{ muscleLabel(r.muscle) }}</text>
           </view>
           <text class="erow__target ft-num">{{ targetText(r) }}</text>
         </view>
-      </view>
 
-      <!-- 添加动作 -->
-      <view class="pe__add" @click="addExercise">
-        <text class="pe__add-plus">+</text>
-        <text>添加动作</text>
-      </view>
+        <FtEmpty v-if="rows.length === 0" title="还没有动作" sub="点下面「添加动作」，从动作库里挑。" />
 
-      <view class="pe__foot-note">FIT-APP LEDGER · RECORD DISCIPLINE // SINGLE LIFTER</view>
-      <view class="pe__pad" />
+        <view class="addbtn" role="button" @click="addExercise">
+          <FtIcon name="plus" :size="16" :stroke="2" />
+          <text>添加动作</text>
+        </view>
+      </view>
     </view>
 
-    <!-- 底部固定：保存 -->
+    <!-- 保存：贴底悬浮的主按钮，与编辑食物页同一位置 -->
     <view class="pe__bottom">
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block"
-        :class="{ 'ft-btn--disabled': saving }"
-        @click="save"
-      >
-        保存修改
-      </view>
+      <FtButton variant="primary" block :disabled="saving" class="pe__save" @click="save">
+        {{ isEdit ? '保存修改' : '创建计划' }}
+      </FtButton>
     </view>
 
-    <!-- 目标组次弹层（逐组） -->
-    <view v-if="targetSheet.show" class="ts-mask" @click="targetSheet.show = false" />
-    <view v-if="targetSheet.show" class="ts">
-      <view class="ts__handle" />
-      <text class="ts__title">目标组次</text>
-      <view class="ts__row">
-        <text class="ts__label">组数</text>
-        <input
-          :value="targetSheet.count"
-          type="number"
-          class="ts__input ft-num"
-          placeholder="–"
-          @input="onCountInput"
-        />
-      </view>
-
-      <!-- 逐组次数／重量：行数由上面的组数决定 -->
-      <view v-if="targetSheet.rows.length > 0" class="ts__sets">
-        <view class="ts__sets-head">
-          <text class="ts__sets-title">每组目标</text>
-          <text class="ts__fill" @click="fillAllSets">整组填充</text>
+    <!-- 目标组次弹层（逐组，ADR 0027／0031） -->
+    <FtSheet
+      v-if="targetSheet.show"
+      title="目标组次"
+      :sub="rows[targetSheet.index]?.name"
+      @close="targetSheet.show = false"
+    >
+      <scroll-view scroll-y class="ts__scroll">
+        <view class="field">
+          <text class="field__label">组数</text>
+          <input
+            :value="targetSheet.count"
+            type="number"
+            class="field__input ft-num"
+            placeholder="不设"
+            placeholder-class="ph"
+            @input="onCountInput"
+          />
         </view>
-        <view v-for="(s, i) in targetSheet.rows" :key="i" class="ts__setrow">
-          <text class="ts__setidx ft-num">第 {{ i + 1 }} 组</text>
-          <!-- 爬楼：一层一栏（ADR 0031）；力量：次数／重量两栏 -->
-          <view v-if="editingIsFloors" class="ts__setfield">
-            <input v-model="s.floors" type="number" class="ts__setinput ft-num" placeholder="–" />
-            <text class="ts__setunit">层</text>
+
+        <!-- 逐组次数／重量：行数由上面的组数决定 -->
+        <view v-if="targetSheet.rows.length > 0" class="sets">
+          <view class="sets__head">
+            <text class="sets__title">每组目标</text>
+            <view class="sets__fill" role="button" @click="fillAllSets">按第 1 组填满</view>
           </view>
-          <template v-else>
-            <view class="ts__setfield">
-              <input v-model="s.reps" type="number" class="ts__setinput ft-num" placeholder="–" />
-              <text class="ts__setunit">次</text>
+          <view v-for="(s, i) in targetSheet.rows" :key="i" class="setrow">
+            <text class="setrow__idx ft-num">第 {{ i + 1 }} 组</text>
+            <!-- 爬楼：一层一栏（ADR 0031）；力量：次数／重量两栏 -->
+            <view v-if="editingIsFloors" class="setrow__field">
+              <input v-model="s.floors" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+              <text class="setrow__unit">层</text>
             </view>
-            <view class="ts__setfield">
-              <input v-model="s.weight" type="digit" class="ts__setinput ft-num" placeholder="–" />
-              <text class="ts__setunit">kg</text>
-            </view>
-          </template>
+            <template v-else>
+              <view class="setrow__field">
+                <input v-model="s.reps" type="number" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+                <text class="setrow__unit">次</text>
+              </view>
+              <view class="setrow__field">
+                <input v-model="s.weight" type="digit" class="setrow__input ft-num" placeholder="–" placeholder-class="ph" />
+                <text class="setrow__unit">kg</text>
+              </view>
+            </template>
+          </view>
         </view>
-      </view>
 
-      <text v-if="editingIsFloors" class="ts__hint">
-        每组层数可留空（全空＝只记组数）；开始训练时按各组目标预填
-      </text>
-      <text v-else-if="editingIsCardio" class="ts__hint">
-        有氧动作只记组数，不设每组次数与重量
-      </text>
-      <text v-else class="ts__hint">组数留空 = 不设目标；开始训练时按各组目标预填</text>
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="confirmTarget">确定</view>
-    </view>
+        <text v-if="editingIsFloors" class="ts__hint">
+          每组层数可留空（全空＝只记组数）；开始训练时按各组目标预填
+        </text>
+        <text v-else-if="editingIsCardio" class="ts__hint">有氧动作只记组数，不设每组次数与重量</text>
+        <text v-else class="ts__hint">组数留空＝不设目标；开始训练时按各组目标预填</text>
+      </scroll-view>
+      <FtButton variant="primary" block class="ts__btn" @click="confirmTarget">确定</FtButton>
+    </FtSheet>
 
-    <!-- 高级设置：循环组 -->
-    <view v-if="circuitSheet.show" class="ts-mask" @click="circuitSheet.show = false" />
-    <view v-if="circuitSheet.show" class="ts ts--tall">
-      <view class="ts__handle" />
-      <text class="ts__title">高级设置 · 循环组</text>
-      <text class="ts__desc">
-        组号相同的动作会轮流做：做完 A 第 1 组马上做 B 第 1 组，一轮走完再进下一轮。轮数按组内最多的组数算。
-      </text>
-      <scroll-view scroll-y class="cs__list">
-        <view v-for="(r, i) in rows" :key="r.exerciseId" class="cs__row">
-          <view class="cs__main">
-            <text class="cs__name">{{ r.name }}</text>
-            <text v-if="isCardio(r)" class="cs__sub">有氧动作不参与循环</text>
-            <view v-else-if="r.circuitNo != null" class="cs__nos">
-              <text
-                v-for="no in MAX_CIRCUIT"
-                :key="no"
-                class="cs__no ft-num"
-                :class="{ 'cs__no--on': r.circuitNo === no }"
-                @click.stop="setCircuitNo(i, no)"
-              >
-                {{ CIRCUIT_LABELS[no - 1] }}
-              </text>
+    <!-- 高级设置：循环组（ADR 0028） -->
+    <FtSheet
+      v-if="circuitSheet.show"
+      title="循环组"
+      sub="组号相同的动作轮流做：做完 A 第 1 组马上做 B 第 1 组，一轮走完再进下一轮。轮数按组内最多的组数算。"
+      @close="circuitSheet.show = false"
+    >
+      <scroll-view scroll-y class="ts__scroll">
+        <view class="cs">
+          <view v-for="(r, i) in rows" :key="r.exerciseId" class="cs__row">
+            <view class="cs__main">
+              <text class="cs__name">{{ r.name }}</text>
+              <text v-if="isCardio(r)" class="cs__sub">有氧动作不参与循环</text>
+              <view v-else-if="r.circuitNo != null" class="cs__nos" role="radiogroup" aria-label="循环组号">
+                <view
+                  v-for="no in MAX_CIRCUIT"
+                  :key="no"
+                  class="cs__no ft-num"
+                  :class="{ 'cs__no--on': r.circuitNo === no }"
+                  role="radio"
+                  :aria-checked="r.circuitNo === no"
+                  @click.stop="setCircuitNo(i, no)"
+                >
+                  {{ CIRCUIT_LABELS[no - 1] }}
+                </view>
+              </view>
             </view>
-          </view>
-          <view
-            class="cs__toggle"
-            :class="{
-              'cs__toggle--on': r.circuitNo != null,
-              'cs__toggle--off': isCardio(r)
-            }"
-            @click.stop="toggleCircuit(i)"
-          >
-            {{ r.circuitNo != null ? `循环${circuitLabel(r.circuitNo)}` : '加入循环' }}
+            <view
+              class="cs__toggle"
+              :class="{ 'cs__toggle--on': r.circuitNo != null, 'is-off': isCardio(r) }"
+              role="switch"
+              :aria-checked="r.circuitNo != null"
+              @click.stop="toggleCircuit(i)"
+            >
+              {{ r.circuitNo != null ? '退出循环' : '加入循环' }}
+            </view>
           </view>
         </view>
       </scroll-view>
-      <view class="ft-btn ft-btn--primary ft-btn--block" @click="circuitSheet.show = false">
-        完成
-      </view>
-    </view>
+      <FtButton variant="primary" block class="ts__btn" @click="circuitSheet.show = false">完成</FtButton>
+    </FtSheet>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .pe__body {
-  padding: 28rpx 32rpx 0;
-}
-
-/* ── 顶部栏 ── */
-.pe__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4rpx 0 20rpx;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
-.pe__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.pe__head-title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.pe__del {
-  width: 64rpx;
-  text-align: right;
-  font-size: $text-sm;
-  color: #c4453c;
-}
-
-.pe__head-space {
-  width: 64rpx;
-}
-
-/* ── meta 行 ── */
-.pe__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4rpx 22rpx;
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
-}
-
-/* ── 名称卡 ── */
-.namecard {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
   border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  padding: 30rpx 32rpx 24rpx;
-  margin-bottom: 36rpx;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
-.namecard__label {
-  font-size: 22rpx;
-  color: $app-ink-subtle;
-}
-
-.namecard__input-row {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  border-bottom: 2rpx solid $app-ink;
-  padding: 14rpx 0 12rpx;
-}
-
-.namecard__input {
-  flex: 1;
-  font-size: 44rpx;
-  font-weight: 700;
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
-.namecard__ph {
+.ph {
   color: $app-ink-subtle;
-  font-weight: 400;
+  font-weight: $weight-regular;
 }
 
-.namecard__pen {
-  font-size: $text-md;
+/* 页头右侧的胶囊按钮；删除用危险色字，不上色块（一屏的色块留给保存） */
+.pill {
+  @include glass($glass-bg-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+}
+
+.pill--danger {
+  color: $app-danger;
+}
+
+.pill:active {
+  opacity: 0.7;
+}
+
+/* ── 名称 ── */
+.block__label {
+  display: block;
+  padding-bottom: 12rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.namecard__stats {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 20rpx;
-  font-size: 22rpx;
+.name-input {
+  width: 100%;
+  height: 92rpx;
+  box-sizing: border-box;
+  padding: 0 24rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.block__stat {
+  display: block;
+  padding-top: 16rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 /* ── 编排 ── */
-.pe__sect {
+.elist {
+  padding: 28rpx 28rpx 28rpx;
+}
+
+.elist__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 0 4rpx 20rpx;
+  gap: 16rpx;
+  padding: 0 8rpx 12rpx;
 }
 
-.pe__sect-l {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
+.elist__title {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
 }
 
-.pe__sect-sub {
+.elist__hint {
   font-size: $text-sm;
-  font-weight: 400;
   color: $app-ink-muted;
 }
 
-/* 齿轮入口：高级设置 */
-.pe__gear {
+/* 循环组入口：浅底小胶囊；已有动作进了循环就挂个数 */
+.adv {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8rpx;
-  padding: 6rpx 10rpx;
-  border-radius: $radius-sm;
+  padding: 10rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
-.pe__gear-text {
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
+.adv:active {
+  opacity: 0.6;
 }
 
-.pe__gear-dot {
-  min-width: 28rpx;
-  height: 28rpx;
-  line-height: 28rpx;
-  padding: 0 6rpx;
-  border-radius: 14rpx;
+.adv__n {
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  box-sizing: border-box;
+  border-radius: $radius-pill;
   background: $app-ink;
   color: $app-surface;
-  font-size: 18rpx;
+  font-size: $text-xs;
   text-align: center;
-}
-
-.elist {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  overflow: hidden;
-  margin-bottom: 24rpx;
 }
 
 .erow {
   display: flex;
   align-items: center;
-  padding: 26rpx 28rpx;
+  gap: 16rpx;
+  padding: 24rpx 8rpx;
+  border-top: 1rpx solid $app-line-soft;
 }
 
-.erow + .erow {
-  border-top: 1rpx solid $app-line;
+.erow:active {
+  opacity: 0.6;
 }
 
 .erow__idx {
-  width: 56rpx;
-  font-size: $text-sm;
-  font-weight: 600;
-  color: $app-ink-muted;
+  width: 40rpx;
   flex-shrink: 0;
+  font-size: $text-sm;
+  color: $app-ink-subtle;
 }
 
 .erow__mid {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4rpx;
+}
+
+.erow__line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   min-width: 0;
 }
 
-.erow__name-row {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
 .erow__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
-.erow__circuit {
-  font-size: 18rpx;
-  padding: 2rpx 8rpx;
-  border-radius: 6rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
+.badge {
+  flex: none;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 
 .erow__sub {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .erow__target {
-  font-size: $text-sm;
-  color: $app-ink-muted;
   flex-shrink: 0;
-  margin-left: 16rpx;
-  max-width: 300rpx;
+  max-width: 280rpx;
   text-align: right;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
-/* ── 添加动作 ── */
-.pe__add {
+.elist :deep(.ft-empty-state) {
+  padding: 24rpx 8rpx 8rpx;
+}
+
+/* 添加动作：虚线框，与记录弹层／组合弹层的「添加食物」同一个 */
+.addbtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10rpx;
-  height: 96rpx;
-  border: 2rpx dashed $app-line;
-  border-radius: $radius-lg;
-  color: $app-ink-muted;
+  gap: 8rpx;
+  height: 88rpx;
+  margin-top: 16rpx;
+  border: 2rpx dashed $app-line-dash;
+  border-radius: $radius-md;
   font-size: $text-base;
-  font-weight: 500;
-  margin-bottom: 48rpx;
+  color: $app-ink-muted;
 }
 
-.pe__add-plus {
-  font-size: $text-md;
-}
-
-.pe__foot-note {
-  text-align: center;
-  font-size: 20rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
-  padding: 8rpx 0;
-}
-
-.pe__pad {
-  height: 260rpx;
+.addbtn:active {
+  opacity: 0.6;
 }
 
 /* ── 底部保存 ── */
 .pe__bottom {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
 }
 
-/* ── 弹层（目标组次 / 高级设置共用） ── */
-.ts-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
-  z-index: 90;
+.pe__bottom .pe__save {
+  height: 104rpx;
+  font-size: 30rpx;
 }
 
-.ts {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-  z-index: 91;
-  max-height: 82vh;
-  overflow-y: auto;
+/* ── 弹层（壳是 FtSheet，分组是白卡） ── */
+.ts__scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 58vh;
 }
 
-.ts--tall {
-  max-height: 86vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.ts__handle {
-  width: 72rpx;
-  height: 8rpx;
-  border-radius: 4rpx;
-  background: $app-line;
-  margin: 0 auto 28rpx;
-}
-
-.ts__title {
-  display: block;
-  font-size: 34rpx;
-  font-weight: 600;
-  color: $app-ink;
-  padding-bottom: 24rpx;
-}
-
-.ts__desc {
-  display: block;
-  font-size: $text-xs;
-  line-height: 1.6;
-  color: $app-ink-muted;
-  padding-bottom: 20rpx;
-}
-
-.ts__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
-}
-
-.ts__label {
-  font-size: $text-md;
-  color: $app-ink;
-}
-
-.ts__input {
-  width: 160rpx;
-  text-align: right;
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
+.pe .ts__btn {
+  flex-shrink: 0;
+  margin-top: 28rpx;
 }
 
 .ts__hint {
   display: block;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-  padding: 16rpx 0 32rpx;
+  padding: 20rpx 8rpx 0;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
 }
 
-/* ── 逐组目标列表 ── */
-.ts__sets {
-  padding-top: 8rpx;
-}
-
-.ts__sets-head {
+.field {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16rpx 0 8rpx;
+  gap: 20rpx;
+  height: 92rpx;
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
-.ts__sets-title {
-  font-size: $text-sm;
-  font-weight: 600;
+.field__label {
+  flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.field__input {
+  flex: 1;
+  text-align: right;
+  font-size: $text-lg;
   color: $app-ink;
 }
 
-.ts__fill {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  padding: 6rpx 14rpx;
-  border: 1rpx solid $app-line;
-  border-radius: 999rpx;
+/* 逐组目标 */
+.sets {
+  margin-top: 20rpx;
+  padding: 8rpx 28rpx 12rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
-.ts__setrow {
+.sets__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0 12rpx;
+}
+
+.sets__title {
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.sets__fill {
+  padding: 8rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
+}
+
+.sets__fill:active {
+  opacity: 0.6;
+}
+
+.setrow {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  padding: 12rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
+  padding: 14rpx 0;
+  border-top: 1rpx solid $app-line-soft;
 }
 
-.ts__setidx {
-  width: 110rpx;
+.setrow__idx {
+  width: 104rpx;
+  flex-shrink: 0;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.setrow__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  height: 68rpx;
+  padding: 0 20rpx;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
+}
+
+.setrow__input {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.setrow__unit {
   flex-shrink: 0;
   font-size: $text-xs;
   color: $app-ink-muted;
 }
 
-.ts__setfield {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-sm;
-  padding: 10rpx 12rpx;
-}
-
-.ts__setinput {
-  flex: 1;
-  min-width: 0;
-  font-size: $text-sm;
-  font-weight: 600;
-  color: $app-ink;
-  text-align: right;
-}
-
-.ts__setunit {
-  font-size: 18rpx;
-  color: $app-ink-subtle;
-}
-
-/* ── 高级设置：循环组 ── */
-.cs__list {
-  max-height: 52vh;
+/* 循环组 */
+.cs {
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .cs__row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16rpx;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
+  padding: 24rpx 0;
+}
+
+.cs__row + .cs__row {
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .cs__main {
@@ -995,58 +925,65 @@ function goBack() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
 .cs__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .cs__sub {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-subtle;
 }
 
+/* 组号 A–D：一组小分段（选中＝深字 ＋ 浅胶囊底） */
 .cs__nos {
   display: flex;
-  gap: 10rpx;
+  align-self: flex-start;
+  padding: 4rpx;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-pill;
 }
 
 .cs__no {
-  width: 48rpx;
-  height: 40rpx;
-  line-height: 40rpx;
+  width: 64rpx;
+  height: 48rpx;
+  line-height: 48rpx;
   text-align: center;
-  border-radius: $radius-sm;
-  border: 1rpx solid $app-line;
-  font-size: $text-xs;
+  border-radius: $radius-pill;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .cs__no--on {
-  background: $app-ink;
-  border-color: $app-ink;
-  color: $app-surface;
+  background: $app-surface-2;
+  color: $app-ink;
 }
 
 .cs__toggle {
   flex-shrink: 0;
-  padding: 12rpx 20rpx;
-  border-radius: 999rpx;
+  padding: 12rpx 24rpx;
   border: 1rpx solid $app-line;
-  font-size: $text-xs;
-  color: $app-ink-muted;
+  border-radius: $radius-pill;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
 .cs__toggle--on {
-  background: $app-ink;
-  border-color: $app-ink;
-  color: $app-surface;
+  color: $app-ink-muted;
 }
 
-.cs__toggle--off {
+.cs__toggle.is-off {
   opacity: 0.4;
+}
+
+.cs__toggle:active {
+  opacity: 0.6;
 }
 </style>

@@ -6,9 +6,13 @@ import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem 
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
+import FtSheet from '@/components/FtSheet.vue'
 
-// ── 动作库（设计稿：.workbuddy/stitch/screen/library.png）──
+// ── 动作库（晴窗，ADR 0041）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
 
 const pick = usePickStore()
@@ -77,9 +81,10 @@ const filtered = computed(() => {
 })
 
 const sectTitle = computed(() => {
-  if (keyword.value.trim()) return `搜索结果 (${filtered.value.length})`
+  const n = filtered.value.length
+  if (keyword.value.trim()) return `找到 ${n} 个`
   const m = MUSCLES.find((x) => x.code === activeMuscle.value)
-  return m ? `${m.section}动作 (${filtered.value.length})` : `全部动作 (${filtered.value.length})`
+  return `${m ? m.section : '全部'} · ${n} 个`
 })
 
 function toggleSelect(id: number) {
@@ -168,241 +173,211 @@ async function confirmCreate() {
     sheet.value.saving = false
   }
 }
-
-function goBack() {
-  uni.navigateBack()
-}
 </script>
 
 <template>
   <view class="lib">
-    <!-- 顶部 -->
-    <view v-if="!selectMode" class="lib__nav">
-      <text class="lib__back" @click="goBack">‹</text>
-      <text class="lib__meta ft-num">● TRAINING LOGBOOK // V3.2</text>
-      <text class="lib__meta ft-num">SEC.04_LIB</text>
-    </view>
-    <view v-else class="lib__select-nav">
-      <text class="lib__cancel" @click="exitSelect">取消</text>
-      <text class="lib__selected ft-num">已选 {{ selectedCount }} 项</text>
-      <view class="lib__select-actions">
-        <text @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
-        <text class="lib__delete" :class="{ 'lib__delete--off': selectedCount === 0 }" @click="doDelete">删除</text>
+    <view class="lib__body" :class="{ 'is-selecting': selectMode }">
+      <FtPageHeader :title="picking ? '添加动作' : '动作库'" back>
+        <template #right>
+          <view v-if="selectMode" class="pill" role="button" @click="exitSelect">取消</view>
+          <view v-else class="pill" role="button" @click="openCreate">
+            <FtIcon name="plus" :size="16" :stroke="2" />
+            <text>新增</text>
+          </view>
+        </template>
+      </FtPageHeader>
+
+      <!-- 搜索 -->
+      <view class="search">
+        <FtIcon name="search" :size="18" tone="subtle" />
+        <input
+          v-model="keyword"
+          class="search__input"
+          placeholder="搜索动作"
+          placeholder-class="search__ph"
+          confirm-type="search"
+        />
+        <view v-if="keyword" class="search__clear" role="button" aria-label="清空" @click="keyword = ''">
+          <FtIcon name="close" :size="14" :stroke="2" />
+        </view>
+      </view>
+
+      <!-- 肌群：可横滑的分段控件 -->
+      <view class="seg">
+        <scroll-view scroll-x class="seg__scroll">
+          <view class="seg__inner" role="tablist">
+            <view
+              class="seg__item"
+              :class="{ 'seg__item--on': activeMuscle === '' }"
+              role="tab"
+              :aria-selected="activeMuscle === ''"
+              @click="activeMuscle = ''"
+            >
+              全部
+            </view>
+            <view
+              v-for="m in MUSCLES"
+              :key="m.code"
+              class="seg__item"
+              :class="{ 'seg__item--on': activeMuscle === m.code }"
+              role="tab"
+              :aria-selected="activeMuscle === m.code"
+              @click="activeMuscle = m.code"
+            >
+              {{ m.label }}<text v-if="counts[m.code]" class="seg__n ft-num">{{ counts[m.code] }}</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- 列表 -->
+      <view class="glass elist">
+        <view class="elist__head">
+          <text class="elist__count">{{ sectTitle }}</text>
+          <text v-if="picking" class="elist__tip">点选即加入计划</text>
+          <text v-else-if="!selectMode" class="elist__tip">长按自定义动作可批量删除</text>
+        </view>
+        <view
+          v-for="e in filtered"
+          :key="e.id"
+          class="erow"
+          :class="{ 'is-dim': selectMode && e.preset }"
+          @click="onTapExercise(e)"
+          @longpress="onLongPressExercise(e)"
+        >
+          <view
+            v-if="selectMode && !e.preset"
+            class="erow__check"
+            :class="{ 'erow__check--on': selected.has(e.id) }"
+          >
+            <FtIcon v-if="selected.has(e.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
+          </view>
+          <view class="erow__mid">
+            <view class="erow__line">
+              <text class="erow__name">{{ e.name }}</text>
+              <text v-if="!e.preset" class="badge">自定义</text>
+            </view>
+            <text class="erow__sub">{{ muscleLabel(e.muscle) }}</text>
+          </view>
+          <view v-if="picking && !selectMode" class="erow__add">
+            <FtIcon name="plus" :size="16" :stroke="2" />
+          </view>
+          <FtIcon v-else-if="!selectMode" name="chevron-right" :size="18" tone="subtle" />
+        </view>
+        <FtEmpty
+          v-if="!loading && filtered.length === 0"
+          :title="keyword.trim() ? '没有匹配的动作' : '这一类还没有动作'"
+          sub="点右上角「新增」，建一个自定义动作。"
+        />
       </view>
     </view>
 
-    <view v-if="!selectMode" class="lib__title-row">
-      <text class="lib__title">动作库</text>
-      <view class="lib__new" @click="openCreate">+ 新增</view>
-    </view>
-
-    <!-- 搜索 -->
-    <view class="search">
-      <FtIcon name="search" :size="16" tone="subtle" />
-      <input
-        v-model="keyword"
-        class="search__input"
-        placeholder="搜索动作"
-        placeholder-class="search__ph"
-        confirm-type="search"
-      />
-      <text v-if="keyword" class="search__clear" @click="keyword = ''">×</text>
-    </view>
-
-    <!-- 肌群 tab -->
-    <scroll-view scroll-x class="mtabs">
-      <view class="mtabs__inner">
-        <view
-          class="mtab"
-          :class="{ 'mtab--active': activeMuscle === '' }"
-          @click="activeMuscle = ''"
-        >
-          全部
-        </view>
-        <view
-          v-for="m in MUSCLES"
-          :key="m.code"
-          class="mtab"
-          :class="{ 'mtab--active': activeMuscle === m.code }"
-          @click="activeMuscle = m.code"
-        >
-          {{ m.label }}
-          <text v-if="counts[m.code]" class="mtab__n ft-num">({{ counts[m.code] }})</text>
-        </view>
-      </view>
-    </scroll-view>
-
-    <!-- 分区行 -->
-    <view class="lib__sect">
-      <text class="lib__sect-l ft-num">{{ sectTitle }} · SORT: NAME</text>
-      <text v-if="picking" class="lib__sect-r">点选即加入计划</text>
-    </view>
-
-    <!-- 列表 -->
-    <view class="elist">
+    <!-- 多选：贴底悬浮的操作条（与悬浮主按钮同一位置） -->
+    <view v-if="selectMode" class="selbar">
+      <text class="selbar__count ft-num">已选 {{ selectedCount }} 项</text>
+      <view class="selbar__all" role="button" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</view>
       <view
-        v-for="e in filtered"
-        :key="e.id"
-        class="erow"
-        :class="{ 'erow--sel': selectMode && selected.has(e.id) }"
-        @click="onTapExercise(e)"
-        @longpress="onLongPressExercise(e)"
+        class="selbar__del"
+        :class="{ 'is-off': selectedCount === 0 }"
+        role="button"
+        @click="doDelete"
       >
-        <view
-          v-if="selectMode && !e.preset"
-          class="erow__check"
-          :class="{ 'erow__check--on': selected.has(e.id) }"
-        >
-          <FtIcon v-if="selected.has(e.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
-        </view>
-        <view class="erow__mid">
-          <text class="erow__name">{{ e.name }}</text>
-          <text class="erow__sub">{{ muscleLabel(e.muscle) }} · {{ e.preset ? '预设' : '自定义' }}</text>
-        </view>
-        <text class="erow__go">{{ picking ? '+' : '›' }}</text>
+        删除
       </view>
-      <view v-if="!loading && filtered.length === 0" class="elist__empty">没有匹配的动作</view>
     </view>
 
     <!-- 新增动作弹层 -->
-    <view v-if="sheet.show" class="sheet-mask" @click="sheet.show = false" />
-    <view v-if="sheet.show" class="sheet">
-      <view class="sheet__handle" />
-      <text class="sheet__title">新增动作</text>
+    <FtSheet v-if="sheet.show" title="新增动作" @close="sheet.show = false">
+      <view class="ns">
+        <view class="field">
+          <text class="field__label">动作名称</text>
+          <input
+            v-model="sheet.name"
+            class="field__input"
+            placeholder="如：保加利亚深蹲"
+            placeholder-class="field__ph"
+            maxlength="32"
+          />
+        </view>
 
-      <view class="sheet__field">
-        <text class="sheet__label">动作名称</text>
-        <input
-          v-model="sheet.name"
-          class="sheet__input"
-          placeholder="如：保加利亚深蹲"
-          placeholder-class="search__ph"
-          maxlength="32"
-        />
-      </view>
-
-      <text class="sheet__label sheet__label--block">肌群</text>
-      <view class="chips">
-        <view
-          v-for="m in MUSCLES"
-          :key="m.code"
-          class="chip"
-          :class="{ 'chip--active': sheet.muscle === m.code }"
-          @click="sheet.muscle = m.code"
-        >
-          {{ m.label }}
+        <view class="group">
+          <text class="group__label">肌群</text>
+          <view class="chips">
+            <view
+              v-for="m in MUSCLES"
+              :key="m.code"
+              class="chip"
+              :class="{ 'chip--on': sheet.muscle === m.code }"
+              role="radio"
+              :aria-checked="sheet.muscle === m.code"
+              @click="sheet.muscle = m.code"
+            >
+              {{ m.label }}
+            </view>
+          </view>
         </view>
       </view>
 
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block sheet__btn"
-        :class="{ 'ft-btn--disabled': sheet.saving }"
-        @click="confirmCreate"
-      >
+      <FtButton variant="primary" block :disabled="sheet.saving" class="ns__btn" @click="confirmCreate">
         创建
-      </view>
-    </view>
+      </FtButton>
+    </FtSheet>
   </view>
 </template>
 
 <style lang="scss" scoped>
-.lib {
-  padding: 28rpx 32rpx calc(48rpx + env(safe-area-inset-bottom));
+.lib__body {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(64rpx + env(safe-area-inset-bottom));
 }
 
-/* ── 顶部 ── */
-.lib__nav {
+/* 多选时底下多了悬浮操作条，正文末尾要让出它的高度 */
+.lib__body.is-selecting {
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+}
+
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+/* 页头右侧的胶囊按钮 */
+.pill {
+  @include glass($glass-bg-strong);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 4rpx 0 24rpx;
-}
-
-.lib__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  padding-right: 8rpx;
-}
-
-.lib__meta {
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
-}
-
-.lib__meta:last-child {
-  margin-left: auto;
-}
-
-.lib__select-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 64rpx;
-  padding-bottom: 24rpx;
-}
-
-.lib__cancel,
-.lib__selected,
-.lib__select-actions text {
+  gap: 6rpx;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
   font-size: $text-base;
-  color: $app-ink-muted;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
 }
 
-.lib__selected {
-  color: $app-ink;
-}
-
-.lib__select-actions {
-  display: flex;
-  align-items: center;
-  gap: 28rpx;
-}
-
-.lib__delete {
-  color: #c4453c !important;
-}
-
-.lib__delete--off {
-  opacity: 0.35;
-}
-
-.lib__title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 28rpx;
-}
-
-.lib__title {
-  font-size: 56rpx;
-  font-weight: 700;
-  color: $app-ink;
-  letter-spacing: 1rpx;
-}
-
-.lib__new {
-  font-size: $text-base;
-  font-weight: 500;
-  color: $app-ink;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-md;
-  padding: 10rpx 24rpx;
+.pill:active {
+  opacity: 0.7;
 }
 
 /* ── 搜索 ── */
 .search {
+  @include glass($glass-bg-strong);
   display: flex;
   align-items: center;
-  gap: 14rpx;
-  height: 84rpx;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-md;
-  padding: 0 24rpx;
-  margin-bottom: 24rpx;
+  gap: 12rpx;
+  height: 88rpx;
+  padding: 0 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
 .search__input {
@@ -416,103 +391,110 @@ function goBack() {
 }
 
 .search__clear {
-  font-size: 36rpx;
-  line-height: 1;
-  color: $app-ink-subtle;
-  padding: 0 6rpx;
-}
-
-/* ── 肌群 tab ── */
-.mtabs {
-  white-space: nowrap;
-  margin-bottom: 8rpx;
-}
-
-.mtabs__inner {
-  display: inline-flex;
-  gap: 36rpx;
-  padding: 0 4rpx 16rpx;
-  border-bottom: 1rpx solid $app-line;
-}
-
-.mtab {
-  font-size: $text-md;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
   color: $app-ink-muted;
-  padding-bottom: 12rpx;
-  position: relative;
-}
-
-.mtab--active {
-  color: $app-ink;
-  font-weight: 600;
-}
-
-.mtab--active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1rpx;
-  height: 4rpx;
-  background: $app-ink;
-  border-radius: 2rpx;
-}
-
-.mtab__n {
-  font-size: $text-xs;
-  font-weight: 400;
-  color: $app-ink-subtle;
-}
-
-/* ── 分区行 ── */
-.lib__sect {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 26rpx 4rpx 16rpx;
+  justify-content: center;
 }
 
-.lib__sect-l {
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
+/* ── 肌群分段：八项放不下一行，壳不动、里面横滑 ── */
+.seg {
+  @include glass;
+  padding: 6rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  overflow: hidden;
 }
 
-.lib__sect-r {
-  font-size: $text-xs;
+.seg__scroll {
+  white-space: nowrap;
+}
+
+.seg__inner {
+  display: inline-flex;
+}
+
+.seg__item {
+  flex-shrink: 0;
+  padding: 12rpx 28rpx;
+  border-radius: $radius-pill;
+  font-size: $text-base;
   color: $app-ink-muted;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+}
+
+.seg__item--on {
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
+}
+
+.seg__n {
+  margin-left: 6rpx;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
 }
 
 /* ── 列表 ── */
 .elist {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  overflow: hidden;
+  padding: 8rpx 28rpx;
+}
+
+.elist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 0 8rpx;
+}
+
+.elist__count {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.elist__tip {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
 }
 
 .erow {
   display: flex;
   align-items: center;
-  padding: 26rpx 28rpx;
+  gap: 16rpx;
+  padding: 24rpx 0;
 }
 
-.erow--sel {
-  background: $app-canvas;
+.erow + .erow,
+.elist__head + .erow {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.erow:active {
+  opacity: 0.6;
+}
+
+/* 多选时预设动作不能删：压淡，免得以为漏了勾 */
+.erow.is-dim {
+  opacity: 0.4;
 }
 
 .erow__check {
   width: 40rpx;
   height: 40rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid $app-line;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2rpx solid $app-line-dash;
   background: $app-surface;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  margin-right: 16rpx;
 }
 
 .erow__check--on {
@@ -520,126 +502,191 @@ function goBack() {
   border-color: $app-ink;
 }
 
-.erow + .erow {
-  border-top: 1rpx solid $app-line;
-}
-
 .erow__mid {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4rpx;
+}
+
+.erow__line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   min-width: 0;
 }
 
 .erow__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
+}
+
+.badge {
+  flex: none;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .erow__sub {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.erow__go {
-  font-size: 36rpx;
-  line-height: 1;
-  color: $app-ink-muted;
-  padding-left: 16rpx;
-}
-
-.elist__empty {
-  padding: 80rpx 0;
-  text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
-/* ── 新增弹层 ── */
-.sheet-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
-  z-index: 90;
+/* 点选模式的「加入」：圆形浅底，不用橙（整页的动作是「点哪个」，不是这颗按钮） */
+.erow__add {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.sheet {
+/* ── 多选操作条 ── */
+.selbar {
+  @include glass($glass-bg-strong);
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  height: 104rpx;
+  padding: 0 12rpx 0 36rpx;
+  box-sizing: border-box;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $glass-shadow-float;
+}
+
+.selbar__count {
+  flex: 1;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.selbar__all {
+  padding: 16rpx 20rpx;
+  font-size: $text-base;
+  color: $app-ink-2;
+}
+
+.selbar__del {
+  height: 80rpx;
+  padding: 0 40rpx;
+  display: flex;
+  align-items: center;
+  border-radius: $radius-pill;
+  background: $app-danger;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-surface;
+}
+
+.selbar__del.is-off {
+  opacity: 0.35;
+}
+
+.selbar__all:active,
+.selbar__del:active {
+  opacity: 0.7;
+}
+
+/* ── 新增动作弹层（壳是 FtSheet，分组是白卡） ── */
+/* 弹层没有副标题：标题下自己让出副标题那一段的距离 */
+.ns {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 28rpx;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  height: 92rpx;
+  padding: 0 28rpx;
   background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-  z-index: 91;
+  border-radius: $radius-lg;
 }
 
-.sheet__handle {
-  width: 72rpx;
-  height: 8rpx;
-  border-radius: 4rpx;
-  background: $app-line;
-  margin: 0 auto 28rpx;
+.field__label {
+  flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
-.sheet__title {
-  display: block;
-  font-size: 34rpx;
-  font-weight: 600;
+.field__input {
+  flex: 1;
+  font-size: $text-md;
+  font-weight: $weight-bold;
   color: $app-ink;
-  padding-bottom: 28rpx;
 }
 
-.sheet__field {
-  border-bottom: 2rpx solid $app-ink;
-  padding-bottom: 16rpx;
-  margin-bottom: 32rpx;
-}
-
-.sheet__label {
-  font-size: 22rpx;
+.field__ph {
   color: $app-ink-subtle;
+  font-weight: $weight-regular;
 }
 
-.sheet__label--block {
+.group {
+  padding: 24rpx 28rpx 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
+}
+
+.group__label {
   display: block;
   padding-bottom: 16rpx;
-}
-
-.sheet__input {
-  font-size: $text-lg;
-  color: $app-ink;
-  padding-top: 10rpx;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
-  margin-bottom: 40rpx;
+  gap: 12rpx;
 }
 
 .chip {
   padding: 12rpx 28rpx;
   border: 1rpx solid $app-line;
-  border-radius: 999rpx;
+  border-radius: $radius-pill;
   font-size: $text-base;
   color: $app-ink-muted;
 }
 
-.chip--active {
-  background: $app-ink;
-  border-color: $app-ink;
-  color: #ffffff;
-  font-weight: 500;
+/* 选中：深字 ＋ 浅胶囊底（与分段控件同一套），描边让掉 */
+.chip--on {
+  border-color: transparent;
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
 }
 
-.sheet__btn {
-  margin-bottom: 8rpx;
+.lib .ns__btn {
+  flex-shrink: 0;
+  margin-top: 28rpx;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg__item {
+    transition: none;
+  }
 }
 </style>
