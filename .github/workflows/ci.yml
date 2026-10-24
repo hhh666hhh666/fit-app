@@ -42,6 +42,11 @@ jobs:
       - name: 注解 SQL 实体用法守卫
         run: bash scripts/check-mapper-sql.sh
 
+      # 设计语言「晴窗」的颜色只认 uni.scss（ADR 0041）。页面分批换皮期间只告警、不阻断；
+      # 全部页面换完（设计语言重构第四批）后改成 `--strict`。
+      - name: 写死颜色守卫（告警）
+        run: bash scripts/check-hardcoded-colors.sh
+
   backend:
     name: 后端 · Maven 单测
     runs-on: ubuntu-latest
