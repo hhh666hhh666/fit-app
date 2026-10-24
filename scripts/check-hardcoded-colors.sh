@@ -6,8 +6,8 @@
 #   bash scripts/check-hardcoded-colors.sh --strict   # 硬失败模式：有命中就 exit 1
 #   bash scripts/check-hardcoded-colors.sh -v         # 逐行列出（默认只给每个文件的条数）
 #
-# 为什么先只告警：页面按批次换皮（见 docs/todo 的设计语言重构待办），地基阶段全站还有几十处
-# 旧写法；一上来就硬失败只会逼人加豁免。全部页面换完（第四批）后 CI 改传 --strict。
+# CI 传 --strict（0.26.0 起，全部页面换完皮、命中清零）。换皮期间是告警模式：地基阶段全站还有
+# 几十处旧写法，一上来就硬失败只会逼人加豁免。
 #
 # 查什么：`frontend/src` 下的 .vue / .scss（`uni.scss` 本身除外）里的
 #   - 十六进制色值 `#abc` / `#aabbcc` / `#aabbccdd`
@@ -88,4 +88,4 @@ echo "==> 共 $TOTAL 处写死的颜色：色值请改用 frontend/src/uni.scss 
 if [ "$STRICT" = 1 ]; then
   exit 1
 fi
-echo "    （告警模式，不阻断；全部页面换皮后 CI 改为 --strict）"
+echo "    （告警模式，不阻断；CI 传 --strict，会失败）"
