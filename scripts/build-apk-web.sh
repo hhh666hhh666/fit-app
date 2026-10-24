@@ -62,12 +62,23 @@ stash "$ASSETS/web"
 # 内置产物的版本号：壳据此判断「肚子里这份是多少版」，首次启动就不会把内容相同的
 # 线上包再下一遍（见 LocalWeb.bundledVersion / WebUpdater.seedAppliedIfEmpty）。
 # ⚠️ 必须与线上 version.json 的拼法一致，否则这个种子无效。
-printf '%s\n' "$TAG" > "$ASSETS/.version"
+# ⚠️ 文件名不能以点开头：aapt 默认把点开头的文件挡在 apk 外（以前叫 .version，从没进过包）。
+printf '%s\n' "$TAG" > "$ASSETS/version.txt"
 [ -f "$ASSETS/index.html" ] || { echo "!! 复制后仍缺 index.html" >&2; exit 1; }
 
 echo "==> 生成自更新包与清单"
+# 这一步只给「本机产物直接部署成站点」用；apk 用不到它，线上的更新包与清单由 CI 的
+# frontend/Dockerfile 自己生成。所以找不到能用的 Python（Windows 上常见：python 只是商店占位）
+# 就提示一句跳过，不让 apk 的准备工作因此报错退出。
+PY=""
+for c in python3 python; do
+    if "$c" -c "import sys" >/dev/null 2>&1; then PY="$c"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "    !! 没有能用的 Python，跳过（apk 不受影响；线上更新包由 CI 生成）"
+else
 mkdir -p "$DIST/web"
-python - "$DIST" "$DIST/web/web-$TAG.zip" "$TAG" "$SITE_ROOT" <<'PY'
+"$PY" - "$DIST" "$DIST/web/web-$TAG.zip" "$TAG" "$SITE_ROOT" <<'PY'
 import hashlib
 import json
 import os
@@ -112,6 +123,7 @@ print("    zip    : %s (%d KB)" % (zip_path, size_kb))
 print("    清单   : %s" % out)
 print("    sha256 : %s..." % manifest["sha256"][:16])
 PY
+fi
 
 echo "==> 完成"
 echo "    下一步：bash scripts/build-apk-web.sh 之后构建 apk（见 android-shell/README.md）"

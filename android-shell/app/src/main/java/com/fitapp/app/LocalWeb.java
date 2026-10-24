@@ -61,8 +61,12 @@ final class LocalWeb {
         return new File(downloadedDir(c), "index.html").isFile();
     }
 
-    /** apk 内置产物的版本号文件（由 `scripts/build-apk-web.sh` 写入，一行文本）。 */
-    static final String VERSION_FILE = ".version";
+    /**
+     * apk 内置产物的版本号文件（由 `scripts/build-apk-web.sh` 写入，一行文本）。
+     * ⚠️ 文件名不能以点开头：aapt 默认的 ignoreAssetsPattern 有 `.*`，点开头的文件根本进不了 apk
+     * （0.1.6 之前叫 `.version`，一直没打进包里，播种从没生效过）。
+     */
+    static final String VERSION_FILE = "version.txt";
 
     /**
      * 读 apk 内置产物的版本号；没有（未内置产物或旧包）返回 null。
