@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import {computed, ref} from 'vue'
 import {onPullDownRefresh, onShow} from '@dcloudio/uni-app'
-import FtDietRings from '@/components/FtDietRings.vue'
+import FtIcon, { type FtIconName } from '@/components/FtIcon.vue'
+import FtNutrientBars from '@/components/FtNutrientBars.vue'
 import MealSheet from '@/components/MealSheet.vue'
 import {useScheduleStore} from '@/stores/schedule'
 import {useDietStore} from '@/stores/diet'
 import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
 import {getMonthSummary, getWorkout, listWorkouts} from '@/api/workout'
 import {clearAll} from '@/api/cache'
-import {buildDietRings} from '@/utils/diet'
+import {buildNutrientBars} from '@/utils/diet'
 import {formatDateLabel, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
@@ -17,22 +18,24 @@ import { useTabPage } from '@/utils/tab-page'
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('home')
 
-const today = (() => {
+// 页头：大标题是日期，上标是「周几 · 今天的安排」
+const todayDate = (() => {
   const d = new Date()
-  const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
-  return `${d.getMonth() + 1}月${d.getDate()}日 · 周${week}`
+  return `${d.getMonth() + 1}月${d.getDate()}日`
 })()
+const todayWeek = `周${['日', '一', '二', '三', '四', '五', '六'][new Date().getDay()]}`
 
 // 饮食记录（真数据：今日概览 → 大卡/四环/快捷；数字区点开「饮食」页）
 const dietStore = useDietStore()
 const dietDay = ref<DayOverview | null>(null)
-const dietShortcuts = [
-  {key: 'breakfast', label: '早餐'},
-  {key: 'lunch', label: '午餐'},
-  {key: 'dinner', label: '晚餐'},
-  {key: 'snack', label: '加餐'},
-  {key: 'water', label: '饮水'},
-  {key: 'weight', label: '记体重'}
+// 六个入口各占一个色相：浅色底 ＋ 同色系图标（$meal-* token，ADR 0041）
+const dietShortcuts: { key: string; label: string; icon: FtIconName }[] = [
+  {key: 'breakfast', label: '早餐', icon: 'breakfast'},
+  {key: 'lunch', label: '午餐', icon: 'lunch'},
+  {key: 'dinner', label: '晚餐', icon: 'dinner'},
+  {key: 'snack', label: '加餐', icon: 'snack'},
+  {key: 'water', label: '饮水', icon: 'water'},
+  {key: 'weight', label: '记体重', icon: 'weight'}
 ]
 const sheetMeal = ref<MealKey | null>(null)
 const todayKey = (() => {
@@ -50,11 +53,21 @@ async function refreshDiet() {
 }
 
 const dietKcal = computed(() => Math.round(Number(dietDay.value?.totals.kcal ?? 0)))
-const dietTargetText = computed(() => {
+const dietTarget = computed(() => {
   const t = dietDay.value?.targets.kcal
-  return t == null ? '目标 --' : `目标 ${Math.round(Number(t))}`
+  return t == null || Number(t) <= 0 ? null : Math.round(Number(t))
 })
-const dietRings = computed(() => buildDietRings(dietDay.value))
+/** 卡头右侧：离目标还差多少／超了多少；没设目标就不说 */
+const dietGapText = computed(() => {
+  const t = dietTarget.value
+  if (t == null) return ''
+  const gap = t - dietKcal.value
+  return gap >= 0 ? `还差 ${formatThousands(gap)} 大卡` : `超出 ${formatThousands(-gap)} 大卡`
+})
+const dietRatio = computed(() =>
+  dietTarget.value == null ? 0 : Math.min(1, dietKcal.value / dietTarget.value)
+)
+const dietBars = computed(() => buildNutrientBars(dietDay.value))
 
 function goDiet() {
   uni.navigateTo({url: '/pages/diet/index'})
@@ -204,83 +217,80 @@ function goLibrary() {
 <template>
   <FtTabPage :page="tab" class="home">
     <view class="home__body">
-      <!-- 顶部行 -->
+      <!-- 页头：上标＝周几 · 今天的安排，大标题＝日期；右侧胶囊进动作库 -->
       <view class="home__head">
         <view class="home__head-main">
-          <text class="home__date ft-num">{{ today }}</text>
-          <text class="home__hint">{{ todayHint }}</text>
+          <text class="home__hint">{{ todayWeek }} · {{ todayHint }}</text>
+          <text class="home__date">{{ todayDate }}</text>
         </view>
-        <text class="home__head-link" @click="goLibrary">动作库</text>
+        <view class="home__pill" role="button" @click="goLibrary">动作库</view>
       </view>
 
-      <!-- 饮食记录卡（真数据；数字区/四环点开「饮食」页，快捷直接记账） -->
-      <view class="ft-card diet">
-        <view class="diet__head">
-          <text class="diet__title">饮食记录</text>
-        </view>
-
+      <!-- 今天吃了：数字区与条形点开「饮食」页，六个入口直接记 -->
+      <view class="glass diet">
         <view class="diet__tap" @click="goDiet">
-          <view class="diet__kcal">
-            <text class="diet__kcal-num ft-num">{{ dietKcal }}</text>
-            <text class="diet__kcal-unit"> / {{ dietTargetText }} 大卡</text>
+          <view class="diet__head">
+            <text class="card-title">今天吃了</text>
+            <text v-if="dietGapText" class="diet__gap ft-num">{{ dietGapText }}</text>
           </view>
-          <FtDietRings :rings="dietRings"/>
+          <view class="diet__kcal">
+            <text class="diet__kcal-num ft-num">{{ formatThousands(dietKcal) }}</text>
+            <text class="diet__kcal-unit ft-num">
+              / {{ dietTarget == null ? '--' : formatThousands(dietTarget) }} 大卡
+            </text>
+          </view>
+          <view class="diet__bar">
+            <view class="diet__bar-fill" :style="{ width: Math.round(dietRatio * 100) + '%' }" />
+          </view>
+          <FtNutrientBars :bars="dietBars" class="diet__bars" />
         </view>
 
         <view class="diet__shortcuts">
           <view
-              v-for="s in dietShortcuts"
-              :key="s.key"
-              class="diet__shortcut"
-              @click="onDietShortcut(s.key)"
+            v-for="s in dietShortcuts"
+            :key="s.key"
+            class="diet__shortcut"
+            role="button"
+            @click="onDietShortcut(s.key)"
           >
-            <view class="diet__ico" :class="'diet__ico--' + s.key"/>
+            <view class="diet__ico" :class="'diet__ico--' + s.key">
+              <FtIcon :name="s.icon" :size="22" />
+            </view>
             <text class="diet__shortcut-label">{{ s.label }}</text>
           </view>
         </view>
       </view>
 
-      <!-- 上次训练（真数据） -->
-      <view v-if="lastWorkout" class="ft-card last">
+      <!-- 上次训练 -->
+      <view v-if="lastWorkout" class="glass last">
         <view class="last__head">
-          <view class="last__head-left">
-            <view class="last__bar"/>
-            <text class="last__title">{{ lastWorkout.title }}</text>
-          </view>
+          <text class="card-title">{{ lastWorkout.title }}</text>
           <text class="last__date ft-num">{{ lastWorkout.date }}</text>
         </view>
         <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
-          <view class="last__dot"/>
           <text class="last__name">{{ row.name }}</text>
-          <text class="last__value ft-num" :class="{ 'ft-marker': row.pr }">{{ row.value }}</text>
+          <text v-if="row.pr" class="last__pr">PR</text>
+          <text class="last__value ft-num">{{ row.value }}</text>
         </view>
         <view class="last__foot ft-num">{{ lastWorkout.footer }}</view>
       </view>
 
-      <view v-else-if="lastLoaded" class="ft-card last last--empty">
-        <view class="last__head">
-          <view class="last__head-left">
-            <view class="last__bar"/>
-            <text class="last__title">上次训练</text>
-          </view>
-        </view>
-        <text class="last__none">还没有训练记录，从今天开始。</text>
+      <view v-else-if="lastLoaded" class="glass last">
+        <text class="card-title">上次训练</text>
+        <text class="last__none">还没有训练记录。点底栏中间的按钮，从今天开始。</text>
       </view>
 
-      <!-- 统计条（白框卡片） -->
-      <view class="strip-card">
-        <view class="strip">
-          <view class="strip__item">
-            <text class="strip__label">本周</text>
-            <text class="strip__num ft-num">{{ weekCount }}</text>
-            <text class="strip__label">练</text>
-          </view>
-          <view class="strip__divider"/>
-          <view class="strip__item">
-            <text class="strip__label">本月</text>
-            <text class="strip__num ft-num">{{ monthCount }}</text>
-            <text class="strip__label">练</text>
-          </view>
+      <!-- 本周 / 本月次数 -->
+      <view class="strip">
+        <view class="glass strip__item">
+          <text class="strip__label">本周</text>
+          <text class="strip__num ft-num">{{ weekCount }}</text>
+          <text class="strip__label">练</text>
+        </view>
+        <view class="glass strip__item">
+          <text class="strip__label">本月</text>
+          <text class="strip__num ft-num">{{ monthCount }}</text>
+          <text class="strip__label">练</text>
         </view>
       </view>
     </view>
@@ -298,26 +308,39 @@ function goLibrary() {
 
 <style lang="scss" scoped>
 .home__body {
-  padding: 28rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
 }
 
-/* ── 顶部行 ── */
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+/* ── 页头 ── */
 .home__head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  padding: 8rpx 0 24rpx;
-}
-
-.home__date {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
+  gap: 16rpx;
+  padding: 12rpx 8rpx 4rpx;
 }
 
 .home__head-main {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .home__hint {
@@ -325,35 +348,60 @@ function goLibrary() {
   color: $app-ink-muted;
 }
 
-.home__head-link {
-  font-size: $text-base;
-  color: $app-ink-muted;
+.home__date {
+  font-family: $font-num;
+  font-size: $text-hero;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: $app-ink;
 }
 
-/* ── 饮食记录卡 ── */
+.home__pill {
+  @include glass;
+  flex-shrink: 0;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+}
+
+.home__pill:active {
+  opacity: 0.7;
+}
+
+/* ── 今天吃了 ── */
+.diet {
+  padding: 36rpx 36rpx 32rpx;
+}
+
 .diet__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
 }
 
-.diet__title {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
+.diet__gap {
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .diet__kcal {
   display: flex;
   align-items: baseline;
-  margin: 18rpx 0 26rpx;
+  gap: 12rpx;
+  margin-top: 12rpx;
 }
 
 .diet__kcal-num {
-  font-size: $text-3xl;
-  font-weight: 600;
+  font-size: $text-display;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   color: $app-ink;
-  line-height: 1;
 }
 
 .diet__kcal-unit {
@@ -361,91 +409,103 @@ function goLibrary() {
   color: $app-ink-muted;
 }
 
-.diet__tap {
-  margin-bottom: 26rpx;
+.diet__bar {
+  height: 20rpx;
+  margin-top: 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  overflow: hidden;
+}
+
+.diet__bar-fill {
+  height: 100%;
+  border-radius: $radius-pill;
+  background: $ring-kcal;
+}
+
+.diet__bars {
+  margin-top: 24rpx;
 }
 
 .diet__shortcuts {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 28rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .diet__shortcut {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8rpx;
-  flex: 1;
+  gap: 12rpx;
 }
 
-.diet__shortcut-label {
-  font-size: $text-xs;
-  color: $app-ink-muted;
+.diet__shortcut:active .diet__ico {
+  transform: scale(0.94);
 }
 
 .diet__ico {
-  width: 40rpx;
-  height: 40rpx;
-  background-repeat: no-repeat;
-  background-size: contain;
-  background-position: center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: $radius-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform $dur-fast $ease-out;
 }
 
-/* 六个快捷图标：自绘线条（stroke 用 muted 色），风格与设计稿一致 */
 .diet__ico--breakfast {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z'/%3E%3Cpath d='M16 10h1.5a2.3 2.3 0 0 1 0 4.6H16'/%3E%3Cpath d='M7.5 3v2.4M11.5 3v2.4'/%3E%3C/svg%3E");
+  background: $meal-breakfast-bg;
+  color: $meal-breakfast-fg;
 }
 
 .diet__ico--lunch {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11h16a8 8 0 0 1-16 0z'/%3E%3Cpath d='M9 4.5v3M15 4.5v3'/%3E%3C/svg%3E");
+  background: $meal-lunch-bg;
+  color: $meal-lunch-fg;
 }
 
 .diet__ico--dinner {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z'/%3E%3C/svg%3E");
+  background: $meal-dinner-bg;
+  color: $meal-dinner-fg;
 }
 
 .diet__ico--snack {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12.5h11l-1.2 7.5H7.7z'/%3E%3Cpath d='M9.5 12.5c0-2.2 1.1-3.4 2.5-3.4s2.5 1.2 2.5 3.4'/%3E%3Cpath d='M12 9V6.6'/%3E%3Ccircle cx='12' cy='5.4' r='1.2'/%3E%3C/svg%3E");
+  background: $meal-snack-bg;
+  color: $meal-snack-fg;
 }
 
 .diet__ico--water {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4c3 4 6 7 6 10a6 6 0 0 1-12 0c0-3 3-6 6-10z'/%3E%3C/svg%3E");
+  background: $meal-water-bg;
+  color: $meal-water-fg;
 }
 
 .diet__ico--weight {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666b73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='16' height='16' rx='4.5'/%3E%3Cpath d='M12 12.2l2.6-3.1'/%3E%3C/svg%3E");
+  background: $meal-weight-bg;
+  color: $meal-weight-fg;
 }
 
-/* ── 上次训练卡 ── */
+.diet__shortcut-label {
+  font-size: $text-sm;
+  color: $app-ink-2;
+}
+
+/* ── 上次训练 ── */
+.last {
+  padding: 32rpx 36rpx 28rpx;
+}
+
 .last__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding-bottom: 18rpx;
-}
-
-.last__head-left {
-  display: flex;
-  align-items: center;
-}
-
-/* 标题左侧的粗竖条标记（对齐设计稿） */
-.last__bar {
-  width: 10rpx;
-  height: 34rpx;
-  border-radius: 4rpx;
-  background: $app-ink;
-  margin-right: 14rpx;
-  flex-shrink: 0;
-}
-
-.last__title {
-  font-size: $text-base;
-  font-weight: 600;
-  color: $app-ink;
+  gap: 16rpx;
+  padding-bottom: 8rpx;
 }
 
 .last__date {
+  flex-shrink: 0;
   font-size: $text-sm;
   color: $app-ink-muted;
 }
@@ -453,83 +513,78 @@ function goLibrary() {
 .last__row {
   display: flex;
   align-items: center;
-  padding: 22rpx 0;
+  gap: 16rpx;
+  padding: 18rpx 0;
+}
+
+.last__row + .last__row {
   border-top: 1rpx solid $app-line-soft;
 }
 
-.last__dot {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: $app-ink;
-  margin-right: 16rpx;
-  flex-shrink: 0;
-}
-
 .last__name {
+  flex: 1;
+  min-width: 0;
   font-size: $text-md;
   color: $app-ink;
+}
+
+/* PR 是「动作的结果」，归橙色：浅橙底 ＋ 深橙字 */
+.last__pr {
+  padding: 2rpx 16rpx;
+  border-radius: $radius-pill;
+  background: $accent-soft;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+  color: $accent-strong;
 }
 
 .last__value {
-  margin-left: auto;
   font-size: $text-md;
-  font-weight: 500;
   color: $app-ink;
 }
 
-.last--empty {
-  padding-bottom: 32rpx;
-}
-
-.last__none {
-  display: block;
+.last__foot {
   padding-top: 8rpx;
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.last__foot {
-  padding-top: 18rpx;
-  border-top: 1rpx solid $app-line-soft;
+.last__none {
+  display: block;
+  padding-top: 12rpx;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
+}
+
+/* ── 本周 / 本月 ── */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20rpx;
+}
+
+.strip__item {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  padding: 24rpx 32rpx;
+}
+
+.strip__label {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-/* ── 统计条（白框卡片）── */
-.strip-card {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  padding: 24rpx 28rpx;
-  margin-bottom: 24rpx;
-}
-
-.strip {
-  display: flex;
-  align-items: center;
-}
-
-.strip__item {
-  flex: 1;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 8rpx;
-  font-size: $text-base;
-  color: $app-ink-muted;
-}
-
 .strip__num {
-  font-size: $text-md;
-  font-weight: 600;
+  font-size: 52rpx;
+  font-weight: $weight-heavy;
   color: $app-ink;
 }
 
-.strip__divider {
-  width: 1rpx;
-  height: 32rpx;
-  background: $app-line;
+@media (prefers-reduced-motion: reduce) {
+  .diet__ico {
+    transition: none;
+  }
 }
 </style>

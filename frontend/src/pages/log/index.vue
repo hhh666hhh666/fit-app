@@ -10,6 +10,7 @@ import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
 import FtIcon from '@/components/FtIcon.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('log')
@@ -53,11 +54,10 @@ const emptyText = computed(() =>
  * 容量位规则＝**有容量才显示数字**：容量口径已排除有氧（ADR 0023），
  * 所以空月份与纯有氧月份都显示「—」，不显示 `0 kg`。
  */
-const overviewText = computed(() => {
-  const s = summary.value
-  if (!s) return '—'
-  const total = Math.round(Number(s.totalVolume))
-  return `${s.count} 练 · 总容量 ${total > 0 ? `${formatThousands(total)} kg` : '—'}`
+const overviewCount = computed(() => (summary.value ? String(summary.value.count) : '—'))
+const overviewVolume = computed(() => {
+  const total = Math.round(Number(summary.value?.totalVolume ?? 0))
+  return total > 0 ? formatThousands(total) : '—'
 })
 
 /**
@@ -222,52 +222,65 @@ function doDelete() {
 <template>
   <FtTabPage :page="tab" class="log">
     <view class="log__body">
-      <!-- 顶栏：常规＝标题＋月份；多选态＝取消＋已选＋全选/删除 -->
+      <!-- 页头：常规＝标题＋月份胶囊；多选态＝取消＋已选＋全选/删除 -->
       <view class="log__head">
         <template v-if="!selectMode">
           <text class="log__title">训练日志</text>
-          <!-- 月份条（自绘）：左右翻月，当月封顶不再往后 -->
-          <view class="log__monthbar">
-            <text class="log__arrow" @click="shiftMonth(-1)">‹</text>
-            <text class="log__month ft-num">{{ monthLabel }}</text>
-            <text class="log__arrow" :class="{ 'log__arrow--off': !canNext }" @click="shiftMonth(1)">›</text>
+          <!-- 月份胶囊：左右翻月，当月封顶不再往后 -->
+          <view class="monthbar">
+            <view class="monthbar__arrow" role="button" aria-label="上个月" @click="shiftMonth(-1)">
+              <FtIcon name="chevron-left" :size="18" :stroke="2" />
+            </view>
+            <text class="monthbar__label ft-num">{{ monthLabel }}</text>
+            <view
+              class="monthbar__arrow"
+              :class="{ 'monthbar__arrow--off': !canNext }"
+              role="button"
+              aria-label="下个月"
+              @click="shiftMonth(1)"
+            >
+              <FtIcon name="chevron-right" :size="18" :stroke="2" />
+            </view>
           </view>
         </template>
         <template v-else>
-          <text class="log__cancel" @click="exitSelect">取消</text>
+          <view class="pill" role="button" @click="exitSelect">取消</view>
           <text class="log__sel ft-num">已选 {{ selectedCount }} 项</text>
           <view class="log__acts">
             <text class="log__all" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
-            <text
-              class="log__del"
-              :class="{ 'log__del--off': selectedCount === 0 }"
+            <view
+              class="pill pill--danger"
+              :class="{ 'pill--off': selectedCount === 0 }"
+              role="button"
               @click="doDelete"
             >
               删除
-            </text>
+            </view>
           </view>
         </template>
       </view>
 
-      <!-- 月概览条：数字按当月算，环比要给基准（ADR 0023） -->
-      <view class="overview">
-        <text class="overview__caps">MONTH OVERVIEW</text>
-        <view class="overview__right">
-          <text class="overview__nums ft-num">{{ overviewText }}</text>
-          <text v-if="deltaText" class="overview__delta ft-num">{{ deltaText }}</text>
+      <!-- 月概览：数字按当月算，环比要给基准（ADR 0023） -->
+      <view class="glass overview">
+        <view class="overview__cell">
+          <text class="overview__label">本月训练</text>
+          <text class="overview__num ft-num">{{ overviewCount }}<text class="overview__unit">练</text></text>
         </view>
+        <view class="overview__cell">
+          <text class="overview__label">总容量</text>
+          <text class="overview__num ft-num">
+            {{ overviewVolume }}<text v-if="overviewVolume !== '—'" class="overview__unit">kg</text>
+          </text>
+        </view>
+        <text v-if="deltaText" class="overview__delta ft-num">{{ deltaText }}</text>
       </view>
 
-      <!-- 时间线列表 -->
+      <!-- 记录列表 -->
       <view v-if="loading" class="ft-loading">加载中…</view>
-      <view v-else-if="items.length === 0" class="ft-empty">{{ emptyText }}</view>
-      <view v-else class="ledger">
-        <view class="ledger__thead">
-          <view v-if="selectMode" class="col-check" />
-          <text class="col-date">日期 / DATE</text>
-          <text class="col-mid">项目 &amp; 主项成绩 / DETAILS</text>
-          <text class="col-time">用时 / TIME</text>
-        </view>
+      <view v-else-if="items.length === 0" class="glass">
+        <FtEmpty :title="emptyText" />
+      </view>
+      <view v-else class="glass ledger">
         <view
           v-for="item in items"
           :key="item.id"
@@ -285,15 +298,13 @@ function doDelete() {
           </view>
           <view class="lrow__date">
             <text class="lrow__date-main ft-num">{{ formatDateLabel(item.createdAt) }}</text>
-            <!-- 时分放在副行：日期列只有 170rpx，挤进主行会把中间标题列压扁（2026-10-19） -->
+            <!-- 时分放在副行：日期列窄，挤进主行会把中间标题列压扁（2026-10-19） -->
             <text class="lrow__date-week ft-num">
               {{ formatTimeLabel(item.createdAt) }} · {{ weekdayOf(item.createdAt) }}
             </text>
           </view>
           <view class="lrow__mid">
-            <view class="lrow__title-line">
-              <text class="lrow__title">{{ item.title }}</text>
-            </view>
+            <text class="lrow__title">{{ item.title }}</text>
             <text class="lrow__detail ft-num">{{ lineOf(item) }}</text>
           </view>
           <view class="lrow__time">
@@ -305,191 +316,201 @@ function doDelete() {
       </view>
 
       <view v-if="loadingMore" class="log__more">加载中…</view>
-
     </view>
   </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
 .log__body {
-  padding: 36rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
 }
 
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+/* ── 页头 ── */
 .log__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 24rpx;
+  gap: 16rpx;
+  min-height: 84rpx;
+  padding: 12rpx 8rpx 4rpx;
 }
 
 .log__title {
-  font-size: 48rpx;
-  font-weight: 700;
+  font-size: $text-hero;
+  font-weight: $weight-bold;
+  line-height: 1.25;
   color: $app-ink;
 }
 
-.log__month {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  border: 1rpx solid $app-line;
-  border-radius: 8rpx;
-  padding: 8rpx 16rpx;
-}
-
-/* ── 月份条：自绘（全站顶部栏都是自绘，不用原生 picker，免得破风格）── */
-.log__monthbar {
+/* 月份胶囊：自绘（全站顶部栏都是自绘，不用原生 picker，免得破风格） */
+.monthbar {
+  @include glass;
   display: flex;
   align-items: center;
-  gap: 6rpx;
+  padding: 4rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
-.log__arrow {
-  font-size: $text-lg;
-  line-height: 1;
-  color: $app-ink-muted;
-  padding: 8rpx 10rpx;
+.monthbar__arrow {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $app-ink-2;
 }
 
-.log__arrow--off {
+.monthbar__arrow:active {
+  background: $app-surface-2;
+}
+
+.monthbar__arrow--off {
   opacity: 0.25;
 }
 
-/* ── 多选态顶栏 ── */
-.log__cancel {
+.monthbar__label {
+  padding: 0 4rpx;
   font-size: $text-base;
-  color: $app-ink-muted;
-  padding: 8rpx 0;
+  color: $app-ink;
+}
+
+/* ── 多选态页头 ── */
+.pill {
+  @include glass($glass-bg-strong);
+  padding: 14rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+}
+
+.pill--danger {
+  color: $app-danger;
+}
+
+.pill--off {
+  opacity: 0.4;
 }
 
 .log__sel {
   font-size: $text-base;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .log__acts {
   display: flex;
   align-items: center;
-  gap: 28rpx;
+  gap: 24rpx;
 }
 
 .log__all {
-  font-size: $text-sm;
+  font-size: $text-base;
   color: $app-ink-muted;
 }
 
-.log__del {
-  font-size: $text-sm;
-  font-weight: 500;
-  color: #c4453c;
-  padding: 8rpx 0;
-}
-
-.log__del--off {
-  opacity: 0.35;
-}
-
-/* ── 月概览条 ── */
+/* ── 月概览 ── */
 .overview {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  padding: 20rpx 24rpx;
-  margin-bottom: 20rpx;
+  flex-wrap: wrap;
+  row-gap: 12rpx;
 }
 
-.overview__caps {
-  font-size: 22rpx;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+.overview__cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.overview__cell + .overview__cell {
+  padding-left: 32rpx;
+  border-left: 1rpx solid $app-line-soft;
+}
+
+.overview__label {
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.overview__nums {
-  font-size: $text-sm;
+.overview__num {
+  font-size: 52rpx;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: $app-ink;
 }
 
-.overview__right {
-  display: flex;
-  align-items: baseline;
-  gap: 16rpx;
+.overview__unit {
+  margin-left: 6rpx;
+  font-size: $text-sm;
+  font-weight: $weight-bold;
+  letter-spacing: 0;
+  color: $app-ink-muted;
 }
 
 .overview__delta {
-  font-size: 22rpx;
+  flex-basis: 100%;
+  padding-top: 16rpx;
+  border-top: 1rpx solid $app-line-soft;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-/* ── 时间线列表 ── */
+/* ── 记录列表 ── */
 .ledger {
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  overflow: hidden;
-  margin-bottom: 24rpx;
-}
-
-.ledger__thead {
-  display: flex;
-  align-items: center;
-  padding: 16rpx 24rpx;
-  background: $app-canvas;
-  border-bottom: 1rpx solid $app-line;
-  font-size: 22rpx;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: $app-ink-muted;
-}
-
-.col-check {
-  width: 56rpx;
-  flex-shrink: 0;
-}
-
-.col-date {
-  width: 170rpx;
-  flex-shrink: 0;
-}
-
-.col-mid {
-  flex: 1;
-}
-
-.col-time {
-  width: 130rpx;
-  text-align: right;
-  flex-shrink: 0;
+  padding: 8rpx 28rpx;
 }
 
 .lrow {
   display: flex;
   align-items: center;
-  padding: 24rpx;
+  gap: 16rpx;
+  margin: 0 -12rpx;
+  padding: 24rpx 12rpx;
+  border-radius: $radius-md;
+  transition: background $dur-fast $ease-out;
 }
 
 .lrow + .lrow {
   border-top: 1rpx solid $app-line-soft;
 }
 
-/* 多选态：选中行浅底；勾选圈与行等高对齐 */
+.lrow:active {
+  background: $app-surface-2;
+}
+
+/* 多选态：选中行浅底 */
 .lrow--sel {
-  background: $app-canvas;
+  background: $app-surface-2;
 }
 
 .lrow__check {
   width: 40rpx;
   height: 40rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid $app-line;
-  background: $app-surface;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2rpx solid $app-line-dash;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  margin-right: 16rpx;
 }
 
 .lrow__check--on {
@@ -498,7 +519,7 @@ function doDelete() {
 }
 
 .lrow__date {
-  width: 170rpx;
+  width: 156rpx;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -507,7 +528,6 @@ function doDelete() {
 
 .lrow__date-main {
   font-size: $text-md;
-  font-weight: 500;
   color: $app-ink;
 }
 
@@ -521,20 +541,16 @@ function doDelete() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
-  padding-right: 12rpx;
-}
-
-.lrow__title-line {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
+  gap: 4rpx;
 }
 
 .lrow__title {
   font-size: $text-lg;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lrow__detail {
@@ -546,27 +562,30 @@ function doDelete() {
 }
 
 .lrow__time {
-  width: 150rpx;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 4rpx;
-  text-align: right;
   font-size: $text-sm;
   color: $app-ink-muted;
-  flex-shrink: 0;
 }
 
 /* 消耗那一行：比时长小一号，扫列表时不抢注意力（ADR 0029） */
 .lrow__kcal {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+  font-size: $text-xs;
 }
 
 .log__more {
-  padding: 24rpx 0;
+  padding: 8rpx 0 24rpx;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lrow {
+    transition: none;
+  }
 }
 </style>

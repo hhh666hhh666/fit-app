@@ -11,12 +11,15 @@ import { useScheduleStore } from '@/stores/schedule'
 import { formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
+import FtListRow from '@/components/FtListRow.vue'
+import FtIcon from '@/components/FtIcon.vue'
+import FtButton from '@/components/FtButton.vue'
 import { useTabPage } from '@/utils/tab-page'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('profile')
 
-// ── 我的（设计稿：.workbuddy/stitch/screen/profile.png）──
+// ── 我的：累计 → 入口两组 → 存储占用与识别用量 → 退出登录 ──
 
 const username = ref('训练者')
 const totalCount = ref(0)
@@ -200,83 +203,57 @@ function logout() {
 <template>
   <FtTabPage :page="tab" class="prof">
     <view class="prof__body">
-      <!-- 顶部 meta 行 -->
-      <view class="prof__meta">
-        <text class="ft-num">FIT-APP LEDGER</text>
-        <text class="ft-num">ID: {{ username.toUpperCase() }}</text>
+      <!-- 页头：头像 ＋ 用户名 -->
+      <view class="prof__head">
+        <view class="prof__avatar">{{ avatarChar }}</view>
+        <view class="prof__who">
+          <text class="prof__eyebrow">我的</text>
+          <text class="prof__name">{{ username }}</text>
+        </view>
       </view>
 
-      <!-- 用户卡 -->
-      <view class="ft-card ucard">
-        <view class="ucard__avatar">{{ avatarChar }}</view>
-        <text class="ucard__name">{{ username }}</text>
-        <text class="ucard__badge">LIFTER</text>
-      </view>
-
-      <!-- 统计双格 -->
-      <view class="ft-card stats">
-        <view class="stats__item">
-          <text class="stats__label">累计训练</text>
-          <view class="stats__num-row">
-            <text class="stats__num ft-num">{{ countText }}</text>
-            <text class="stats__unit">次</text>
+      <!-- 累计 -->
+      <view class="glass duo">
+        <view class="duo__cell">
+          <text class="duo__label">累计训练</text>
+          <view class="duo__num-row">
+            <text class="duo__num ft-num">{{ countText }}</text>
+            <text class="duo__unit">次</text>
           </view>
         </view>
-        <view class="stats__divider" />
-        <view class="stats__item">
-          <text class="stats__label">总容量</text>
-          <view class="stats__num-row">
-            <text class="stats__num ft-num">{{ totalVolumeText }}</text>
-            <text v-if="showVolumeUnit" class="stats__unit">kg</text>
+        <view class="duo__cell">
+          <text class="duo__label">总容量</text>
+          <view class="duo__num-row">
+            <text class="duo__num ft-num">{{ totalVolumeText }}</text>
+            <text v-if="showVolumeUnit" class="duo__unit">kg</text>
           </view>
         </view>
       </view>
 
-      <!-- 入口三行 -->
-      <view class="ft-card entries">
-        <view class="entry" @click="goBody">
-          <text class="entry__label">身体档案</text>
-          <text class="entry__value ft-num">
-            {{ latestWeight == null ? '—' : formatWeight(latestWeight, weightUnit) }}
-          </text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goLibrary">
-          <text class="entry__label">动作库</text>
-          <text class="entry__value ft-num">{{ exerciseCount }} 项已记录</text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goPlans">
-          <text class="entry__label">训练计划</text>
-          <text class="entry__value ft-num">{{ planSummary }}</text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goWeek">
-          <text class="entry__label">训练安排</text>
-          <text class="entry__value ft-num">{{ weekSummary }}</text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goFoods">
-          <text class="entry__label">食物库</text>
-          <text class="entry__value ft-num">{{ foodSummary }}</text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goAlbum">
-          <text class="entry__label">照片</text>
-          <text class="entry__value ft-num">{{ photoCountText }}</text>
-          <text class="entry__go">›</text>
-        </view>
-        <view class="entry" @click="goSettings">
-          <text class="entry__label">设置</text>
-          <text class="entry__value ft-num">饮食目标 · 图片压缩</text>
-          <text class="entry__go">›</text>
-        </view>
+      <!-- 训练相关入口 -->
+      <view class="glass entries">
+        <FtListRow title="训练计划" :value="planSummary" arrow @click="goPlans" />
+        <FtListRow title="训练安排" :value="weekSummary" arrow @click="goWeek" />
+        <FtListRow title="动作库" :value="`${exerciseCount} 项已记录`" arrow @click="goLibrary" />
+      </view>
+
+      <!-- 身体、饮食与设置 -->
+      <view class="glass entries">
+        <FtListRow
+          title="身体档案"
+          :value="latestWeight == null ? '—' : formatWeight(latestWeight, weightUnit)"
+          arrow
+          @click="goBody"
+        />
+        <FtListRow title="食物库" :value="foodSummary" arrow @click="goFoods" />
+        <FtListRow title="照片" :value="photoCountText" arrow @click="goAlbum" />
+        <FtListRow title="设置" value="饮食目标 · 图片压缩" arrow @click="goSettings" />
       </view>
 
       <!-- 存储占用（ADR 0013）：目前只统计餐照 -->
-      <view class="ft-card storage">
+      <view class="glass storage">
         <view class="storage__head">
-          <text class="storage__label">存储占用</text>
+          <text class="card-title">存储占用</text>
           <text class="storage__val ft-num">{{ photoUsedText }} / {{ photoQuotaText }}</text>
         </view>
         <view class="storage__bar">
@@ -289,204 +266,201 @@ function logout() {
         <text class="storage__hint">目前只统计餐照；达到上限后将无法再上传新照片</text>
       </view>
 
-      <!-- 识别用量（ADR 0018）：存储占用下方；外卡两值，点进明细分页 -->
-      <view class="ft-card storage rec-usage" @click="goRecognitionLogs">
+      <!-- 识别用量（ADR 0018）：外卡两值，点进明细分页 -->
+      <view class="glass storage storage--tap" @click="goRecognitionLogs">
         <view class="storage__head">
-          <text class="storage__label">识别用量</text>
-          <text class="storage__val ft-num">{{ recTokensText }} · {{ recRequestsText }}</text>
+          <text class="card-title">识别用量</text>
+          <view class="storage__go">
+            <text class="storage__val ft-num">{{ recTokensText }} · {{ recRequestsText }}</text>
+            <FtIcon name="chevron-right" :size="18" tone="subtle" />
+          </view>
         </view>
         <text class="storage__hint">营养成分表识别的 token 累计（不含费用）；点开看每次调用明细</text>
       </view>
 
-      <text class="prof__logout" @click="logout">退出登录</text>
-
+      <view class="prof__logout">
+        <FtButton variant="ghost" size="sm" @click="logout">退出登录</FtButton>
+      </view>
     </view>
   </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
 .prof__body {
-  padding: 36rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
 }
 
-/* ── meta 行 ── */
-.prof__meta {
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+/* ── 页头 ── */
+.prof__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 4rpx 28rpx;
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
+  gap: 24rpx;
+  padding: 12rpx 8rpx 4rpx;
 }
 
-/* ── 用户卡 ── */
-.ucard {
-  display: flex;
-  align-items: center;
-  gap: 26rpx;
-}
-
-.ucard__avatar {
-  width: 108rpx;
-  height: 108rpx;
+.prof__avatar {
+  @include glass($glass-bg-strong);
+  width: 112rpx;
+  height: 112rpx;
+  flex-shrink: 0;
   border-radius: 50%;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
+  border: 1rpx solid $glass-edge;
+  box-shadow: $glass-shadow;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 44rpx;
-  font-weight: 700;
-  color: $app-ink;
-  flex-shrink: 0;
-}
-
-.ucard__name {
-  font-size: 40rpx;
-  font-weight: 700;
+  font-family: $font-num;
+  font-size: $text-2xl;
+  font-weight: $weight-heavy;
   color: $app-ink;
 }
 
-.ucard__badge {
-  margin-left: auto;
-  font-size: 20rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-muted;
-  border: 1rpx solid $app-line;
-  border-radius: 8rpx;
-  padding: 8rpx 14rpx;
-}
-
-/* ── 统计双格 ── */
-.stats {
+.prof__who {
+  min-width: 0;
   display: flex;
-  align-items: stretch;
-  padding: 32rpx 0;
+  flex-direction: column;
 }
 
-.stats__item {
+.prof__eyebrow {
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.prof__name {
+  font-size: $text-hero;
+  font-weight: $weight-bold;
+  line-height: 1.25;
+  color: $app-ink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 累计 ── */
+.duo {
+  display: flex;
+}
+
+.duo__cell {
   flex: 1;
-  padding: 0 36rpx;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
 }
 
-.stats__label {
+.duo__cell + .duo__cell {
+  padding-left: 32rpx;
+  border-left: 1rpx solid $app-line-soft;
+}
+
+.duo__label {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.stats__num-row {
+.duo__num-row {
   display: flex;
   align-items: baseline;
-  gap: 10rpx;
-  padding-top: 10rpx;
+  gap: 6rpx;
 }
 
-.stats__num {
-  font-size: $text-3xl;
-  font-weight: 700;
+.duo__num {
+  font-size: 52rpx;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: $app-ink;
-  line-height: 1;
 }
 
-.stats__unit {
+.duo__unit {
   font-size: $text-sm;
   color: $app-ink-muted;
-}
-
-.stats__divider {
-  width: 1rpx;
-  background: $app-line;
 }
 
 /* ── 入口 ── */
 .entries {
-  padding: 8rpx 28rpx;
+  padding-top: 8rpx;
+  padding-bottom: 8rpx;
 }
 
-.entry {
-  display: flex;
-  align-items: center;
-  padding: 32rpx 4rpx;
-}
-
-.entry + .entry {
-  border-top: 1rpx solid $app-line-soft;
-}
-
-.entry__label {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.entry__value {
-  margin-left: auto;
+/* 入口右侧的值是说明，不是主角：比标题降一档 */
+.entries :deep(.ft-row__value) {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
 
-.entry__go {
-  font-size: 36rpx;
-  line-height: 1;
-  color: $app-ink-subtle;
-  padding-left: 14rpx;
-}
-
-/* ── 存储占用 ── */
-.storage {
-  padding: 28rpx 32rpx;
-}
-
+/* ── 存储占用 ／ 识别用量 ── */
 .storage__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding-bottom: 18rpx;
-}
-
-.storage__label {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
+  gap: 16rpx;
 }
 
 .storage__val {
   font-size: $text-sm;
-  color: $app-ink-muted;
+  color: $app-ink;
+}
+
+.storage__go {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.storage--tap:active {
+  opacity: 0.7;
 }
 
 .storage__bar {
   height: 12rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
-  border-radius: 6rpx;
+  margin-top: 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
   overflow: hidden;
 }
 
 .storage__fill {
   height: 100%;
-  background: $app-ink;
+  border-radius: $radius-pill;
+  background: $app-ink-2;
 }
 
-/* 接近上限：进度条转警示色 */
+/* 接近上限（≥90%）转警示色 */
 .storage__fill--warn {
-  background: #c4453c;
+  background: $app-danger;
 }
 
 .storage__hint {
   display: block;
-  padding-top: 14rpx;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
+  margin-top: 16rpx;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
 }
 
-/* ── 退出 ── */
+/* 居中的这一行正对底栏中间圆钮：圆钮比胶囊高出约 34px，底部多让 24px，免得滚到底时被它压住 */
 .prof__logout {
-  display: block;
-  text-align: center;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  padding: 48rpx 0;
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 64rpx;
 }
 </style>

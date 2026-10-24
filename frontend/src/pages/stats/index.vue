@@ -6,12 +6,13 @@ import { clearAll } from '@/api/cache'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
 import { useTabPage } from '@/utils/tab-page'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('stats')
 
-// ── 统计（设计稿：.workbuddy/stitch/screen/stats.png）──
+// ── 统计：周期分段 → 次数／时长 → 近 4 周 → PR 归档 ──
 
 const PERIODS: { key: StatsPeriod; label: string }[] = [
   { key: 'week', label: '本周' },
@@ -72,6 +73,13 @@ const weekAvg = computed(() => {
   return (total / 4).toFixed(1)
 })
 
+/** 柱下标签：后端按时间顺序给 W1–W4（最后一根是本周），这里念成相对周。 */
+const WEEK_LABELS = ['3 周前', '2 周前', '上周', '本周']
+
+function weekLabel(i: number, n: number): string {
+  return WEEK_LABELS[WEEK_LABELS.length - n + i] ?? ''
+}
+
 function barHeight(count: number): string {
   return `${Math.max(4, Math.round((count / maxBarCount.value) * 150))}rpx`
 }
@@ -81,218 +89,215 @@ function barHeight(count: number): string {
 <template>
   <FtTabPage :page="tab" class="stats">
     <view class="stats__body">
-      <!-- 标题行 -->
+      <!-- 页头：标题 ＋ 周期分段（选中＝深字 ＋ 浅胶囊底，和底栏选中同一套；导航不用橙） -->
       <view class="stats__head">
         <text class="stats__title">统计</text>
-        <text class="stats__meta ft-num">FIT-APP LOG</text>
-      </view>
-
-      <!-- 周期 tab -->
-      <view class="ptabs">
-        <view
-          v-for="p in PERIODS"
-          :key="p.key"
-          class="ptab"
-          :class="{ 'ptab--active': period === p.key }"
-          @click="switchPeriod(p.key)"
-        >
-          {{ p.label }}
+        <view class="seg" role="tablist">
+          <view
+            v-for="p in PERIODS"
+            :key="p.key"
+            class="seg__item"
+            :class="{ 'seg__item--on': period === p.key }"
+            role="tab"
+            :aria-selected="period === p.key"
+            @click="switchPeriod(p.key)"
+          >
+            {{ p.label }}
+          </view>
         </view>
       </view>
 
-      <!-- 双格卡 -->
-      <view class="ft-card duo">
+      <!-- 次数 ／ 时长 -->
+      <view class="glass duo">
         <view class="duo__cell">
+          <text class="duo__label">{{ periodLabel }}训练</text>
           <view class="duo__num-row">
             <text class="duo__num ft-num">{{ data?.count ?? 0 }}</text>
             <text class="duo__unit">练</text>
           </view>
-          <text class="duo__label">{{ periodLabel }}训练次数</text>
         </view>
-        <view class="duo__divider" />
         <view class="duo__cell">
+          <text class="duo__label">总训练时长</text>
           <view class="duo__num-row">
             <template v-if="dur.h > 0">
-              <text class="duo__num ft-num">{{ dur.h }}<text class="duo__unit"> 小时 </text>{{ dur.m }}</text>
-              <text class="duo__unit"> 分</text>
+              <text class="duo__num ft-num">{{ dur.h }}</text>
+              <text class="duo__unit">小时</text>
+              <text class="duo__num ft-num">{{ dur.m }}</text>
+              <text class="duo__unit">分</text>
             </template>
             <template v-else>
               <text class="duo__num ft-num">{{ dur.m }}</text>
-              <text class="duo__unit"> 分钟</text>
+              <text class="duo__unit">分钟</text>
             </template>
           </view>
-          <text class="duo__label">总训练时长</text>
         </view>
       </view>
 
       <!-- 近 4 周柱状 -->
-      <view class="ft-card weeks">
-        <view class="weeks__head">
-          <text class="weeks__title">近 4 周训练次数</text>
-          <text class="weeks__avg ft-num">周均 {{ weekAvg }} 次</text>
+      <view class="glass weeks">
+        <view class="card-head">
+          <text class="card-title">近 4 周训练次数</text>
+          <text class="card-meta ft-num">周均 {{ weekAvg }} 次</text>
         </view>
         <view class="bars">
-          <view v-for="w in data?.weekly ?? []" :key="w.label" class="barcol">
+          <view v-for="(w, i) in data?.weekly ?? []" :key="w.label" class="barcol">
             <text class="barcol__num ft-num">{{ w.count }}</text>
-            <view class="barcol__bar" :style="{ height: barHeight(w.count) }" />
-            <text class="barcol__label ft-num">{{ w.label }}</text>
+            <!-- 最后一根是本周：深色；前三周浅一档，一眼看出「这周比前几周」 -->
+            <view
+              class="barcol__bar"
+              :class="{ 'barcol__bar--now': i === (data?.weekly?.length ?? 0) - 1 }"
+              :style="{ height: barHeight(w.count) }"
+            />
+            <text class="barcol__label">{{ weekLabel(i, data?.weekly?.length ?? 0) }}</text>
           </view>
         </view>
       </view>
 
       <!-- PR 归档 -->
-      <view class="ft-card prcard">
-        <view class="prcard__head">
-          <text class="prcard__title">个人最好成绩</text>
-          <text class="prcard__meta ft-num">PR ARCHIVE</text>
+      <view class="glass prcard">
+        <view class="card-head">
+          <text class="card-title">个人最好成绩</text>
+          <text class="card-meta ft-num">{{ data?.prs?.length ?? 0 }} 项</text>
         </view>
-        <view v-if="(data?.prs?.length ?? 0) === 0" class="prcard__empty">
-          还没有训练记录——破纪录会出现在这里
-        </view>
-        <view
-          v-for="(p, i) in data?.prs ?? []"
-          :key="p.exerciseId"
-          class="prow"
-          :class="{ 'prow--lit': i === 0 }"
-        >
-          <view class="prow__dot" :class="{ 'prow__dot--hollow': i !== 0 }" />
+        <FtEmpty
+          v-if="(data?.prs?.length ?? 0) === 0"
+          title="还没有 PR"
+          sub="每个动作最重的一组会出现在这里。"
+        />
+        <view v-for="p in data?.prs ?? []" :key="p.exerciseId" class="prow">
           <text class="prow__name">{{ p.name }}</text>
-          <text class="prow__val ft-num" :class="{ 'ft-marker': i === 0 }">
-            {{ formatThousands(Number(p.weight)) }} kg × {{ p.reps }}
-          </text>
+          <text class="prow__val ft-num">{{ formatThousands(Number(p.weight)) }} kg × {{ p.reps }}</text>
           <text class="prow__date ft-num">{{ formatDateLabel(p.performedAt) }}</text>
         </view>
       </view>
-
-      <text class="stats__foot">FIT-APP LEDGER · DISCIPLINE IN NUMBERS</text>
     </view>
   </FtTabPage>
 </template>
 
 <style lang="scss" scoped>
 .stats__body {
-  padding: 36rpx 32rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
 }
 
-/* ── 标题行 ── */
-.stats__head {
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+.card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding-bottom: 24rpx;
+  gap: 16rpx;
+}
+
+.card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.card-meta {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* ── 页头 ── */
+.stats__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-height: 84rpx;
+  padding: 12rpx 8rpx 4rpx;
 }
 
 .stats__title {
-  font-size: 48rpx;
-  font-weight: 700;
+  font-size: $text-hero;
+  font-weight: $weight-bold;
+  line-height: 1.25;
   color: $app-ink;
 }
 
-.stats__meta {
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
-}
-
-/* ── 周期 tab ── */
-.ptabs {
+/* ── 周期分段 ── */
+.seg {
+  @include glass;
   display: flex;
-  gap: 44rpx;
-  border-bottom: 1rpx solid $app-line;
-  margin-bottom: 28rpx;
+  padding: 6rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
-.ptab {
-  font-size: $text-md;
+.seg__item {
+  padding: 12rpx 24rpx;
+  border-radius: $radius-pill;
+  font-size: $text-base;
   color: $app-ink-muted;
-  padding-bottom: 14rpx;
-  position: relative;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
-.ptab--active {
+.seg__item--on {
+  background: $app-surface-2;
   color: $app-ink;
-  font-weight: 700;
+  font-weight: $weight-bold;
 }
 
-.ptab--active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1rpx;
-  height: 5rpx;
-  background: $app-ink;
-  border-radius: 3rpx;
-}
-
-/* ── 双格卡 ── */
+/* ── 次数 ／ 时长 ── */
 .duo {
   display: flex;
-  align-items: stretch;
-  padding: 32rpx 0;
 }
 
 .duo__cell {
   flex: 1;
-  padding: 0 36rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.duo__cell + .duo__cell {
+  padding-left: 32rpx;
+  border-left: 1rpx solid $app-line-soft;
+}
+
+.duo__label {
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .duo__num-row {
   display: flex;
   align-items: baseline;
-  gap: 8rpx;
+  gap: 6rpx;
 }
 
 .duo__num {
   font-size: $text-3xl;
-  font-weight: 700;
+  font-weight: $weight-heavy;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   color: $app-ink;
-  line-height: 1.1;
 }
 
 .duo__unit {
+  margin-right: 6rpx;
   font-size: $text-sm;
-  font-weight: 400;
   color: $app-ink-muted;
-}
-
-.duo__label {
-  display: block;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  padding-top: 10rpx;
-}
-
-.duo__divider {
-  width: 1rpx;
-  background: $app-line;
 }
 
 /* ── 近 4 周 ── */
-.weeks__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-bottom: 24rpx;
-}
-
-.weeks__title {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.weeks__avg {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
 .bars {
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
-  height: 230rpx;
-  border-bottom: 1rpx solid $app-line;
+  height: 260rpx;
+  margin-top: 16rpx;
 }
 
 .barcol {
@@ -300,109 +305,75 @@ function barHeight(count: number): string {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 8rpx;
-  width: 96rpx;
+  gap: 10rpx;
+  width: 112rpx;
   height: 100%;
 }
 
 .barcol__num {
   font-size: $text-sm;
-  font-weight: 600;
   color: $app-ink;
 }
 
 .barcol__bar {
   width: 56rpx;
-  background: $app-ink;
-  border-radius: 6rpx 6rpx 0 0;
+  border-radius: $radius-xs;
+  background: $app-line-dash;
+}
+
+.barcol__bar--now {
+  background: $app-ink-2;
 }
 
 .barcol__label {
   font-size: $text-xs;
   color: $app-ink-muted;
-  /* 标签压在底线下方 */
-  transform: translateY(40rpx);
 }
 
 /* ── PR 归档 ── */
-.prcard__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-bottom: 8rpx;
-}
-
-.prcard__title {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.prcard__meta {
-  font-size: 22rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
+.prcard {
+  padding-bottom: 16rpx;
 }
 
 .prow {
   display: flex;
   align-items: center;
-  padding: 28rpx 4rpx;
+  gap: 20rpx;
+  padding: 24rpx 0;
+}
+
+.prow + .prow,
+.card-head + .prow {
   border-top: 1rpx solid $app-line-soft;
 }
 
-.prow:first-of-type {
-  border-top: none;
-}
-
-.prow__dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: $app-ink;
-  margin-right: 18rpx;
-  flex-shrink: 0;
-}
-
-.prow__dot--hollow {
-  background: transparent;
-  border: 2rpx solid $app-line;
+.card-head + .prow {
+  margin-top: 16rpx;
 }
 
 .prow__name {
+  flex: 1;
+  min-width: 0;
   font-size: $text-md;
   color: $app-ink;
 }
 
 .prow__val {
-  margin-left: auto;
   font-size: $text-md;
-  font-weight: 600;
   color: $app-ink;
 }
 
 .prow__date {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  width: 110rpx;
-  text-align: right;
+  width: 120rpx;
   flex-shrink: 0;
-}
-
-.prcard__empty {
-  padding: 48rpx 0 32rpx;
-  text-align: center;
+  text-align: right;
   font-size: $text-sm;
-  color: $app-ink-subtle;
-  border-top: 1rpx solid $app-line-soft;
+  color: $app-ink-muted;
 }
 
-.stats__foot {
-  display: block;
-  text-align: center;
-  font-size: 20rpx;
-  letter-spacing: 2rpx;
-  color: $app-ink-subtle;
-  padding: 40rpx 0 8rpx;
+@media (prefers-reduced-motion: reduce) {
+  .seg__item {
+    transition: none;
+  }
 }
 </style>
