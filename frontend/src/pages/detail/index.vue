@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
+import { ask } from '@/utils/confirm'
 // 训练详情（从日志页点进来；接 GET /api/workouts/{id}）。
 // 右上角「编辑」进入就地编辑：标题、各组、消耗、备注可改；底部悬浮「保存修改」提交（PUT /api/workouts/{id}），
 // 右上角变「取消」＝放弃这次改动。
@@ -261,7 +261,7 @@ async function save() {
       }))
     })
     editing.value = false
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
   } catch {
     // request 层已统一提示；留在编辑态可重试
   } finally {
@@ -282,14 +282,13 @@ async function saveNote() {
 
 /** 编辑中要离开（返回或取消）先问一句；确认后才执行 then。 */
 function confirmDiscard(then: () => void) {
-  uni.showModal({
+  void ask({
     title: '放弃修改？',
     content: '当前改动尚未保存，放弃后不会保留。',
     confirmText: '放弃',
-    confirmColor: PALETTE.danger,
-    success: ({ confirm }) => {
-      if (confirm) then()
-    }
+    danger: true
+  }).then((confirm) => {
+    if (confirm) then()
   })
 }
 

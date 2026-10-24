@@ -14,6 +14,7 @@ import { ensureLogin } from '@/utils/guard'
 import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
@@ -143,15 +144,14 @@ const uncertainLabels = computed(() => {
 
 /** 撞名二选一（ADR 0018）：打开已有的 / 仍然新建（保存会被同名校验拦下，需改名）。 */
 function showDuplicateChoice(d: FoodDraft) {
-  uni.showModal({
+  void ask({
     title: '库里有同名食物',
     content: `「${d.duplicateFoodName || '同名食物'}」已在食物库里。可打开已有的查看编辑；仍新建的话，保存时会被拦下要求改名。`,
     confirmText: '打开已有的',
-    cancelText: '仍然新建',
-    success: ({ confirm }) => {
-      if (confirm) {
-        uni.redirectTo({ url: `/pages/food-detail/index?id=${d.duplicateFoodId}` })
-      }
+    cancelText: '仍然新建'
+  }).then((confirm) => {
+    if (confirm) {
+      uni.redirectTo({ url: `/pages/food-detail/index?id=${d.duplicateFoodId}` })
     }
   })
 }
@@ -231,7 +231,7 @@ async function save() {
     } else {
       await createFood(payload)
     }
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 400)
   } catch {
     // request 层已统一提示；留在本页可重试

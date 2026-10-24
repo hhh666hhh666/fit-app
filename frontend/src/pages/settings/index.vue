@@ -91,7 +91,7 @@ async function save() {
       targetFat: numOrNull(targets.value.fat),
       targetWater: wv ? Number(wv) : null
     })
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
   } catch {
     // request 层已统一提示
   } finally {

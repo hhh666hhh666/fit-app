@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
@@ -11,6 +10,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 动作库（晴窗，ADR 0041）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
@@ -129,21 +129,20 @@ function toggleAll() {
 function doDelete() {
   const ids = [...selected.value]
   if (!ids.length) return
-  uni.showModal({
+  void ask({
     title: '删除自定义动作',
     content: `删除选中的 ${ids.length} 个动作？动作会从动作库下架，历史训练记录仍会保留。`,
     confirmText: '删除',
-    confirmColor: PALETTE.danger,
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await batchDeleteExercises(ids)
-        all.value = all.value.filter((e) => !ids.includes(e.id))
-        exitSelect()
-        uni.showToast({ title: `已删除 ${ids.length} 个`, icon: 'none' })
-      } catch {
-        // request 层已统一提示
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await batchDeleteExercises(ids)
+      all.value = all.value.filter((e) => !ids.includes(e.id))
+      exitSelect()
+      uni.showToast({ title: `已删除 ${ids.length} 个`, icon: 'none' })
+    } catch {
+      // request 层已统一提示
     }
   })
 }
@@ -165,7 +164,7 @@ async function confirmCreate() {
   try {
     await createExercise({ name: n, muscle: sheet.value.muscle })
     sheet.value.show = false
-    uni.showToast({ title: '已创建', icon: 'success' })
+    uni.showToast({ title: '已创建', icon: 'none' })
     await load()
   } catch {
     // unwrap 已提示

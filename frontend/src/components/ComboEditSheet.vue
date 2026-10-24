@@ -110,7 +110,7 @@ async function save() {
     } else {
       await createCombo(payload)
     }
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
     emit('saved')
   } catch {
     // request 层已统一提示；留在弹层可重试

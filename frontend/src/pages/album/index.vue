@@ -8,6 +8,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ensureLogin } from '@/utils/guard'
+import { ask } from '@/utils/confirm'
 
 // ── 相册（ADR 0014）：全部餐照按日期倒序的网格（每行 3 张、日期分组、触底加载）──
 //    列表只加载**缩略图**；点开看大图时才按需拉原图（走 PhotoViewer，可左右翻、可就地删）。
@@ -137,23 +138,22 @@ const viewerCaption = computed(() => {
 function removeCurrent() {
   const r = rows.value[viewer.value.index]
   if (!r) return
-  uni.showModal({
+  void ask({
     title: '删除这张照片？',
     content: '删除后不可恢复；这一餐的饮食条目不受影响。',
     confirmText: '删除',
-    cancelText: '取消',
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      const ok = await deletePhoto(r.logDate, r.meal)
-      if (!ok) return
-      // 照片已删：这张的原图与缩略图一起失效（缓存自己 revoke），本地索引同步去掉
-      invalidatePhoto(r.logDate, r.meal)
-      const k = keyOf(r)
-      delete thumbs.value[k]
-      rows.value = rows.value.filter((x) => x.id !== r.id)
-      closeViewer()
-      uni.showToast({ title: '已删除', icon: 'none' })
-    }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    const ok = await deletePhoto(r.logDate, r.meal)
+    if (!ok) return
+    // 照片已删：这张的原图与缩略图一起失效（缓存自己 revoke），本地索引同步去掉
+    invalidatePhoto(r.logDate, r.meal)
+    const k = keyOf(r)
+    delete thumbs.value[k]
+    rows.value = rows.value.filter((x) => x.id !== r.id)
+    closeViewer()
+    uni.showToast({ title: '已删除', icon: 'none' })
   })
 }
 

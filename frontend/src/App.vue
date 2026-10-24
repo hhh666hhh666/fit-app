@@ -97,6 +97,136 @@ page::before {
   display: none;
 }
 
+/* ── uni 自带的确认框 / 操作菜单 / 轻提示：换成晴窗的皮 ──
+   uni.showModal / showActionSheet / showToast 在 H5 是运行时自己渲染的 DOM（`uni-modal`、
+   `uni-actionsheet`、`uni-toast`），默认是 3px 圆角、纯黑字、iOS 蓝确认、50% 纯黑遮罩。这里按类名覆盖：
+   确认框＝实底圆角卡 ＋ 两枚胶囊钮（左取消灰底、右确认白底），按钮字色由 utils/confirm.ts 的
+   confirmColor / cancelColor 内联给（深字或危险红）；操作菜单＝贴底实底面板；轻提示＝深色胶囊。
+   ⚠️ 类名是 uni 运行时的内部结构，升级 uni-app 后打开一个确认框看一眼。 */
+uni-modal .uni-mask,
+uni-actionsheet .uni-mask {
+  background: $app-mask;
+}
+
+uni-modal .uni-modal {
+  width: calc(100% - 112rpx);
+  max-width: 640rpx;
+  border-radius: $radius-lg;
+  background: $app-canvas-bottom;
+  box-shadow: $shadow-md;
+  font-family: $font-text;
+}
+
+uni-modal .uni-modal__hd {
+  padding: 48rpx 40rpx 0;
+}
+
+uni-modal .uni-modal__title {
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  line-height: 1.4;
+  color: $app-ink;
+}
+
+uni-modal .uni-modal__bd {
+  min-height: 0;
+  padding: 16rpx 40rpx 40rpx;
+  font-size: $text-md;
+  line-height: 1.6;
+  color: $app-ink-muted;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+uni-modal .uni-modal__ft {
+  gap: 16rpx;
+  padding: 0 32rpx 32rpx;
+  line-height: 88rpx;
+  font-size: $text-md;
+}
+
+uni-modal .uni-modal__ft::after,
+uni-modal .uni-modal__btn::after {
+  display: none;
+}
+
+uni-modal .uni-modal__btn {
+  border-radius: $radius-pill;
+  font-weight: $weight-bold;
+  transition: opacity $dur-fast $ease-out;
+}
+
+uni-modal .uni-modal__btn_default {
+  background: $app-surface-2;
+}
+
+uni-modal .uni-modal__btn_primary {
+  background: $app-surface;
+  box-shadow: inset 0 0 0 1rpx $app-line;
+}
+
+uni-modal .uni-modal__btn:active {
+  background-color: inherit;
+  opacity: 0.7;
+}
+
+uni-actionsheet .uni-actionsheet {
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+  font-family: $font-text;
+}
+
+uni-actionsheet .uni-actionsheet__menu,
+uni-actionsheet .uni-actionsheet__action {
+  border-radius: $radius-lg;
+  background-color: $app-canvas-bottom;
+  box-shadow: $shadow-md;
+}
+
+uni-actionsheet .uni-actionsheet__action {
+  margin-top: 16rpx;
+}
+
+/* 菜单项的字色是运行时按 itemColor 内联的（默认纯黑），只能用 !important 压 */
+uni-actionsheet .uni-actionsheet__cell {
+  padding: 28rpx 24rpx;
+  font-size: $text-lg;
+  color: $app-ink !important;
+}
+
+uni-actionsheet .uni-actionsheet__action .uni-actionsheet__cell {
+  font-weight: $weight-bold;
+  color: $app-ink-muted !important;
+}
+
+uni-actionsheet .uni-actionsheet__cell::before {
+  left: 32rpx;
+  right: 32rpx;
+  border-top-color: $app-line-soft;
+}
+
+uni-actionsheet .uni-actionsheet__cell:active {
+  background-color: $app-surface-2;
+}
+
+uni-toast .uni-simple-toast__text,
+uni-toast .uni-toast {
+  background: $app-ink;
+  color: $app-surface;
+  border-radius: $radius-pill;
+  font-family: $font-text;
+  box-shadow: $shadow-md;
+}
+
+uni-toast .uni-simple-toast__text {
+  /* 长提示会折成两行，全圆角两头太鼓，单独收一档 */
+  border-radius: $radius-md;
+  padding: 20rpx 36rpx;
+  font-size: $text-md;
+  line-height: 1.5;
+}
+
 /* ── 切页转场：旧页克隆层滑出（ADR 0040）──
    utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层的 __content，
    新页就绪的那一帧放行：层撤掉底色、只滑 __content，新页同时从另一侧滑入。

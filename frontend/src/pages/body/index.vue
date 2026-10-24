@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
@@ -38,6 +37,7 @@ import {
   weightUnitShort,
   type WeightUnit
 } from '@/utils/weight'
+import { ask } from '@/utils/confirm'
 
 // ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
 
@@ -223,24 +223,23 @@ function toggleAll() {
 function doDelete() {
   const ids = [...selected.value]
   if (ids.length === 0) return
-  uni.showModal({
+  void ask({
     title: '删除身体档案记录',
     content:
       ids.length === 1
         ? '删除这条记录？删除后不可恢复。'
         : `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
     confirmText: '删除',
-    confirmColor: PALETTE.danger,
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await batchDeleteBodyRecords(ids)
-        exitSelect()
-        uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
-        await load() // 卡片与两张图都要按新数据重算
-      } catch {
-        // request 层已统一提示
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await batchDeleteBodyRecords(ids)
+      exitSelect()
+      uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
+      await load() // 卡片与两张图都要按新数据重算
+    } catch {
+      // request 层已统一提示
     }
   })
 }
@@ -400,7 +399,7 @@ async function save() {
     if (f.editId != null) await updateBodyRecord(f.editId, payload)
     else await createBodyRecord(payload)
     sheet.value.show = false
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
     await load()
   } catch {
     // request 层已统一提示
@@ -457,7 +456,7 @@ async function saveProfileSheet() {
       activityLevel: f.activityLevel
     })
     f.show = false
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
   } catch {
     // request 层已统一提示
   } finally {

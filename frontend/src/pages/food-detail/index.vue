@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
@@ -9,6 +8,7 @@ import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 食物详情（只读）：预置＝「复制为自定义」；自有＝编辑/删除。食物库列表点条目进入。 ──
 //    只展示「有值」的营养字段（空字段不占版面）；主组固定显示（未测显示 —）。
@@ -122,23 +122,22 @@ function doEdit() {
 function doDelete() {
   const f = food.value
   if (!f || deleting.value) return
-  uni.showModal({
+  void ask({
     title: '删除食物',
     content: `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。`,
     confirmText: '删除',
-    confirmColor: PALETTE.danger,
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      deleting.value = true
-      try {
-        await deleteFood(f.id)
-        uni.showToast({ title: '已删除', icon: 'none' })
-        setTimeout(() => uni.navigateBack(), 300)
-      } catch {
-        // request 层已统一提示
-      } finally {
-        deleting.value = false
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    deleting.value = true
+    try {
+      await deleteFood(f.id)
+      uni.showToast({ title: '已删除', icon: 'none' })
+      setTimeout(() => uni.navigateBack(), 300)
+    } catch {
+      // request 层已统一提示
+    } finally {
+      deleting.value = false
     }
   })
 }

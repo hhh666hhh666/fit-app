@@ -22,6 +22,7 @@ import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
@@ -111,20 +112,19 @@ function onComboTap(c: FoodComboVO) {
 
 /** 删除组合：连带明细一起删；已记录的历史是快照，不受影响。 */
 function removeCombo(c: FoodComboVO) {
-  uni.showModal({
+  void ask({
     title: '删除组合？',
     content: `「${c.name}」将被删除。已记录的历史不受影响。`,
     confirmText: '删除',
-    cancelText: '取消',
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await deleteCombo(c.id)
-        combos.value = combos.value.filter((x) => x.id !== c.id)
-        uni.showToast({ title: '已删除', icon: 'none' })
-      } catch {
-        // request 层已统一提示
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await deleteCombo(c.id)
+      combos.value = combos.value.filter((x) => x.id !== c.id)
+      uni.showToast({ title: '已删除', icon: 'none' })
+    } catch {
+      // request 层已统一提示
     }
   })
 }

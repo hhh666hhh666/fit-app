@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
@@ -12,6 +11,7 @@ import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
 import FtIcon from '@/components/FtIcon.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
+import { ask } from '@/utils/confirm'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('log')
@@ -199,22 +199,21 @@ function toggleAll() {
 function doDelete() {
   const ids = [...selected.value]
   if (ids.length === 0) return
-  uni.showModal({
+  void ask({
     title: '删除训练记录',
     content: `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
     confirmText: '删除',
-    confirmColor: PALETTE.danger,
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await batchDeleteWorkouts(ids)
-        exitSelect()
-        // 重载而不是本地剔除：概览的次数与容量也跟着变，不能只动列表
-        await load(true)
-        uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
-      } catch {
-        // request 层已统一提示
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await batchDeleteWorkouts(ids)
+      exitSelect()
+      // 重载而不是本地剔除：概览的次数与容量也跟着变，不能只动列表
+      await load(true)
+      uni.showToast({ title: `已删除 ${ids.length} 条`, icon: 'none' })
+    } catch {
+      // request 层已统一提示
     }
   })
 }

@@ -19,6 +19,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -124,19 +125,18 @@ function viewPhoto() {
 
 /** 删除这一餐的照片（二次确认、不可恢复）。 */
 function removePhoto() {
-  uni.showModal({
+  void ask({
     title: '删除这张照片？',
     content: '删除后不可恢复；这一餐的饮食条目不受影响。',
     confirmText: '删除',
-    cancelText: '取消',
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      const ok = await deletePhoto(props.date, props.meal)
-      if (!ok) return
-      photoUrl.value = null
-      uni.showToast({ title: '已删除', icon: 'none' })
-      emit('changed')
-    }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    const ok = await deletePhoto(props.date, props.meal)
+    if (!ok) return
+    photoUrl.value = null
+    uni.showToast({ title: '已删除', icon: 'none' })
+    emit('changed')
   })
 }
 
@@ -163,7 +163,7 @@ async function applyCombo(c: FoodComboVO) {
     const added = await addMealsBatch({ date: props.date, meal: props.meal, items: payload })
     items.value.push(...added)
     lastBatch.value = added.map((a) => a.id)
-    uni.showToast({ title: `已加入 ${added.length} 条`, icon: 'success' })
+    uni.showToast({ title: `已加入 ${added.length} 条`, icon: 'none' })
     emit('changed')
   } catch {
     // request 层已统一提示
@@ -237,7 +237,7 @@ async function confirmAdd() {
     items.value.push(item)
     cancelSelect()
     keyword.value = ''
-    uni.showToast({ title: '已记录', icon: 'success' })
+    uni.showToast({ title: '已记录', icon: 'none' })
     emit('changed')
   } catch {
     // request 层已统一提示
@@ -285,6 +285,13 @@ async function confirmEdit() {
 }
 
 async function removeItem(it: MealItem) {
+  const ok = await ask({
+    title: '删除这条记录？',
+    content: `「${it.foodName}」${it.grams}g 会从这一餐里删掉。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await deleteMeal(it.id)
     items.value = items.value.filter((x) => x.id !== it.id)

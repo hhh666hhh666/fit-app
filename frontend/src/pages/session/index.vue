@@ -23,6 +23,7 @@ import {
   type SessionBlock,
   type SessionSet
 } from '@/utils/session'
+import { ask } from '@/utils/confirm'
 
 // ── 训练会话（计划多动作：按目标预填 → 点勾完成 → 全组完成自动切下一个未完成动作）──
 // 会话存本机（ADR 0020）：返回＝最小化、退到后台与杀进程都能接续；计时走墙钟净时长（ADR 0022）。
@@ -425,18 +426,31 @@ function onLongPress(i: number) {
     itemList: items,
     success: ({ tapIndex }) => {
       if (items[tapIndex] === '取消完成') askUndoSet(i)
-      else removeSet(i)
+      else void removeSet(i)
     }
   })
 }
 
-/** 删一组：每个动作至少留一组（全删空等于顺手把动作也删了）。 */
-function removeSet(i: number) {
+/**
+ * 删一组：每个动作至少留一组（全删空等于顺手把动作也删了）。
+ * 已完成的组是记下来的数据，删之前先问；没完成的只是一行空目标，直接删。
+ */
+async function removeSet(i: number) {
   const b = curBlock.value
   if (!b) return
   if (b.sets.length <= 1) {
     uni.showToast({ title: '每个动作至少留一组', icon: 'none' })
     return
+  }
+  const row = b.sets[i]
+  if (row?.done) {
+    const ok = await ask({
+      title: '删除这一组？',
+      content: `第 ${i + 1} 组已经完成，删掉后这一组的记录就没了。`,
+      confirmText: '删除',
+      danger: true
+    })
+    if (!ok || b.sets[i] !== row) return
   }
   b.sets.splice(i, 1)
 }
@@ -450,22 +464,21 @@ function askUndoSet(i: number) {
   const row = b?.sets[i]
   if (!b || !row || !row.done) return
   const cascaded = b.sets.slice(i).filter((x) => x.done).length
-  uni.showModal({
+  void ask({
     title: '取消这一组的完成？',
     content:
       cascaded > 1
         ? `第 ${i + 1} 组，以及它后面 ${cascaded - 1} 个已完成的组，都会回到未完成。`
         : `第 ${i + 1} 组会回到未完成，可以重新改重量和次数。`,
     confirmText: '取消完成',
-    cancelText: '保留',
-    success: ({ confirm }) => {
-      if (!confirm) return
-      for (let k = i; k < b.sets.length; k++) {
-        if (b.sets[k].done) {
-          b.sets[k].done = false
-          b.sets[k].doneAt = null
-          b.sets[k].dur = null
-        }
+    cancelText: '保留'
+  }).then((confirm) => {
+    if (!confirm) return
+    for (let k = i; k < b.sets.length; k++) {
+      if (b.sets[k].done) {
+        b.sets[k].done = false
+        b.sets[k].doneAt = null
+        b.sets[k].dur = null
       }
     }
   })
@@ -535,17 +548,16 @@ async function finish() {
     .filter((x) => x.sets.length > 0)
   // 一组都没勾：确认后直接丢弃这条会话（不发请求、不留记录）
   if (doneBlocks.length === 0) {
-    uni.showModal({
+    void ask({
       title: '结束本次训练？',
       content: '还没有完成任何一组，本次不会有记录，填的消耗也不会计入。确定结束吗？',
       confirmText: '结束',
-      cancelText: '继续',
-      success: ({ confirm }) => {
-        if (confirm) {
-          ended = true
-          clearSession()
-          leaveSession()
-        }
+      cancelText: '继续'
+    }).then((confirm) => {
+      if (confirm) {
+        ended = true
+        clearSession()
+        leaveSession()
       }
     })
     return
@@ -553,14 +565,13 @@ async function finish() {
   // 有任意动作的任意组未完成 → 先确认是否提前结束
   const pending = s.blocks.reduce((sum, b) => sum + b.sets.filter((x) => !x.done).length, 0)
   if (pending > 0) {
-    uni.showModal({
+    void ask({
       title: '提前结束训练？',
       content: `还有 ${pending} 组未完成，确定现在结束吗？未完成的组不会入库。`,
       confirmText: '结束',
-      cancelText: '继续',
-      success: ({ confirm }) => {
-        if (confirm) void submit(doneBlocks)
-      }
+      cancelText: '继续'
+    }).then((confirm) => {
+      if (confirm) void submit(doneBlocks)
     })
     return
   }

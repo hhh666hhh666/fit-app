@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PALETTE } from '@/utils/palette'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { createPlan, deletePlan, getPlan, updatePlan } from '@/api/plan'
@@ -13,6 +12,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import { ask } from '@/utils/confirm'
 
 // ── 计划编辑/新建（晴窗，ADR 0041）──
 
@@ -359,7 +359,7 @@ async function save() {
     } else {
       await createPlan(payload)
     }
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({ title: '已保存', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 400)
   } catch {
     // unwrap 已提示；留在本页可重试
@@ -370,20 +370,19 @@ async function save() {
 
 function removePlan() {
   if (!isEdit.value) return
-  uni.showModal({
+  void ask({
     title: '删除计划',
     content: '删除后，周表里引用它的安排也会一并移除。',
     confirmText: '删除',
-    confirmColor: PALETTE.danger,
-    success: async ({ confirm }) => {
-      if (!confirm) return
-      try {
-        await deletePlan(editId.value as number)
-        uni.showToast({ title: '已删除', icon: 'none' })
-        setTimeout(() => uni.navigateBack(), 400)
-      } catch {
-        // unwrap 已提示
-      }
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await deletePlan(editId.value as number)
+      uni.showToast({ title: '已删除', icon: 'none' })
+      setTimeout(() => uni.navigateBack(), 400)
+    } catch {
+      // unwrap 已提示
     }
   })
 }

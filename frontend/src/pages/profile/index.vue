@@ -15,6 +15,7 @@ import FtListRow from '@/components/FtListRow.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import { useTabPage } from '@/utils/tab-page'
+import { ask } from '@/utils/confirm'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('profile')
@@ -184,18 +185,17 @@ function goRecognitionLogs() {
 }
 
 function logout() {
-  uni.showModal({
+  void ask({
     title: '退出登录',
     content: '将清除本机登录状态；训练数据保存在服务器，不受影响。',
-    confirmText: '退出',
-    success: ({ confirm }) => {
-      if (!confirm) return
-      uni.removeStorageSync('fitapp_token')
-      uni.removeStorageSync('fitapp_username')
-      // 换人就用：数据缓存与照片缓存一并清掉（ADR 0035），别把上一个人的东西留在内存里
-      resetCaches()
-      uni.reLaunch({ url: '/pages/login/index' })
-    }
+    confirmText: '退出'
+  }).then((confirm) => {
+    if (!confirm) return
+    uni.removeStorageSync('fitapp_token')
+    uni.removeStorageSync('fitapp_username')
+    // 换人就用：数据缓存与照片缓存一并清掉（ADR 0035），别把上一个人的东西留在内存里
+    resetCaches()
+    uni.reLaunch({ url: '/pages/login/index' })
   })
 }
 </script>
