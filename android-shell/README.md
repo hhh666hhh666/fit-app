@@ -45,7 +45,8 @@ export JAVA_HOME=E:/jdk21
 行为等同旧版（慢但能用）。
 
 依赖拉取：`settings.gradle` 里阿里云镜像优先、google/central 兜底；
-`gradle.properties` 配了 v2rayN 代理（兜底请求走代理分流）。
+仓库的 `gradle.properties` **不写代理**：哪台机器要走本机代理（如 v2rayN），在那台的
+`~/.gradle/gradle.properties` 里配 `systemProp.http(s).proxyHost/proxyPort`。流量本来就被透明代理接管的机器什么都不用配。
 
 ## 两个版本号，别混
 
