@@ -102,7 +102,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | 会话页组次流程：按目标预填、点勾仅完成、动作自由切换＋全组完成自动切下一个未完成动作（计划目标＝组/次/重量）；**组内按顺序推进**（越级点勾无反应） | [ADR 0007](../adr/0007-session-set-flow-and-target-weight.md)、[ADR 0010](../adr/0010-session-free-switch-and-early-finish.md)、[ADR 0021](../adr/0021-session-set-order-and-undo.md) |
 | 饮食记录：条目级＋全自建食物库（无预置）；拍照记录（图片存库）；目标手动设 | [ADR 0008](../adr/0008-diet-logging-module.md) |
 | 训练提前结束：任意时刻可结束，0 组确认后不发请求；**返回＝最小化**（会话存本机），不做离页确认，不加页内退出按钮 | [ADR 0011](../adr/0011-session-early-finish-and-leave-guard.md)（离页确认部分被 [ADR 0020](../adr/0020-session-local-persistence-and-wall-clock-timer.md) 取代） |
-| 训练会话：存本机、退到后台／杀进程都不丢；**计时用墙钟净时长**（真实时间 − 暂停合计）；首页给「训练进行中」横幅；重开 App 不自动跳回 | [ADR 0020](../adr/0020-session-local-persistence-and-wall-clock-timer.md) |
+| 训练会话：存本机、退到后台／杀进程都不丢；**计时用墙钟净时长**（真实时间 − 暂停合计）；回程入口是底栏中间圆钮（2026-10-24 前是首页横幅，[ADR 0041](../adr/0041-design-language-qingchuang.md)）；重开 App 不自动跳回 | [ADR 0020](../adr/0020-session-local-persistence-and-wall-clock-timer.md) |
 | 组次删除与取消完成：长按组行弹菜单；取消完成二次确认并级联撤回该动作内后面已勾的组；每个动作至少留一行 | [ADR 0021](../adr/0021-session-set-order-and-undo.md) |
 | 训练暂停：冻结计时＋锁住录入区；组次净用时（剔除暂停）落库 `workout_set.duration_sec`，详情页编辑可改 | [ADR 0022](../adr/0022-session-pause-and-set-duration.md) |
 | 食物组合：食物＋固定克数，加入时展开为多条普通条目 | [ADR 0012](../adr/0012-food-combo.md) |
