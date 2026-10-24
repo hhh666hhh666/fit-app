@@ -48,8 +48,10 @@ const tabs: readonly (Tab & { icon: FtIconName; iconOn: FtIconName })[] = TABS
 const activeIdx = computed(() => Math.max(0, tabs.findIndex((t) => t.key === props.active)))
 const activeCol = computed(() => tabs[activeIdx.value].col)
 
-// ── 凹口几何（px）：胶囊高 62、两端半圆；凹口是圆心在顶边上方 4px、半径 36 的圆，
-//    与顶边之间用半径 8 的圆角过渡。宽度随屏宽变，所以路径在运行时按实测宽度生成。──
+// ── 凹口几何（px）：胶囊高 62、两端半圆；凹口是圆心**正好落在顶边上**、半径 36 的圆，
+//    与顶边之间用半径 8 的圆角过渡。宽度随屏宽变，所以路径在运行时按实测宽度生成。
+//    过渡圆心在 (c ± 43.27, 8)：与顶边相切（离顶边 8），与凹口圆外切（两圆心相距 36 ＋ 8 ＝ 44，
+//    √(44² − 8²) ＝ 43.27）；切点在凹口圆上 (c ± 35.40, 6.55)。圆钮直径 60、圆心同在顶边上，四周留 6px 缝。──
 const BAR_H = 62
 const barRef = ref<unknown>(null)
 /** 整个底栏（含圆钮）：切页时克隆一份钉住，补上新页底栏还没画出来的那几帧 */
@@ -63,8 +65,8 @@ const notchPath = computed(() => {
   const c = W / 2
   const f = (n: number) => Math.round(n * 100) / 100
   return (
-    `M${r},0 H${f(c - 42.33)} A8,8 0 0 1 ${f(c - 34.63)},5.82 ` +
-    `A36,36 0 0 0 ${f(c + 34.63)},5.82 A8,8 0 0 1 ${f(c + 42.33)},0 ` +
+    `M${r},0 H${f(c - 43.27)} A8,8 0 0 1 ${f(c - 35.4)},6.55 ` +
+    `A36,36 0 0 0 ${f(c + 35.4)},6.55 A8,8 0 0 1 ${f(c + 43.27)},0 ` +
     `H${f(W - r)} A${r},${r} 0 0 1 ${f(W - r)},${BAR_H} H${r} A${r},${r} 0 0 1 ${r},0 Z`
   )
 })
@@ -307,21 +309,27 @@ watch(
     <!-- 选计划弹层：放在玻璃层外面（带 backdrop-filter 的祖先会改掉 fixed 的定位基准） -->
     <view v-if="picker" class="ft-tabbar__sheet">
       <FtSheet title="选择训练计划" :sub="pickerHint" @close="picker = false">
-        <scroll-view v-if="plansOrdered.length" scroll-y class="ft-tabbar__plans">
-          <FtListRow
-            v-for="p in plansOrdered"
-            :key="p.id"
-            :title="p.name"
-            :sub="`${p.exerciseCount} 个动作${p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''}`"
-            :highlight="p.id === schedule.todayPlan?.id"
-            arrow
-            @click="startPlan(p.id)"
-          >
-            <template #badge>
-              <text v-if="p.id === schedule.todayPlan?.id" class="ft-tabbar__badge">今天 · 建议</text>
-            </template>
-          </FtListRow>
-        </scroll-view>
+        <!-- 计划列表放进白卡：今天那行的浅底往两边伸 20rpx，伸进卡片的内边距里；
+             别让它贴着 scroll-view 的边——scroll-view 会把伸出去的部分连同圆角一起裁掉 -->
+        <view v-if="plansOrdered.length" class="ft-tabbar__plans">
+          <scroll-view scroll-y class="ft-tabbar__plans-scroll">
+            <view class="ft-tabbar__plans-list">
+              <FtListRow
+                v-for="p in plansOrdered"
+                :key="p.id"
+                :title="p.name"
+                :sub="`${p.exerciseCount} 个动作${p.lastTrainedAt ? ` · 上次 ${formatDateLabel(p.lastTrainedAt)}` : ''}`"
+                :highlight="p.id === schedule.todayPlan?.id"
+                arrow
+                @click="startPlan(p.id)"
+              >
+                <template #badge>
+                  <text v-if="p.id === schedule.todayPlan?.id" class="ft-tabbar__badge">今天 · 建议</text>
+                </template>
+              </FtListRow>
+            </view>
+          </scroll-view>
+        </view>
 
         <FtEmpty v-else title="还没有训练计划" sub="在「我的 → 训练计划」里建一个，之后就能在这里选。" />
 
@@ -448,11 +456,11 @@ watch(
   font-weight: $weight-bold;
 }
 
-/* 圆钮：嵌在凹口里，圆心对准凹口圆心（顶边上方 4px） */
+/* 圆钮：嵌在凹口里，圆心对准凹口圆心——正好在胶囊顶边上（过圆心的水平线与顶边重合） */
 .ft-tabbar__center {
   position: absolute;
   left: 50%;
-  top: -34px;
+  top: calc(#{$tabbar-btn} / -2);
   width: $tabbar-btn;
   height: $tabbar-btn;
   margin-left: calc(#{$tabbar-btn} / -2);
@@ -484,8 +492,17 @@ watch(
 }
 
 .ft-tabbar__plans {
-  max-height: 560rpx;
+  @include sheet-card;
+  overflow: hidden;
   margin-bottom: 24rpx;
+}
+
+.ft-tabbar__plans-scroll {
+  max-height: 560rpx;
+}
+
+.ft-tabbar__plans-list {
+  padding: 8rpx 28rpx;
 }
 
 .ft-tabbar__badge {

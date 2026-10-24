@@ -3,6 +3,7 @@ import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import { ref } from 'vue'
 import { useBackClose } from '@/utils/backStack'
+import { ask } from '@/utils/confirm'
 import {
   createCombo,
   listFoods,
@@ -23,8 +24,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
 
-// 安卓返回键 / Esc 先关这一层
-useBackClose(() => emit('close'))
+// 关法（遮罩、关闭钮、安卓返回键、Esc）都走 requestClose：改过就先问一句（同 FtSheet 的 guard）
+useBackClose(() => void requestClose())
 
 type DraftRow = { foodId: number; foodName: string; grams: string; unit: 'g' | 'ml' }
 
@@ -41,6 +42,27 @@ const draft = ref<DraftRow[]>(
     }))
 )
 const saving = ref(false)
+
+// ── 防误触：和打开时比，组合名或明细（食物、克数）变了就算改过 ──
+// 加食物是点列表、不打字，不能像 FtSheet 那样听 input 事件，只能比快照。
+// 「存为组合」带进来的预填明细算初始状态：没动过就直接关。
+const snapshot = () => JSON.stringify([name.value.trim(), draft.value.map((r) => [r.foodId, r.grams.trim()])])
+const initial = snapshot()
+let closing = false
+
+async function requestClose() {
+  if (closing) return
+  closing = true
+  try {
+    if (snapshot() !== initial) {
+      const ok = await ask({ title: '放弃填写的内容？', content: '填的内容还没保存，关掉就没了。', confirmText: '放弃', danger: true })
+      if (!ok) return
+    }
+    emit('close')
+  } finally {
+    closing = false
+  }
+}
 
 // ── 添加食物 ──
 const picking = ref(false)
@@ -125,12 +147,18 @@ async function save() {
 </script>
 
 <template>
-  <view class="cs-mask" @click="emit('close')" />
-  <view class="cs" role="dialog" :aria-label="isNew ? '新建组合' : '编辑组合'">
+  <!-- touchmove 截在弹层自己身上：冒到页面上会被当成「下拉刷新」（不截 touchstart，uni 的长按靠它） -->
+  <view class="cs-mask" @click="requestClose" @touchmove.stop.prevent />
+  <view
+    class="cs"
+    role="dialog"
+    :aria-label="isNew ? '新建组合' : '编辑组合'"
+    @touchmove.stop
+  >
     <view class="cs__handle" />
     <view class="cs__head">
       <text class="cs__title">{{ isNew ? '新建组合' : '编辑组合' }}</text>
-      <view class="cs__close" role="button" aria-label="关闭" @click="emit('close')">
+      <view class="cs__close" role="button" aria-label="关闭" @click="requestClose">
         <FtIcon name="close" :size="18" :stroke="2" />
       </view>
     </view>

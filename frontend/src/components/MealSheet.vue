@@ -253,6 +253,8 @@ async function confirmAdd() {
 // ── 条目操作：点行 → 修改份量 / 删除 ──
 
 function onItemTap(it: MealItem) {
+  // 正在改这一条的份量：点的是行里的输入框，别再弹一次菜单（菜单会被键盘顶上去、正好盖住数字）
+  if (editingId.value === it.id) return
   uni.showActionSheet({
     itemList: ['修改份量', '删除'],
     success: ({ tapIndex }) => {
@@ -264,6 +266,17 @@ function onItemTap(it: MealItem) {
       }
     }
   })
+}
+
+/**
+ * 键盘弹起后把正在改的那一行滚到弹层中间：WebView 因键盘缩高要一会儿，晚一点再滚。
+ * uni 的 focus 事件给的 target 不是 DOM，直接取当前获焦的原生 input。
+ */
+function revealEdit() {
+  setTimeout(() => {
+    const el = document.activeElement as HTMLElement | null
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, 300)
 }
 
 async function confirmEdit() {
@@ -312,8 +325,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 </script>
 
 <template>
-  <view class="ms-mask" @click="emit('close')" />
-  <view class="ms" role="dialog" :aria-label="MEAL_LABEL[meal]">
+  <!-- touchmove 截在弹层自己身上：冒到首页的 uni-page-wrapper 会被当成「下拉刷新」（列表滑到顶再往下拉就触发）；
+       不截 touchstart，uni 的长按靠 window 上的 touchstart 模拟 -->
+  <view class="ms-mask" @click="emit('close')" @touchmove.stop.prevent />
+  <view class="ms" role="dialog" :aria-label="MEAL_LABEL[meal]" @touchmove.stop>
     <view class="ms__handle" />
     <view class="ms__head">
       <view class="ms__ico" :class="'ms__ico--' + meal">
@@ -436,7 +451,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
             <template v-if="editingId === it.id">
               <text class="irow__name">{{ it.foodName }}</text>
               <view class="irow__edit">
-                <input v-model="editGrams" type="digit" class="irow__edit-input ft-num" />
+                <input v-model="editGrams" type="digit" :focus="true" class="irow__edit-input ft-num" @focus="revealEdit" />
                 <text class="irow__edit-unit">g</text>
                 <view class="irow__ok" role="button" aria-label="保存份量" @click.stop="confirmEdit">
                   <FtIcon name="check" :size="16" :stroke="2.4" />

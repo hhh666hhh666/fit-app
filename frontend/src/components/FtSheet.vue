@@ -89,6 +89,8 @@ onBeforeUnmount(() => rootEl()?.removeEventListener('input', markTouched, true))
 
 <template>
   <view class="ft-sheet-mask" :class="{ 'is-leaving': leaving }" @click="requestClose" @touchmove.stop.prevent />
+  <!-- touchmove 截在面板上：冒到页面的 uni-page-wrapper 会被当成「下拉刷新」（里面的列表滑到顶再往下拉就触发）。
+       只截 touchmove、不截 touchstart——uni 的长按是靠 window 上的 touchstart 模拟的 -->
   <view
     ref="sheetRef"
     class="ft-sheet"
@@ -97,6 +99,7 @@ onBeforeUnmount(() => rootEl()?.removeEventListener('input', markTouched, true))
     role="dialog"
     aria-modal="true"
     :aria-label="title"
+    @touchmove.stop
   >
     <view
       class="ft-sheet__grip"

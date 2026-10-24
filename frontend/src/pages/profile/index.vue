@@ -451,7 +451,7 @@ function logout() {
   color: $app-ink-muted;
 }
 
-/* 居中的这一行正对底栏中间圆钮：圆钮比胶囊高出约 34px，底部多让 24px，免得滚到底时被它压住 */
+/* 居中的这一行正对底栏中间圆钮：圆钮比胶囊高出 30px（半个圆钮），底部多让 24px，免得滚到底时被它压住 */
 .prof__logout {
   display: flex;
   justify-content: center;
