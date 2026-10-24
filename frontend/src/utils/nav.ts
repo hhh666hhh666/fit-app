@@ -115,16 +115,21 @@ function copyCanvases(from: HTMLElement, to: HTMLElement) {
 }
 
 /**
- * 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行。
- * 参数 `withEnter`：新页正在同一帧滑进来（`playTabEnter` 放行）＝ true；
- * 新页没来、超时或没有方向（兜底放行）＝ false，见 startSlide 里两种滑法的区别。
+ * 已铺好、还没起跑的旧页克隆层的放行方式：
+ * - `enter`：新页正在同一帧滑进来（`playTabEnter` 放行）——层撤底色、只滑内容；
+ * - `plain`：新页已经在了但不播入场（没有方向、不支持动画），或下一次切页抢先——整层滑走；
+ * - `timeout`：新页 400ms 还没来——整层滑走，且新页的底栏还没有，**底栏副本留到最后**。
+ * 前两种新页（连同它的底栏）都已经在文档里，底栏副本当场摘掉。
  */
-let heldOut: ((withEnter: boolean) => void) | null = null
+type ReleaseMode = 'enter' | 'plain' | 'timeout'
 
-function releaseOut(withEnter = false) {
+/** 已铺好、还没起跑的旧页克隆层；由新页入场同帧放行 */
+let heldOut: ((mode: ReleaseMode) => void) | null = null
+
+function releaseOut(mode: ReleaseMode = 'plain') {
   const go = heldOut
   heldOut = null
-  go?.(withEnter)
+  go?.(mode)
 }
 
 function prefersReducedMotion() {
@@ -260,8 +265,11 @@ function cloneAt(src: HTMLElement, into: HTMLElement, prune = false): HTMLElemen
  *
  * **底栏副本**（2026-10-24）：底栏是每页各一份，旧页一切走它就跟着藏了，新页的底栏要等新页
  * 挂上才出现——中间那几帧屏幕上没有底栏（真机连拍两帧实锤）。所以把当前底栏（`pinned`）
- * 也克隆一份钉在「克隆层之上、真底栏之下」（z-index 15，介于 10 与 20 之间）：新底栏一画出来
- * 就把副本原样盖住，指示条从那一刻起照常滑；副本随克隆层一起摘掉。
+ * 也克隆一份钉在克隆层之上（z-index 15）补这几帧。
+ * ⚠️ **副本绝不能和真底栏叠在一起**：底栏是半透明玻璃，两层一叠，边线、投影、圆钮的橙色光晕
+ * 都加倍，整条底栏明显变色，滑完副本一摘又跳回来（0.22.1 真机录屏实锤，实测同一点差 10 级）。
+ * 所以副本一铺上就把原件藏起来（`visibility: hidden`），新页的底栏一进文档（放行那一帧）
+ * 就摘副本、还原件——放行发生在 rAF 回调里、早于这一帧绘制，所以中间一帧也不会叠。
  *
  * `dir` 是旧页滑出的方向；`fromSelectors` 是当前页要跟着滑的块（正文 `.log__body` 等，
  * 每页一块）；`pinned` 是钉住不动、只需要补位的块（底栏）。
@@ -300,6 +308,15 @@ export function startSlide(
     pin.className = 'tab-slide-pin'
     for (const bar of bars) renameSvgIds(cloneAt(bar, pin))
     document.body.appendChild(pin)
+    // 原件藏起来：切换生效前旧页还在屏幕上，不藏就是两层玻璃叠在一起
+    for (const bar of bars) bar.style.visibility = 'hidden'
+  }
+  // 摘副本、还原件（原件所在的旧页此时已被切走藏起，还原不会露出来）
+  const unpin = () => {
+    if (!pin) return
+    pin.remove()
+    pin = null
+    for (const bar of bars) bar.style.visibility = ''
   }
 
   let removed = false
@@ -307,7 +324,7 @@ export function startSlide(
     if (removed) return
     removed = true
     layer.remove()
-    pin?.remove()
+    unpin()
     slidingCount = Math.max(0, slidingCount - 1)
     if (slidingCount === 0) html.classList.remove(SLIDING_CLASS)
   }
@@ -315,13 +332,14 @@ export function startSlide(
   // 上一次还没放行的层（连点）立刻放它滑走，不排队
   releaseOut()
   const dx = dir === 'left' ? -100 : 100
-  heldOut = (withEnter) => {
+  heldOut = (mode) => {
     // 新页同帧滑进来：层撤底色、只滑内容；兜底：整层带底色滑走（新页还停在原位，要挡住它）
     let target: HTMLElement = layer
-    if (withEnter) {
+    if (mode === 'enter') {
       layer.classList.add('is-released')
       target = content
     }
+    if (mode !== 'timeout') unpin()
     const anim = target.animate(
       [{ transform: 'translateX(0)' }, { transform: `translateX(${dx}%)` }],
       { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' }
@@ -332,7 +350,7 @@ export function startSlide(
   }
   const mine = heldOut
   setTimeout(() => {
-    if (heldOut === mine) releaseOut()
+    if (heldOut === mine) releaseOut('timeout')
   }, HOLD_MAX_MS)
 
   // 先把层铺上去，再切换：新页挂载期间由旧页克隆层顶着，不是白屏
@@ -359,7 +377,7 @@ export function playTabEnter(selectors: string | readonly string[], dir: 'left' 
     if (el && el.isConnected) {
       if (typeof el.animate !== 'function') return releaseOut()
       // 新页这一帧开始从屏幕外滑进来：旧页克隆层可以撤底色、只滑内容
-      releaseOut(true)
+      releaseOut('enter')
       for (const s of list) {
         const target = document.querySelector(s) as HTMLElement | null
         if (!target?.isConnected) continue
