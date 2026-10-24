@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FtIcon from '@/components/FtIcon.vue'
+import FtButton from '@/components/FtButton.vue'
 import { ref } from 'vue'
 import {
   createCombo,
@@ -121,11 +122,13 @@ async function save() {
 
 <template>
   <view class="cs-mask" @click="emit('close')" />
-  <view class="cs">
+  <view class="cs" role="dialog" :aria-label="isNew ? '新建组合' : '编辑组合'">
     <view class="cs__handle" />
     <view class="cs__head">
       <text class="cs__title">{{ isNew ? '新建组合' : '编辑组合' }}</text>
-      <text class="cs__close" @click="emit('close')">×</text>
+      <view class="cs__close" role="button" aria-label="关闭" @click="emit('close')">
+        <FtIcon name="close" :size="18" :stroke="2" />
+      </view>
     </view>
 
     <scroll-view scroll-y class="cs__body">
@@ -147,15 +150,20 @@ async function save() {
             <input v-model="it.grams" type="digit" class="drow__input ft-num" />
             <text class="drow__unit">{{ it.unit }}</text>
           </view>
-          <text class="drow__del" @click="removeAt(i)">删除</text>
+          <view class="drow__del" role="button" aria-label="删除这一样" @click="removeAt(i)">
+            <FtIcon name="close" :size="14" :stroke="2" />
+          </view>
         </view>
       </view>
 
-      <view v-if="!picking" class="addbtn" @click="startPick">+ 添加食物</view>
+      <view v-if="!picking" class="addbtn" role="button" @click="startPick">
+        <FtIcon name="plus" :size="16" :stroke="2" />
+        <text>添加食物</text>
+      </view>
 
       <view v-else class="picker">
         <view class="psearch">
-          <FtIcon name="search" :size="15" tone="subtle" />
+          <FtIcon name="search" :size="16" tone="subtle" />
           <input
             v-model="keyword"
             class="psearch__input"
@@ -183,25 +191,18 @@ async function save() {
       <view class="cs__pad" />
     </scroll-view>
 
-    <view
-      class="ft-btn ft-btn--primary ft-btn--block cs__save"
-      :class="{ 'ft-btn--disabled': saving }"
-      @click="save"
-    >
-      保存
-    </view>
+    <FtButton variant="primary" block :disabled="saving" class="cs__save" @click="save">保存</FtButton>
   </view>
 </template>
 
 <style lang="scss" scoped>
+/* 和 MealSheet 同一套弹层皮：实底面板 ＋ 不透明白卡分组（弹层里不做玻璃） */
 .cs-mask {
   position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
+  inset: 0;
+  background: $app-mask;
   z-index: 90;
+  animation: cs-fade $dur-base $ease-out;
 }
 
 .cs {
@@ -209,44 +210,50 @@ async function save() {
   left: 0;
   right: 0;
   bottom: 0;
-  background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   z-index: 91;
   max-height: 88vh;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  padding: 20rpx 40rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: $app-canvas-bottom;
+  border-radius: $radius-xl $radius-xl 0 0;
+  box-shadow: $shadow-sheet;
+  animation: cs-up $dur-base $ease-out;
 }
 
 .cs__handle {
+  flex-shrink: 0;
   width: 72rpx;
   height: 8rpx;
-  border-radius: 4rpx;
+  margin: 0 auto 20rpx;
+  border-radius: $radius-pill;
   background: $app-line;
-  margin: 0 auto 18rpx;
-  flex-shrink: 0;
 }
 
 .cs__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-bottom: 20rpx;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 24rpx;
 }
 
 .cs__title {
-  font-size: 34rpx;
-  font-weight: 600;
+  font-size: $text-xl;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .cs__close {
-  font-size: 44rpx;
-  line-height: 1;
-  color: $app-ink-muted;
-  padding: 0 8rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cs__body {
@@ -264,112 +271,139 @@ async function save() {
   display: flex;
   align-items: center;
   gap: 20rpx;
-  padding: 6rpx 0 22rpx;
+  height: 92rpx;
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .field__label {
-  font-size: $text-sm;
-  color: $app-ink-muted;
   flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .field__input {
   flex: 1;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
-  border-bottom: 2rpx solid $app-ink;
-  padding: 6rpx 4rpx;
 }
 
 .field__ph {
   color: $app-ink-subtle;
-  font-weight: 400;
+  font-weight: $weight-regular;
 }
 
 /* ── 明细 ── */
 .dlist {
-  border-top: 1rpx solid $app-line;
+  margin-top: 20rpx;
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .dlist__empty {
   padding: 36rpx 0;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
 .drow {
   display: flex;
   align-items: center;
-  padding: 22rpx 4rpx;
-  border-bottom: 1rpx solid $app-line-soft;
+  gap: 16rpx;
+  padding: 20rpx 0;
+}
+
+.drow + .drow {
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .drow__name {
   flex: 1;
   min-width: 0;
-  font-size: $text-base;
-  color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: $text-md;
+  color: $app-ink;
 }
 
 .drow__grams {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8rpx;
-  flex-shrink: 0;
 }
 
 .drow__input {
-  width: 120rpx;
+  width: 128rpx;
+  height: 64rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
   text-align: right;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
-  border-bottom: 1rpx solid $app-line;
-  padding: 4rpx 2rpx;
 }
 
 .drow__unit {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .drow__del {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  margin-left: 24rpx;
   flex-shrink: 0;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-muted;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── 添加食物 ── */
 .addbtn {
-  padding: 26rpx 8rpx 6rpx;
-  font-size: $text-sm;
-  font-weight: 500;
-  color: $app-ink;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  height: 84rpx;
+  margin-top: 20rpx;
+  border: 2rpx dashed $app-line-dash;
+  border-radius: $radius-lg;
+  font-size: $text-base;
+  color: $app-ink-2;
+}
+
+.addbtn:active {
+  background: $app-surface-2;
 }
 
 .picker {
-  padding-top: 18rpx;
+  margin-top: 20rpx;
 }
 
 .psearch {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 14rpx 20rpx;
+  height: 84rpx;
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
 .psearch__input {
   flex: 1;
-  font-size: $text-base;
+  font-size: $text-md;
   color: $app-ink;
 }
 
@@ -378,20 +412,31 @@ async function save() {
 }
 
 .psearch__cancel {
-  font-size: $text-xs;
+  font-size: $text-base;
   color: $app-ink-muted;
 }
 
 .plist {
   max-height: 420rpx;
   overflow-y: auto;
+  margin-top: 16rpx;
+  padding: 0 24rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .prow {
   display: flex;
   align-items: center;
-  padding: 22rpx 8rpx;
-  border-bottom: 1rpx solid $app-line-soft;
+  padding: 22rpx 0;
+}
+
+.prow + .prow {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.prow:active {
+  opacity: 0.6;
 }
 
 .prow__mid {
@@ -403,34 +448,59 @@ async function save() {
 }
 
 .prow__name {
-  font-size: $text-base;
-  color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: $text-md;
+  color: $app-ink;
 }
 
 .prow__sub {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .prow__kcal {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  margin-left: 16rpx;
   flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: $text-sm;
+  color: $app-ink;
 }
 
 .plist__empty {
   padding: 40rpx 0;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
-.cs__save {
-  margin-top: 20rpx;
+.cs .cs__save {
   flex-shrink: 0;
+  margin-top: 20rpx;
+}
+
+@keyframes cs-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes cs-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs,
+  .cs-mask {
+    animation: none;
+  }
 }
 </style>

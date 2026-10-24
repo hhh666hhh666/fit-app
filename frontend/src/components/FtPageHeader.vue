@@ -60,12 +60,11 @@ function goBack() {
   color: $app-ink-muted;
 }
 
+/* 标题多是中文：中文只用 400／700 两档（ADR 0041），不走 Nunito 的 800 */
 .ft-head__title {
-  font-family: $font-num;
   font-size: $text-hero;
-  font-weight: $weight-heavy;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-weight: $weight-bold;
+  line-height: 1.25;
   color: $app-ink;
 }
 </style>

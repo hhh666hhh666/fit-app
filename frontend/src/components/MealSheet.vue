@@ -302,12 +302,17 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
 <template>
   <view class="ms-mask" @click="emit('close')" />
-  <view class="ms">
+  <view class="ms" role="dialog" :aria-label="MEAL_LABEL[meal]">
     <view class="ms__handle" />
     <view class="ms__head">
+      <view class="ms__ico" :class="'ms__ico--' + meal">
+        <FtIcon :name="meal" :size="20" />
+      </view>
       <text class="ms__title">{{ MEAL_LABEL[meal] }}</text>
       <text class="ms__date ft-num">{{ date }}</text>
-      <text class="ms__close" @click="emit('close')">×</text>
+      <view class="ms__close" role="button" aria-label="关闭" @click="emit('close')">
+        <FtIcon name="close" :size="18" :stroke="2" />
+      </view>
     </view>
 
     <scroll-view scroll-y class="ms__body">
@@ -323,7 +328,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               <text class="photo__op" @click.stop="removePhoto">删除</text>
             </view>
           </view>
-          <view v-else class="photo__empty" @click="shoot">+ 拍照记录这一餐</view>
+          <view v-else class="photo__empty" role="button" @click="shoot">
+            <FtIcon name="plus" :size="18" :stroke="2" />
+            <text>拍照记录这一餐</text>
+          </view>
         </view>
 
         <!-- 组合横滑条：点一下整份加入（可撤销） -->
@@ -341,7 +349,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
         <!-- 添加区 -->
         <view class="add">
           <view v-if="!selected" class="asearch">
-            <FtIcon name="search" :size="15" tone="subtle" />
+            <FtIcon name="search" :size="16" tone="subtle" />
             <input
               v-model="keyword"
               class="asearch__input"
@@ -349,10 +357,12 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               placeholder-class="asearch__ph"
               confirm-type="search"
             />
-            <text v-if="keyword" class="asearch__clear" @click="keyword = ''">×</text>
+            <view v-if="keyword" class="asearch__clear" role="button" aria-label="清空" @click="keyword = ''">
+              <FtIcon name="close" :size="14" :stroke="2" />
+            </view>
           </view>
 
-          <!-- 选中食物 → 份量行 -->
+          <!-- 选中食物 → 份量行；「添加」是这一屏唯一的橙色动作 -->
           <view v-if="selected" class="pick">
             <view class="pick__head">
               <text class="pick__name">{{ selected.name }}</text>
@@ -367,7 +377,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
                 <text class="pick__portion" @click="usePortion(1)">
                   {{ selected.portionLabel || '1份' }}
                 </text>
-                <text class="pick__portion" @click="usePortion(2)">×2</text>
+                <text class="pick__portion ft-num" @click="usePortion(2)">×2</text>
               </view>
               <view class="pick__input">
                 <input v-model="grams" type="digit" class="pick__input-field ft-num" />
@@ -376,6 +386,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               <view
                 class="pick__btn"
                 :class="{ 'pick__btn--disabled': saving }"
+                role="button"
                 @click="confirmAdd"
               >
                 添加
@@ -405,14 +416,20 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
         <!-- 本餐条目 -->
         <view class="list">
-          <view v-if="items.length === 0" class="list__empty">这一餐还没有记录</view>
+          <view class="list__head">
+            <text class="list__title">这一餐</text>
+            <text class="list__sum ft-num">合计 {{ mealKcal }} 大卡</text>
+          </view>
+          <view v-if="items.length === 0" class="list__empty">还没有记录</view>
           <view v-for="it in items" :key="it.id" class="irow" @click="onItemTap(it)">
             <template v-if="editingId === it.id">
               <text class="irow__name">{{ it.foodName }}</text>
               <view class="irow__edit">
                 <input v-model="editGrams" type="digit" class="irow__edit-input ft-num" />
                 <text class="irow__edit-unit">g</text>
-                <view class="irow__ok" @click.stop="confirmEdit">✓</view>
+                <view class="irow__ok" role="button" aria-label="保存份量" @click.stop="confirmEdit">
+                  <FtIcon name="check" :size="16" :stroke="2.4" />
+                </view>
               </view>
             </template>
             <template v-else>
@@ -427,14 +444,11 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
           </view>
         </view>
 
-        <!-- 合计 -->
-        <view class="sum">
-          <text class="sum__label">本餐合计</text>
-          <text class="sum__num ft-num">{{ mealKcal }} 大卡</text>
-        </view>
-
-        <view v-if="items.length > 0" class="savecombo" @click="saveAsCombo">
-          <text class="savecombo__text">＋ 把这一餐存为组合</text>
+        <view v-if="items.length > 0" class="savecombo">
+          <view class="savecombo__btn" role="button" @click="saveAsCombo">
+            <FtIcon name="plus" :size="16" :stroke="2" />
+            <text>把这一餐存为组合</text>
+          </view>
         </view>
 
         <view class="ms__pad" />
@@ -466,14 +480,14 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 </template>
 
 <style lang="scss" scoped>
+/* 弹层是实底（晴窗：底部弹层不做玻璃——底下压着遮罩，没有可透的东西）；
+   弹层里的分组用不透明白卡，和页面上的玻璃卡区分开 */
 .ms-mask {
   position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
+  inset: 0;
+  background: $app-mask;
   z-index: 90;
+  animation: ms-fade $dur-base $ease-out;
 }
 
 .ms {
@@ -481,50 +495,85 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   left: 0;
   right: 0;
   bottom: 0;
-  background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   z-index: 91;
   max-height: 88vh;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  padding: 20rpx 40rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: $app-canvas-bottom;
+  border-radius: $radius-xl $radius-xl 0 0;
+  box-shadow: $shadow-sheet;
+  animation: ms-up $dur-base $ease-out;
 }
 
 .ms__handle {
+  flex-shrink: 0;
   width: 72rpx;
   height: 8rpx;
-  border-radius: 4rpx;
+  margin: 0 auto 20rpx;
+  border-radius: $radius-pill;
   background: $app-line;
-  margin: 0 auto 18rpx;
-  flex-shrink: 0;
 }
 
 .ms__head {
-  display: flex;
-  align-items: baseline;
-  gap: 16rpx;
-  padding-bottom: 16rpx;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding-bottom: 24rpx;
+}
+
+.ms__ico {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: $radius-sm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ms__ico--breakfast {
+  background: $meal-breakfast-bg;
+  color: $meal-breakfast-fg;
+}
+
+.ms__ico--lunch {
+  background: $meal-lunch-bg;
+  color: $meal-lunch-fg;
+}
+
+.ms__ico--dinner {
+  background: $meal-dinner-bg;
+  color: $meal-dinner-fg;
+}
+
+.ms__ico--snack {
+  background: $meal-snack-bg;
+  color: $meal-snack-fg;
 }
 
 .ms__title {
-  font-size: 34rpx;
-  font-weight: 600;
+  font-size: $text-xl;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .ms__date {
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
 .ms__close {
   margin-left: auto;
-  font-size: 44rpx;
-  line-height: 1;
-  color: $app-ink-muted;
-  padding: 0 8rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ms__body {
@@ -537,7 +586,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   padding: 60rpx 0;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
 .ms__pad {
@@ -546,7 +595,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
 /* ── 照片 ── */
 .photo {
-  margin-bottom: 22rpx;
+  margin-bottom: 24rpx;
 }
 
 .photo__box {
@@ -558,11 +607,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   width: 100%;
   height: 480rpx;
   border-radius: $radius-lg;
-  border: 1rpx solid $app-line-soft;
-  background: $app-canvas;
+  background: $app-surface-2;
 }
 
-/* 角标：更换 / 删除 */
+/* 角标：更换 / 删除——压在照片上，用遮罩色的深底白字 */
 .photo__ops {
   position: absolute;
   right: 16rpx;
@@ -572,28 +620,33 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 }
 
 .photo__op {
-  padding: 6rpx 18rpx;
-  border-radius: 8rpx;
-  font-size: $text-xs;
-  color: #ffffff;
-  background: rgba(10, 11, 13, 0.55);
+  padding: 8rpx 22rpx;
+  border-radius: $radius-pill;
+  background: $app-mask;
+  font-size: $text-sm;
+  color: $app-surface;
 }
 
 .photo__empty {
   height: 112rpx;
-  border: 2rpx dashed $app-line;
+  border: 2rpx dashed $app-line-dash;
   border-radius: $radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: $text-sm;
+  gap: 8rpx;
+  font-size: $text-base;
   color: $app-ink-muted;
+}
+
+.photo__empty:active {
+  background: $app-surface-2;
 }
 
 /* ── 组合横滑条 ── */
 .combar {
   white-space: nowrap;
-  margin-bottom: 22rpx;
+  margin-bottom: 24rpx;
 }
 
 .combar__inner {
@@ -605,22 +658,26 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 .combar__chip {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
-  padding: 16rpx 24rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
+  gap: 4rpx;
+  padding: 16rpx 28rpx;
+  background: $app-surface;
   border-radius: $radius-md;
+  box-shadow: $shadow-sm;
+}
+
+.combar__chip:active {
+  opacity: 0.7;
 }
 
 .combar__name {
-  font-size: $text-sm;
-  font-weight: 600;
+  font-size: $text-base;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .combar__sub {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 /* ── 添加区 ── */
@@ -628,15 +685,16 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   display: flex;
   align-items: center;
   gap: 12rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 14rpx 20rpx;
+  height: 84rpx;
+  padding: 0 28rpx;
+  background: $app-surface;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
 .asearch__input {
   flex: 1;
-  font-size: $text-base;
+  font-size: $text-md;
   color: $app-ink;
 }
 
@@ -645,45 +703,54 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 }
 
 .asearch__clear {
-  font-size: $text-md;
-  color: $app-ink-subtle;
-  padding: 0 6rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-muted;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pick {
-  border: 2rpx solid $app-ink;
+  padding: 24rpx 28rpx;
+  background: $app-surface;
   border-radius: $radius-lg;
-  padding: 20rpx 24rpx;
+  /* 用描边不用外投影：外投影画在盒子外面，会被 scroll-view 的边裁掉 */
+  border: 3rpx solid $accent-ring;
 }
 
 .pick__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 16rpx;
 }
 
 .pick__name {
-  font-size: $text-md;
-  font-weight: 600;
+  font-size: $text-lg;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .pick__cancel {
-  font-size: $text-sm;
+  flex-shrink: 0;
+  font-size: $text-base;
   color: $app-ink-muted;
 }
 
 .pick__sub {
-  font-size: $text-xs;
-  color: $app-ink-muted;
   padding-top: 6rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .pick__row {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  padding-top: 18rpx;
+  padding-top: 20rpx;
 }
 
 .pick__portions {
@@ -692,43 +759,54 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 }
 
 .pick__portion {
-  font-size: $text-xs;
-  color: $app-ink;
-  border: 1rpx solid $app-line;
-  border-radius: 20rpx;
-  padding: 6rpx 16rpx;
-  background: $app-canvas;
+  padding: 10rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
 .pick__input {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8rpx;
-  border-bottom: 2rpx solid $app-ink;
-  padding: 6rpx 4rpx;
+  height: 76rpx;
+  padding: 0 20rpx;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
 }
 
 .pick__input-field {
   flex: 1;
-  font-size: $text-md;
-  font-weight: 600;
+  min-width: 0;
+  font-size: $text-lg;
+  font-weight: $weight-heavy;
   color: $app-ink;
 }
 
 .pick__unit {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .pick__btn {
-  background: $app-ink;
-  color: #ffffff;
-  font-size: $text-base;
-  font-weight: 500;
-  border-radius: $radius-lg;
-  padding: 14rpx 32rpx;
   flex-shrink: 0;
+  height: 76rpx;
+  padding: 0 36rpx;
+  border-radius: $radius-pill;
+  background: $accent-bg;
+  box-shadow: $accent-shadow;
+  display: flex;
+  align-items: center;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-surface;
+}
+
+.pick__btn:active {
+  transform: scale(0.97);
 }
 
 .pick__btn--disabled {
@@ -738,13 +816,24 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 .foods {
   max-height: 420rpx;
   overflow-y: auto;
+  margin-top: 16rpx;
+  padding: 0 24rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
 }
 
 .frow {
   display: flex;
   align-items: center;
-  padding: 22rpx 8rpx;
-  border-bottom: 1rpx solid $app-line-soft;
+  padding: 22rpx 0;
+}
+
+.frow + .frow {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.frow:active {
+  opacity: 0.6;
 }
 
 .frow__mid {
@@ -765,61 +854,82 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 .frow__name {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: $text-base;
-  color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: $text-md;
+  color: $app-ink;
 }
 
 .frow__badge {
   flex: none;
-  padding: 4rpx 8rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid $app-line;
-  background: $app-canvas;
-  font-size: 18rpx;
-  line-height: 1;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 
 .frow__sub {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .frow__kcal {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-  margin-left: 16rpx;
   flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: $text-sm;
+  color: $app-ink;
 }
 
 .foods__empty {
   padding: 40rpx 0;
   text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
-/* ── 条目列表 ── */
+/* ── 本餐条目 ── */
 .list {
-  margin-top: 24rpx;
-  border-top: 1rpx solid $app-line;
+  margin-top: 28rpx;
+  padding: 8rpx 28rpx;
+  background: $app-surface;
+  border-radius: $radius-lg;
+}
+
+.list__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 20rpx 0 12rpx;
+}
+
+.list__title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.list__sum {
+  font-size: $text-base;
+  color: $app-ink;
 }
 
 .list__empty {
-  padding: 32rpx 0 12rpx;
-  text-align: center;
+  padding: 16rpx 0 24rpx;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
 .irow {
   display: flex;
   align-items: center;
-  padding: 24rpx 4rpx;
-  border-bottom: 1rpx solid $app-line-soft;
+  padding: 22rpx 0;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.irow:active {
+  opacity: 0.6;
 }
 
 .irow__mid {
@@ -831,106 +941,125 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 }
 
 .irow__name {
-  font-size: $text-base;
+  font-size: $text-md;
   color: $app-ink;
 }
 
 .irow__sub {
-  font-size: 20rpx;
-  color: $app-ink-subtle;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .irow__kcal {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-  margin-left: 16rpx;
   flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: $text-md;
+  color: $app-ink;
 }
 
 .irow__edit {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10rpx;
 }
 
 .irow__edit-input {
-  width: 120rpx;
-  border-bottom: 2rpx solid $app-ink;
+  width: 140rpx;
+  height: 64rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
   text-align: right;
   font-size: $text-md;
-  font-weight: 600;
+  font-weight: $weight-bold;
   color: $app-ink;
 }
 
 .irow__edit-unit {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .irow__ok {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 8rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
   background: $app-ink;
-  color: #ffffff;
+  color: $app-surface;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: $text-base;
-}
-
-/* ── 合计 ── */
-.sum {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 24rpx 4rpx 8rpx;
-}
-
-.sum__label {
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
-.sum__num {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
 }
 
 /* ── 存为组合 / 整份加入的撤销条 ── */
 .savecombo {
-  padding: 10rpx 4rpx 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 24rpx;
 }
 
-.savecombo__text {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-  border-bottom: 1rpx dashed $app-line;
-  padding-bottom: 2rpx;
+.savecombo__btn {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 14rpx 28rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-base;
+  color: $app-ink-2;
 }
 
+.savecombo__btn:active {
+  opacity: 0.7;
+}
+
+/* 撤销条：深底白字，像一条 toast 钉在弹层底部 */
 .undo {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 16rpx;
-  padding: 18rpx 24rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  flex-shrink: 0;
+  padding: 20rpx 32rpx;
+  border-radius: $radius-pill;
+  background: $app-ink;
 }
 
 .undo__text {
-  font-size: $text-sm;
-  color: $app-ink-muted;
+  font-size: $text-base;
+  color: $app-surface;
 }
 
 .undo__btn {
-  font-size: $text-sm;
-  font-weight: 600;
-  color: $app-ink;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $accent-soft;
+}
+
+@keyframes ms-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ms-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms,
+  .ms-mask {
+    animation: none;
+  }
 }
 </style>

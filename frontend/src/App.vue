@@ -181,6 +181,16 @@ page::before {
 
 /* 四个主 tab 的页面根（横向裁切、底部留白、钉住的底栏）收在 components/FtTabPage.vue。 */
 
+/* scroll-view 不画滚动条：手机 WebView 本来就是悬浮滚动条，电脑浏览器里那条灰槽会压住卡片右边
+   （会话页的动作横滑条、记录弹层的列表都踩过） */
+.uni-scroll-view {
+  scrollbar-width: none;
+}
+
+.uni-scroll-view::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── 切页转场：旧页克隆层滑出（ADR 0040）──
    utils/nav.ts 在切换前把当前页正文 cloneNode 一份塞进这个层的 __content，
    新页就绪的那一帧放行：层撤掉底色、只滑 __content，新页同时从另一侧滑入。

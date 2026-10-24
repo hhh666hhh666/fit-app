@@ -891,15 +891,6 @@ function comingSoon(tip: string) {
   width: auto;
 }
 
-/* 横滑条不要滚动条：电脑浏览器里它会在胶囊下面画一条灰线 */
-.switcher :deep(.uni-scroll-view) {
-  scrollbar-width: none;
-}
-
-.switcher :deep(.uni-scroll-view::-webkit-scrollbar) {
-  display: none;
-}
-
 .switcher__inner {
   display: inline-flex;
   gap: 16rpx;
