@@ -117,6 +117,11 @@ components:
     textColor: "{colors.ink-muted}"
     rounded: "{rounded.pill}"
     height: "46px"
+  button-danger:
+    backgroundColor: "transparent"
+    textColor: "{colors.danger}"
+    rounded: "{rounded.pill}"
+    height: "46px"
   card-glass:
     backgroundColor: "{colors.glass}"
     rounded: "{rounded.lg}"
@@ -207,7 +212,7 @@ components:
 
 ### Tertiary
 
-- **危险红 Danger**（danger）、**星标金 Star**（star）：状态色。危险红只给删除（确认弹窗、批量删除按钮、页头的删除字）、失败与待核对提示、存储接近上限的进度条；星标金只给食物收藏的实心星。JS 里需要危险红（`uni.showModal` 的 `confirmColor`）时从 `utils/palette.ts` 取，守卫逐行核对两边一致。
+- **危险红 Danger**（danger）、**星标金 Star**（star）：状态色。危险红只给删除（确认弹窗、批量删除按钮、页头的删除字）、失败与待核对提示、存储接近上限的进度条；星标金只给食物收藏的实心星。JS 里需要危险红（确认框的确认钮）时从 `utils/palette.ts` 取，守卫逐行核对两边一致；确认框一律走 `utils/confirm.ts` 的 `ask()`，传 `danger` 即标红。
 
 ### Neutral
 
@@ -289,6 +294,7 @@ components:
 - **Secondary / Ghost:** 次级是强玻璃胶囊 ＋ ink-2 字（如「知道了」「去填写」）；幽灵是透明底 ＋ line 描边 ＋ ink-muted 字（如「先不练」）。
 - **页头胶囊:** 页头右侧的「新建／编辑／取消」用强玻璃小胶囊；危险动作（删除计划）只把字换成危险红，不上色块。
 - **危险实心:** 只有批量删除（多选操作条上）用危险红实心胶囊 ＋ 白字。
+- **危险次要（danger）:** 透明底 ＋ line 描边 ＋ 危险红字，给弹层里和主按钮并列、会丢数据的那个选项（如「结束并开新的」）；点了还要再确认一次。
 
 ### Chips
 
@@ -317,7 +323,19 @@ components:
 
 ### Bottom Sheet
 
-实底弹层（canvas-bottom），上缘 28px 圆角 ＋ 顶部把手，从底部 220ms 滑入、遮罩淡入；标题 20px 700，可带一行灰色副标题。内容是一组组白卡，长内容在中间滚动，主按钮固定在最下面。
+实底弹层（canvas-bottom），上缘 28px 圆角 ＋ 顶部把手，从底部 220ms 滑入、遮罩淡入；标题 20px 700，右侧一枚灰底圆形关闭钮，可带一行灰色副标题。内容是一组组白卡，长内容在中间滚动，主按钮固定在最下面。
+
+- **关法五种、走同一个口子:** 点遮罩、关闭钮、按住顶部（把手 ＋ 标题行）往下拉、安卓返回键、电脑 Esc；都先 220ms 滑出再消失。
+- **表单弹层防误触:** 里面的输入框改过之后，上面任何一种关法都先问「放弃填写的内容？」（危险红「放弃」）。
+- **二选一不用确认框:** 要在两个动作之间选（如「继续上次／结束并开新的」）就做成弹层里的两枚按钮，危险的那个用 danger 次要钮。
+
+### Confirm Dialog / Action Sheet / Toast
+
+uni 自带的三件套在 H5 是运行时渲染的，皮在 `App.vue` 里按类名覆盖成晴窗：
+
+- **确认框:** 实底 24px 圆角卡居中，标题 16px 700、正文 ink-muted；底部两枚胶囊——左「取消」灰蓝薄纱底 ＋ ink-muted 字，右「确认」纸白底 ＋ line 内描边 ＋ ink 字（删除、放弃类换危险红字）。左边的取消位只放「不做」：安卓返回键会替用户点它。
+- **操作菜单:** 贴底实底面板（与悬浮件同位：左右 16px、离底 14px ＋ 安全区），24px 圆角，菜单项 ink、取消 ink-muted 700；「删除」项不单独标红，点了再走红色确认框。
+- **轻提示:** ink 深色底 ＋ 纸白字，16px 圆角，长文案折行居中；成功提示一律纯文字，不带勾。
 
 ### Floating Action Bar
 
@@ -347,6 +365,7 @@ components:
 - **Don't** 中文用 500／600 这类中间字重。
 - **Don't** 做深色模式，也不把 token 迁成 CSS 变量。
 - **Don't** 用同心环表示营养素，营养素一律是「名称 ＋ 数值／目标 ＋ 进度条」。
+- **Don't** 把会丢数据的动作放进确认框的取消位（安卓返回键会点到它）；二选一用弹层的两枚按钮。
 - **Don't** 给底部弹层做玻璃，也不要把 `FtSheet` 放进带 `backdrop-filter`／`transform` 的祖先里（fixed 会跟着祖先定位）。
 - **Don't** 在 `scroll-view` 里的卡片上用外投影画描边，会被裁掉，改用 border。
 - **Don't** 加英文装饰行（如 `FIT-APP LEDGER`、`SEC.04_LIB` 这类旧设计的上标）。
