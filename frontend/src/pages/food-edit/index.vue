@@ -11,6 +11,9 @@ import {
 import { useRecognitionStore } from '@/stores/recognition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
+import FtButton from '@/components/FtButton.vue'
+import FtIcon from '@/components/FtIcon.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
@@ -237,22 +240,15 @@ async function save() {
   }
 }
 
-function goBack() {
-  uni.navigateBack()
-}
 </script>
 
 <template>
   <view class="fe">
     <view class="fe__body">
-      <view class="fe__head">
-        <text class="fe__back" @click="goBack">‹</text>
-        <text class="fe__title">{{ pageTitle }}</text>
-        <view class="fe__head-space" />
-      </view>
+      <FtPageHeader :title="pageTitle" back />
 
       <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 名字缺失警告 ＋ 待核对字段点名 -->
-      <view v-if="fromRecognition" class="ft-card block rec-note">
+      <view v-if="fromRecognition" class="glass block rec-note">
         <text class="block__title">来自拍照识别</text>
         <text v-if="!form.name.trim()" class="rec-note__text rec-note__text--warn">
           没能认出食物名称——其余数值已按标签填好，补个名字就能保存
@@ -264,7 +260,7 @@ function goBack() {
       </view>
 
       <!-- 名称 + 单位 -->
-      <view class="ft-card block">
+      <view class="glass block">
         <text class="block__label">食物名称<text v-if="isUncertain('name')" class="fld__warn"> 待核对</text></text>
         <input
           v-model="form.name"
@@ -295,7 +291,7 @@ function goBack() {
       </view>
 
       <!-- 主组（必填） -->
-      <view class="ft-card block">
+      <view class="glass block">
         <text class="block__title">主要营养（必填）</text>
         <view class="fld">
           <text class="fld__label">热量（大卡）<text v-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
@@ -320,7 +316,7 @@ function goBack() {
       </view>
 
       <!-- 升糖指数（扩展字段，常显） -->
-      <view class="ft-card block">
+      <view class="glass block">
         <text class="block__title">升糖指数（选填）</text>
         <view class="fld">
           <text class="fld__label">GI（葡萄糖＝100）</text>
@@ -335,7 +331,7 @@ function goBack() {
       </view>
 
       <!-- 常用份 -->
-      <view class="ft-card block">
+      <view class="glass block">
         <text class="block__title">常用份（可选）</text>
         <view class="fld">
           <text class="fld__label">份标签</text>
@@ -354,10 +350,12 @@ function goBack() {
       </view>
 
       <!-- 更多营养（折叠） -->
-      <view v-for="g in OPTIONAL_GROUPS" :key="g.title" class="ft-card block">
+      <view v-for="g in OPTIONAL_GROUPS" :key="g.title" class="glass block">
         <view class="group-head" @click="toggleGroup(g.title)">
           <text class="block__title">{{ g.title }}（选填）</text>
-          <text class="group-head__arrow">{{ openGroups[g.title] ? '▾' : '▸' }}</text>
+          <view class="group-head__arrow" :class="{ 'group-head__arrow--open': openGroups[g.title] }">
+            <FtIcon name="chevron-right" :size="18" tone="muted" />
+          </view>
         </view>
         <template v-if="openGroups[g.title]">
           <view v-for="fd in g.fields" :key="fd.key" class="fld">
@@ -373,110 +371,97 @@ function goBack() {
         </template>
       </view>
 
-      <view class="fe__pad" />
     </view>
 
+    <!-- 保存：贴底悬浮的主按钮，与汇总页「完成」同一位置 -->
     <view class="fe__bottom">
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block"
-        :class="{ 'ft-btn--disabled': saving }"
-        @click="save"
-      >
-        保存
-      </view>
+      <FtButton variant="primary" block :disabled="saving" class="fe__save" @click="save">保存</FtButton>
     </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
 .fe__body {
-  padding: 28rpx 32rpx 0;
-}
-
-.fe__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4rpx 0 20rpx;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
-.fe__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.fe__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.fe__head-space {
-  width: 64rpx;
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
 }
 
 .block {
-  margin-bottom: 24rpx;
-  padding: 26rpx 28rpx 12rpx;
+  padding-top: 28rpx;
+  padding-bottom: 12rpx;
 }
 
 .block__label {
   display: block;
-  font-size: 22rpx;
-  color: $app-ink-subtle;
-  padding-bottom: 10rpx;
+  padding-bottom: 12rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
 .block__title {
-  font-size: $text-base;
-  font-weight: 600;
-  color: $app-ink;
   padding-bottom: 8rpx;
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
 }
 
 .name-input {
   width: 100%;
-  font-size: 40rpx;
-  font-weight: 600;
-  color: $app-ink;
-  border-bottom: 2rpx solid $app-ink;
-  padding: 12rpx 0;
+  height: 92rpx;
   box-sizing: border-box;
+  padding: 0 24rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  color: $app-ink;
 }
 
 .ph {
   color: $app-ink-subtle;
-  font-weight: 400;
+  font-weight: $weight-regular;
 }
 
 .unit-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22rpx 0 14rpx;
+  padding: 24rpx 0 16rpx;
 }
 
+.unit-row .block__label {
+  padding-bottom: 0;
+}
+
+/* 数值基准：和全站分段控件同一套（选中＝深字 ＋ 浅胶囊底） */
 .units {
   display: flex;
-  gap: 14rpx;
+  padding: 6rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
 }
 
 .unit {
-  font-size: $text-sm;
+  padding: 10rpx 24rpx;
+  border-radius: $radius-pill;
+  font-size: $text-base;
   color: $app-ink-muted;
-  border: 1rpx solid $app-line;
-  border-radius: 30rpx;
-  padding: 8rpx 24rpx;
-  background: $app-canvas;
 }
 
 .unit--active {
-  color: #ffffff;
-  background: $app-ink;
-  border-color: $app-ink;
-  font-weight: 600;
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
 }
 
 .fld {
@@ -484,69 +469,83 @@ function goBack() {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid $app-line-soft;
+}
+
+.fld + .fld,
+.block__title + .fld,
+.group-head + .fld {
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .fld__label {
-  font-size: $text-sm;
-  color: $app-ink-muted;
   flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
 }
 
 .fld__input {
+  flex: 1;
+  margin-left: 20rpx;
   text-align: right;
   font-size: $text-md;
   color: $app-ink;
-  flex: 1;
-  margin-left: 20rpx;
 }
 
 /* 识别低置信度字段的「待核对」角标（ADR 0018） */
 .fld__warn {
-  font-size: 20rpx;
-  line-height: 1;
-  color: #c4453c;
-  border: 1rpx solid #c4453c;
-  border-radius: 6rpx;
-  padding: 3rpx 8rpx;
   margin-left: 8rpx;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $accent-soft;
+  font-size: $text-xs;
+  color: $app-danger;
 }
 
 /* 识别草稿提示卡 */
 .rec-note__text {
   display: block;
+  padding-top: 8rpx;
   font-size: $text-sm;
+  line-height: 1.6;
   color: $app-ink-muted;
-  padding-bottom: 12rpx;
-  line-height: 1.5;
 }
 
 /* 名字没认出的警告行 */
 .rec-note__text--warn {
-  color: #c4453c;
+  color: $app-danger;
 }
 
 .group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 12rpx;
 }
 
 .group-head__arrow {
-  font-size: $text-md;
-  color: $app-ink-muted;
+  display: flex;
+  transition: transform $dur-fast $ease-out;
 }
 
-.fe__pad {
-  height: 220rpx;
+.group-head__arrow--open {
+  transform: rotate(90deg);
 }
 
 .fe__bottom {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-canvas;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+}
+
+.fe__bottom .fe__save {
+  height: 104rpx;
+  font-size: 30rpx;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-head__arrow {
+    transition: none;
+  }
 }
 </style>

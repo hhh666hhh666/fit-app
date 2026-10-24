@@ -18,6 +18,10 @@ import { useRecognitionStore } from '@/stores/recognition'
 import { ensureLogin } from '@/utils/guard'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 import FtIcon from '@/components/FtIcon.vue'
+import FtButton from '@/components/FtButton.vue'
+import FtEmpty from '@/components/FtEmpty.vue'
+import FtPageHeader from '@/components/FtPageHeader.vue'
+import FtSheet from '@/components/FtSheet.vue'
 
 // ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
@@ -137,10 +141,6 @@ watch(keyword, () => {
   searchTimer = setTimeout(() => void reload(), 250)
 })
 
-function goBack() {
-  uni.navigateBack()
-}
-
 function goNew() {
   if (tab.value === 'combo') {
     comboSheet.value = { show: true, editing: null }
@@ -241,106 +241,122 @@ function copyExport() {
 
 <template>
   <view class="foods">
-    <view class="foods__head">
-      <text class="foods__back" @click="goBack">‹</text>
-      <text class="foods__title">{{ tab === 'combo' ? '食物组合' : '食物库' }}</text>
-      <text class="foods__new" @click="goNew">{{ tab === 'combo' ? '+ 新建' : '+ 新增' }}</text>
-    </view>
+    <view class="foods__body">
+      <FtPageHeader :title="tab === 'combo' ? '食物组合' : '食物库'" back>
+        <template #right>
+          <view class="pill" role="button" @click="goNew">
+            <FtIcon name="plus" :size="16" :stroke="2" />
+            <text>{{ tab === 'combo' ? '新建' : '新增' }}</text>
+          </view>
+        </template>
+      </FtPageHeader>
 
-    <view class="tabs">
-      <text class="tabs__item" :class="{ 'tabs__item--on': tab === 'food' }" @click="tab = 'food'">
-        食物
-      </text>
-      <text
-        class="tabs__item"
-        :class="{ 'tabs__item--on': tab === 'combo' }"
-        @click="tab = 'combo'"
-      >
-        组合
-      </text>
-    </view>
-
-    <view v-if="tab === 'food'" class="foods__body">
-      <view class="search">
-        <FtIcon name="search" :size="16" tone="subtle" />
-        <input
-          v-model="keyword"
-          class="search__input"
-          placeholder="搜索食物"
-          placeholder-class="search__ph"
-          confirm-type="search"
-        />
-        <text v-if="keyword" class="search__clear" @click="keyword = ''">×</text>
+      <view class="seg" role="tablist">
+        <view
+          class="seg__item"
+          :class="{ 'seg__item--on': tab === 'food' }"
+          role="tab"
+          :aria-selected="tab === 'food'"
+          @click="tab = 'food'"
+        >
+          食物
+        </view>
+        <view
+          class="seg__item"
+          :class="{ 'seg__item--on': tab === 'combo' }"
+          role="tab"
+          :aria-selected="tab === 'combo'"
+          @click="tab = 'combo'"
+        >
+          组合
+        </view>
       </view>
 
-      <view class="ops">
-        <text class="ops__btn" @click="openImport">导入 JSON</text>
-        <text class="ops__btn" @click="doExport">导出 JSON</text>
-        <text class="ops__btn" @click="startRecognize">拍照识别</text>
-        <text class="ops__meta ft-num">{{
-          keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种`
-        }}</text>
-      </view>
+      <template v-if="tab === 'food'">
+        <view class="search">
+          <FtIcon name="search" :size="18" tone="subtle" />
+          <input
+            v-model="keyword"
+            class="search__input"
+            placeholder="搜索食物"
+            placeholder-class="search__ph"
+            confirm-type="search"
+          />
+          <view v-if="keyword" class="search__clear" role="button" aria-label="清空" @click="keyword = ''">
+            <FtIcon name="close" :size="14" :stroke="2" />
+          </view>
+        </view>
 
-      <text class="ops__note">「预设」＝系统内置只读数据（可复制为自定义）；名称带 * 的营养数据来自公开资料补全，供参考</text>
+        <view class="ops">
+          <view class="ops__btn" role="button" @click="startRecognize">拍照识别</view>
+          <view class="ops__btn" role="button" @click="openImport">导入 JSON</view>
+          <view class="ops__btn" role="button" @click="doExport">导出 JSON</view>
+        </view>
 
-      <view class="flist">
-        <view v-for="f in list" :key="f.id" class="frow" @click="onTap(f)">
-          <view class="frow__mid">
-            <view class="frow__line">
-              <text class="frow__name">{{ f.name }}</text>
-              <text v-if="f.preset" class="frow__badge">预设</text>
+        <view class="glass flist">
+          <view class="flist__head">
+            <text class="flist__count ft-num">{{ keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种` }}</text>
+          </view>
+          <view v-for="f in list" :key="f.id" class="frow" @click="onTap(f)">
+            <view class="frow__mid">
+              <view class="frow__line">
+                <text class="frow__name">{{ f.name }}</text>
+                <text v-if="f.preset" class="frow__badge">预设</text>
+              </view>
+              <text class="frow__sub ft-num">{{ perText(f) }}</text>
             </view>
-            <text class="frow__sub ft-num">{{ perText(f) }}</text>
+            <FtIcon name="chevron-right" :size="18" tone="subtle" />
           </view>
-          <text class="frow__go">›</text>
+          <FtEmpty
+            v-if="!loading && list.length === 0"
+            :title="keyword.trim() ? '没有匹配的食物' : '还没有食物'"
+            :sub="keyword.trim() ? '换个关键词，或点右上角新增一种。' : '点右上角「新增」，或拍一张包装营养成分表识别。'"
+          />
+          <view v-else-if="loadingMore" class="flist__more">加载中…</view>
+          <view v-else-if="finished && list.length > 0" class="flist__more ft-num">共 {{ total }} 种食物</view>
         </view>
-        <view v-if="!loading && list.length === 0" class="flist__empty">
-          {{ keyword.trim() ? '没有匹配的食物' : '还没有食物——点右上「+ 新增」' }}
-        </view>
-        <view v-else-if="loadingMore" class="flist__more">加载中…</view>
-        <view v-else-if="finished && list.length > 0" class="flist__more">
-          共 {{ total }} 种食物
-        </view>
-      </view>
-    </view>
 
-    <!-- 组合页签：列表（点条目 → 编辑 / 删除） -->
-    <view v-if="tab === 'combo'" class="foods__body">
-      <text class="ops__note">
-        组合＝一串「食物 ＋ 固定克数」。记录一餐时在记录弹层里点一下即可整份加入；组合的改动不影响已记录的历史
-      </text>
-      <view class="clist">
-        <view v-for="c in combos" :key="c.id" class="crow" @click="onComboTap(c)">
-          <view class="crow__mid">
-            <text class="crow__name">{{ c.name }}</text>
-            <text class="crow__sub ft-num">
-              {{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡
-            </text>
+        <text class="note">「预设」＝系统内置只读数据（可复制为自定义）；名称带 * 的营养数据来自公开资料补全，供参考</text>
+      </template>
+
+      <!-- 组合页签：列表（点条目 → 编辑 / 删除） -->
+      <template v-else>
+        <view class="glass flist">
+          <view v-for="c in combos" :key="c.id" class="frow" @click="onComboTap(c)">
+            <view class="frow__mid">
+              <text class="frow__name">{{ c.name }}</text>
+              <text class="frow__sub ft-num">{{ c.items.length }} 样 · {{ Math.round(c.totalKcal) }} 大卡</text>
+            </view>
+            <FtIcon name="chevron-right" :size="18" tone="subtle" />
           </view>
-          <text class="frow__go">›</text>
+          <FtEmpty
+            v-if="combos.length === 0"
+            title="还没有组合"
+            sub="点右上角「新建」，或在记录一餐时用「把这一餐存为组合」。"
+          />
         </view>
-        <view v-if="combos.length === 0" class="flist__empty">
-          还没有组合——点右上「+ 新建」，或在记录一餐时用「存为组合」
-        </view>
-      </view>
+        <text class="note">
+          组合＝一串「食物 ＋ 固定克数」。记录一餐时在记录弹层里点一下即可整份加入；组合的改动不影响已记录的历史
+        </text>
+      </template>
     </view>
 
     <!-- 导入弹层 -->
-    <view v-if="importSheet.show" class="fs-mask" @click="importSheet.show = false" />
-    <view v-if="importSheet.show" class="fs">
-      <view class="fs__handle" />
-      <text class="fs__title">导入 JSON</text>
-      <text class="fs__hint">粘贴食物数组：数值按「每 100g/100ml」，也可给 kj 自动换算；同名会跳过</text>
-      <textarea
-        v-model="importSheet.text"
-        class="fs__area"
-        placeholder='[{"name":"鸡蛋","kcal":139,"protein":13.1,"fat":8.6,"carb":2.4,"sodium":131}]'
-        placeholder-class="fs__ph"
-        maxlength="-1"
-      />
-      <template v-if="importSheet.result">
-        <view class="fs__result">
+    <FtSheet
+      v-if="importSheet.show"
+      title="导入 JSON"
+      sub="粘贴食物数组：数值按「每 100g/100ml」，也可给 kj 自动换算；同名会跳过"
+      @close="importSheet.show = false"
+    >
+      <scroll-view scroll-y class="fs__scroll">
+        <textarea
+          v-model="importSheet.text"
+          class="fs__area"
+          placeholder='[{"name":"鸡蛋","kcal":139,"protein":13.1,"fat":8.6,"carb":2.4,"sodium":131}]'
+          placeholder-class="fs__ph"
+          maxlength="-1"
+        />
+        <view v-if="importSheet.result" class="fs__result">
           <text class="fs__line ft-num">
             成功 {{ importSheet.result.imported }} · 跳过 {{ importSheet.result.skipped.length }} ·
             失败 {{ importSheet.result.failed.length }}
@@ -352,26 +368,17 @@ function copyExport() {
             失败：{{ fl.name }} —— {{ fl.reason }}
           </text>
         </view>
-      </template>
-      <view
-        class="ft-btn ft-btn--primary ft-btn--block fs__btn"
-        :class="{ 'ft-btn--disabled': importSheet.busy }"
-        @click="doImport"
-      >
+      </scroll-view>
+      <FtButton variant="primary" block :disabled="importSheet.busy" class="fs__btn" @click="doImport">
         导入
-      </view>
-    </view>
+      </FtButton>
+    </FtSheet>
 
     <!-- 导出弹层 -->
-    <view v-if="exportSheet.show" class="fs-mask" @click="exportSheet.show = false" />
-    <view v-if="exportSheet.show" class="fs">
-      <view class="fs__handle" />
-      <text class="fs__title">导出 JSON（已复制到剪贴板）</text>
+    <FtSheet v-if="exportSheet.show" title="导出 JSON" sub="已复制到剪贴板" @close="exportSheet.show = false">
       <textarea :value="exportSheet.text" class="fs__area" maxlength="-1" />
-      <view class="ft-btn ft-btn--primary ft-btn--block fs__btn" @click="copyExport">
-        再复制一次
-      </view>
-    </view>
+      <FtButton block class="fs__btn" @click="copyExport">再复制一次</FtButton>
+    </FtSheet>
 
     <!-- 组合编辑弹层（新建 / 编辑共用） -->
     <ComboEditSheet
@@ -384,74 +391,83 @@ function copyExport() {
 </template>
 
 <style lang="scss" scoped>
-.foods {
-  min-height: 100vh;
+.foods__body {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 28rpx 40rpx calc(64rpx + env(safe-area-inset-bottom));
 }
 
-.foods__head {
+.glass {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+/* 页头右侧的胶囊按钮 */
+.pill {
+  @include glass($glass-bg-strong);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx 12rpx;
-}
-
-.foods__back {
-  font-size: 56rpx;
-  line-height: 1;
-  color: $app-ink;
-  width: 64rpx;
-}
-
-.foods__title {
-  font-size: $text-lg;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.foods__new {
+  gap: 6rpx;
+  padding: 16rpx 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
   font-size: $text-base;
-  color: $app-ink;
-  width: 120rpx;
-  text-align: right;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
 }
 
-/* ── 页签 ── */
-.tabs {
+.pill:active {
+  opacity: 0.7;
+}
+
+/* ── 食物／组合 分段 ── */
+.seg {
+  @include glass;
   display: flex;
-  gap: 44rpx;
-  padding: 6rpx 32rpx 0;
+  padding: 6rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
-.tabs__item {
+.seg__item {
+  flex: 1;
+  padding: 14rpx 0;
+  border-radius: $radius-pill;
+  text-align: center;
   font-size: $text-base;
   color: $app-ink-muted;
-  padding: 10rpx 0;
-  border-bottom: 4rpx solid transparent;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
-.tabs__item--on {
+.seg__item--on {
+  background: $app-surface-2;
   color: $app-ink;
-  font-weight: 600;
-  border-bottom-color: $app-ink;
+  font-weight: $weight-bold;
 }
 
-.foods__body {
-  padding: 12rpx 32rpx 40rpx;
-}
-
+/* ── 搜索 ── */
 .search {
+  @include glass($glass-bg-strong);
   display: flex;
   align-items: center;
   gap: 12rpx;
-  background: $app-surface;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-lg;
-  padding: 16rpx 22rpx;
+  height: 88rpx;
+  padding: 0 28rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
 }
 
 .search__input {
   flex: 1;
-  font-size: $text-base;
+  font-size: $text-md;
   color: $app-ink;
 }
 
@@ -460,54 +476,66 @@ function copyExport() {
 }
 
 .search__clear {
-  font-size: $text-md;
-  color: $app-ink-subtle;
-  padding: 0 6rpx;
-}
-
-.ops {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-muted;
   display: flex;
   align-items: center;
-  gap: 32rpx;
-  padding: 22rpx 8rpx 16rpx;
+  justify-content: center;
+}
+
+/* ── 操作：拍照识别 ／ 导入 ／ 导出 ── */
+.ops {
+  display: flex;
+  gap: 16rpx;
 }
 
 .ops__btn {
+  flex: 1;
+  height: 72rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $text-base;
+  color: $app-ink-2;
+}
+
+.ops__btn:active {
+  opacity: 0.7;
+}
+
+/* ── 列表 ── */
+.flist {
+  padding: 8rpx 28rpx;
+}
+
+.flist__head {
+  padding: 16rpx 0 8rpx;
+}
+
+.flist__count {
   font-size: $text-sm;
   color: $app-ink-muted;
-  border-bottom: 1rpx dashed $app-line;
-  padding-bottom: 2rpx;
-}
-
-.ops__meta {
-  margin-left: auto;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.ops__note {
-  display: block;
-  padding: 0 8rpx 16rpx;
-  font-size: $text-xs;
-  line-height: 1.5;
-  color: $app-ink-subtle;
-}
-
-.flist {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-lg;
-  overflow: hidden;
 }
 
 .frow {
   display: flex;
   align-items: center;
-  padding: 26rpx 28rpx;
+  gap: 16rpx;
+  padding: 24rpx 0;
 }
 
-.frow + .frow {
+.frow + .frow,
+.flist__head + .frow {
   border-top: 1rpx solid $app-line-soft;
+}
+
+.frow:active {
+  opacity: 0.6;
 }
 
 .frow__mid {
@@ -515,7 +543,7 @@ function copyExport() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4rpx;
 }
 
 .frow__line {
@@ -528,149 +556,58 @@ function copyExport() {
 .frow__name {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
 }
 
 .frow__badge {
   flex: none;
-  padding: 5rpx 10rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid $app-line;
-  background: $app-canvas;
-  font-size: 20rpx;
-  line-height: 1;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 
 .frow__sub {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-.frow__go {
-  font-size: 40rpx;
-  color: $app-ink-subtle;
-  line-height: 1;
-  margin-left: 16rpx;
-}
-
-.flist__empty {
-  padding: 60rpx 24rpx;
-  text-align: center;
   font-size: $text-sm;
-  color: $app-ink-subtle;
+  color: $app-ink-muted;
 }
 
 .flist__more {
-  padding: 20rpx 24rpx;
+  padding: 24rpx 0;
+  border-top: 1rpx solid $app-line-soft;
   text-align: center;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-  border-top: 1rpx solid $app-line-soft;
+  font-size: $text-sm;
+  color: $app-ink-muted;
 }
 
-/* ── 组合列表 ── */
-.clist {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
-  border-radius: $radius-lg;
-  overflow: hidden;
+.note {
+  padding: 0 8rpx;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
 }
 
-.crow {
-  display: flex;
-  align-items: center;
-  padding: 26rpx 28rpx;
-}
-
-.crow + .crow {
-  border-top: 1rpx solid $app-line-soft;
-}
-
-.crow__mid {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.crow__name {
-  font-size: $text-md;
-  font-weight: 600;
-  color: $app-ink;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.crow__sub {
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-}
-
-/* ── 弹层 ── */
-.fs-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(23, 25, 29, 0.4);
-  z-index: 90;
-}
-
-.fs {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: $app-surface;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
-  z-index: 91;
-  max-height: 88vh;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-.fs__handle {
-  width: 72rpx;
-  height: 8rpx;
-  border-radius: 4rpx;
-  background: $app-line;
-  margin: 0 auto 24rpx;
-}
-
-.fs__title {
-  display: block;
-  font-size: 34rpx;
-  font-weight: 600;
-  color: $app-ink;
-}
-
-.fs__hint {
-  display: block;
-  font-size: $text-xs;
-  color: $app-ink-subtle;
-  padding: 10rpx 0 18rpx;
+/* ── 导入／导出弹层（壳是 FtSheet） ── */
+.fs__scroll {
+  max-height: 56vh;
 }
 
 .fs__area {
   width: 100%;
   height: 380rpx;
-  background: $app-canvas;
-  border: 1rpx solid $app-line;
+  box-sizing: border-box;
+  padding: 24rpx;
+  background: $app-surface;
   border-radius: $radius-lg;
-  padding: 20rpx;
+  font-family: $font-num;
   font-size: $text-sm;
   color: $app-ink;
-  box-sizing: border-box;
 }
 
 .fs__ph {
@@ -678,28 +615,35 @@ function copyExport() {
 }
 
 .fs__result {
-  padding: 20rpx 4rpx 0;
   display: flex;
   flex-direction: column;
   gap: 8rpx;
+  padding: 24rpx 8rpx 0;
 }
 
 .fs__line {
-  font-size: $text-sm;
+  font-size: $text-base;
   color: $app-ink;
 }
 
 .fs__skip {
-  font-size: $text-xs;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
 .fs__fail {
-  font-size: $text-xs;
-  color: #c4453c;
+  font-size: $text-sm;
+  color: $app-danger;
 }
 
-.fs__btn {
+.foods .fs__btn {
+  flex-shrink: 0;
   margin-top: 28rpx;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg__item {
+    transition: none;
+  }
 }
 </style>
