@@ -330,11 +330,7 @@ function doDelete() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 /* ── 页头 ── */
@@ -391,14 +387,7 @@ function doDelete() {
 
 /* ── 多选态页头 ── */
 .pill {
-  @include glass($glass-bg-strong);
-  padding: 14rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
+  @include glass-pill(14rpx 28rpx);
 }
 
 .pill--danger {

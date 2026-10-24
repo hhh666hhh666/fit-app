@@ -505,42 +505,26 @@ const fullHeight = computed(() => {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 /* ── 分段（页头的记录／趋势、趋势的五指标共用） ── */
 .seg {
-  @include glass;
+  @include seg-track;
   display: flex;
-  padding: 6rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
 }
 
 .seg__item {
-  padding: 12rpx 28rpx;
-  border-radius: $radius-pill;
+  @include seg-item;
   text-align: center;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 .seg--wide .seg__item {
@@ -964,9 +948,8 @@ const fullHeight = computed(() => {
 }
 
 .eq {
+  @include sheet-card;
   padding: 8rpx 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .eq__row {

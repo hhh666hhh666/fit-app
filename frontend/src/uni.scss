@@ -141,6 +141,140 @@ $ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 }
 
+// ── 页面里的共用形状 ──
+// 各页类名照旧写在自己的 scoped 样式里（`.glass`、`.pill`、`.seg` …），声明体一律 `@include` 这里；
+// 布局（flex、gap、外边距）和各页特有的内边距留在页面里。改某个形状的样子只改这里。
+@mixin glass-card {
+  @include glass;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-lg;
+  box-shadow: $glass-shadow;
+  padding: 32rpx 36rpx;
+}
+
+// 页头右侧的玻璃胶囊按钮（编辑 / 取消 / 删除）
+@mixin glass-pill($padding: 16rpx 28rpx) {
+  @include glass($glass-bg-strong);
+  padding: $padding;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+}
+
+// 分段控件：轨道三种底（玻璃 / 卡里的实白 / 细描边），选项与选中态共用
+@mixin seg-track {
+  @include glass;
+  padding: 6rpx;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-sm;
+}
+
+@mixin seg-track-solid {
+  display: flex;
+  padding: 6rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+}
+
+@mixin seg-track-outline {
+  display: flex;
+  padding: 4rpx;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-pill;
+}
+
+@mixin seg-item($padding: 12rpx 28rpx) {
+  padding: $padding;
+  border-radius: $radius-pill;
+  font-size: $text-base;
+  color: $app-ink-muted;
+  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+}
+
+@mixin seg-item-on {
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
+}
+
+@mixin card-title {
+  font-size: $text-title;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+// 小角标；颜色由状态决定的传 null，交给修饰类
+@mixin badge($bg: $app-surface-2, $color: $app-ink-muted) {
+  flex: none;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $bg;
+  font-size: $text-xs;
+  color: $color;
+}
+
+// 多选时贴底的操作条：「已选 N 项 · 全选 · 删除」，放在 `.selbar { … }` 里 include，
+// 子元素类名固定为 `__count` / `__all` / `__del`
+@mixin selbar {
+  @include glass($glass-bg-strong);
+  position: fixed;
+  left: $tabbar-side;
+  right: $tabbar-side;
+  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  height: 104rpx;
+  padding: 0 12rpx 0 36rpx;
+  box-sizing: border-box;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $glass-shadow-float;
+
+  &__count {
+    flex: 1;
+    font-size: $text-md;
+    color: $app-ink;
+  }
+
+  &__all {
+    padding: 16rpx 20rpx;
+    font-size: $text-base;
+    color: $app-ink-2;
+  }
+
+  &__del {
+    height: 80rpx;
+    padding: 0 40rpx;
+    display: flex;
+    align-items: center;
+    border-radius: $radius-pill;
+    background: $app-danger;
+    font-size: $text-md;
+    font-weight: $weight-bold;
+    color: $app-surface;
+  }
+
+  &__del.is-off {
+    opacity: 0.35;
+  }
+
+  &__all:active,
+  &__del:active {
+    opacity: 0.7;
+  }
+}
+
+// 底部弹层（FtSheet 实底）里的白卡分组；内边距各弹层自定
+@mixin sheet-card {
+  background: $app-surface;
+  border-radius: $radius-lg;
+}
+
 // ── 字体 ──
 // 中文走系统字体，只用 400 / 700 两档（安卓各家中文字体的中间字重不可靠）；
 // 数字与拉丁字符（含 kg、×）走自托管的 Nunito 700 / 800（`src/assets/fonts/`，App.vue 里声明）。

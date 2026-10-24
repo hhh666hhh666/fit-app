@@ -129,11 +129,7 @@ async function submit() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .form {
@@ -144,27 +140,18 @@ async function submit() {
 
 /* ── 登录／注册 分段 ── */
 .seg {
-  display: flex;
+  @include seg-track-solid;
   margin-bottom: 8rpx;
-  padding: 6rpx;
-  border-radius: $radius-pill;
-  background: $app-surface;
 }
 
 .seg__item {
+  @include seg-item(14rpx 0);
   flex: 1;
-  padding: 14rpx 0;
-  border-radius: $radius-pill;
   text-align: center;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 /* ── 输入框：白底胶囊，标签在左 ── */

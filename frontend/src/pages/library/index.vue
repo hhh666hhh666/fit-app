@@ -340,27 +340,16 @@ async function confirmCreate() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 /* 页头右侧的胶囊按钮 */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6rpx;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill:active {
@@ -403,11 +392,7 @@ async function confirmCreate() {
 
 /* ── 肌群分段：八项放不下一行，壳不动、里面横滑 ── */
 .seg {
-  @include glass;
-  padding: 6rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
+  @include seg-track;
   overflow: hidden;
 }
 
@@ -420,18 +405,12 @@ async function confirmCreate() {
 }
 
 .seg__item {
+  @include seg-item;
   flex-shrink: 0;
-  padding: 12rpx 28rpx;
-  border-radius: $radius-pill;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 .seg__n {
@@ -529,12 +508,7 @@ async function confirmCreate() {
 }
 
 .badge {
-  flex: none;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-xs;
-  color: $app-ink-muted;
+  @include badge;
 }
 
 .erow__sub {
@@ -557,54 +531,11 @@ async function confirmCreate() {
 
 /* ── 多选操作条 ── */
 .selbar {
-  @include glass($glass-bg-strong);
-  position: fixed;
-  left: $tabbar-side;
-  right: $tabbar-side;
-  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  height: 104rpx;
-  padding: 0 12rpx 0 36rpx;
-  box-sizing: border-box;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $glass-shadow-float;
+  @include selbar;
 }
 
 .selbar__count {
-  flex: 1;
-  font-size: $text-md;
   font-weight: $weight-bold;
-  color: $app-ink;
-}
-
-.selbar__all {
-  padding: 16rpx 20rpx;
-  font-size: $text-base;
-  color: $app-ink-2;
-}
-
-.selbar__del {
-  height: 80rpx;
-  padding: 0 40rpx;
-  display: flex;
-  align-items: center;
-  border-radius: $radius-pill;
-  background: $app-danger;
-  font-size: $text-md;
-  font-weight: $weight-bold;
-  color: $app-surface;
-}
-
-.selbar__del.is-off {
-  opacity: 0.35;
-}
-
-.selbar__all:active,
-.selbar__del:active {
-  opacity: 0.7;
 }
 
 /* ── 新增动作弹层（壳是 FtSheet，分组是白卡） ── */
@@ -645,9 +576,8 @@ async function confirmCreate() {
 }
 
 .group {
+  @include sheet-card;
   padding: 24rpx 28rpx 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .group__label {

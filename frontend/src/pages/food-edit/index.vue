@@ -389,11 +389,7 @@ async function save() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .block {
@@ -445,10 +441,7 @@ async function save() {
 
 /* 数值基准：和全站分段控件同一套（选中＝深字 ＋ 浅胶囊底） */
 .units {
-  display: flex;
-  padding: 6rpx;
-  border-radius: $radius-pill;
-  background: $app-surface;
+  @include seg-track-solid;
 }
 
 .unit {

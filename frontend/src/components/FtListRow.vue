@@ -1,6 +1,6 @@
 <!--
   列表行（晴窗）：左侧可选图标位、标题 ＋ 副标题、右侧值或箭头。行与行之间是细线，
-  放在 FtCard 或 FtSheet 里用。highlight＝浅底胶囊（如「今天的计划」）。
+  放在玻璃卡（页面的 `.glass`）或 FtSheet 里用。highlight＝浅底胶囊（如「今天的计划」）。
 -->
 <script setup lang="ts">
 import FtIcon from '@/components/FtIcon.vue'

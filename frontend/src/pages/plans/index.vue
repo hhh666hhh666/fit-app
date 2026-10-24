@@ -202,27 +202,16 @@ function startPreviewPlan() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 /* 页头右侧的胶囊按钮 */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6rpx;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill:active {
@@ -329,9 +318,8 @@ function startPreviewPlan() {
 }
 
 .pv {
+  @include sheet-card;
   padding: 0 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .pvrow {
@@ -378,12 +366,7 @@ function startPreviewPlan() {
 }
 
 .badge {
-  flex-shrink: 0;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-xs;
-  color: $app-ink-muted;
+  @include badge;
 }
 
 .pv__actions {

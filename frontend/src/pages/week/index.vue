@@ -88,11 +88,7 @@ function editDay(idx: number) {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .note {
@@ -157,12 +153,7 @@ function editDay(idx: number) {
 }
 
 .badge {
-  flex-shrink: 0;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface;
-  font-size: $text-xs;
-  color: $app-ink-muted;
+  @include badge($app-surface);
 }
 
 .dayrow__name {

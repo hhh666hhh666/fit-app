@@ -108,11 +108,7 @@ function durationText(ms: number): string {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .note {
@@ -171,10 +167,7 @@ function durationText(ms: number): string {
 }
 
 .badge {
-  flex: none;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  font-size: $text-xs;
+  @include badge(null, null);
 }
 
 /* 失败：浅橙底 ＋ 危险色字（与编辑食物页「待核对」同一个角标） */

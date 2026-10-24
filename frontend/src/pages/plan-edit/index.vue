@@ -561,17 +561,11 @@ function removePlan() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 .ph {
@@ -581,17 +575,10 @@ function removePlan() {
 
 /* 页头右侧的胶囊按钮；删除用危险色字，不上色块（一屏的色块留给保存） */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill--danger {
@@ -729,12 +716,7 @@ function removePlan() {
 }
 
 .badge {
-  flex: none;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-xs;
-  color: $app-ink-muted;
+  @include badge;
 }
 
 .erow__sub {
@@ -830,10 +812,9 @@ function removePlan() {
 
 /* 逐组目标 */
 .sets {
+  @include sheet-card;
   margin-top: 20rpx;
   padding: 8rpx 28rpx 12rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .sets__head {
@@ -904,9 +885,8 @@ function removePlan() {
 
 /* 循环组 */
 .cs {
+  @include sheet-card;
   padding: 0 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .cs__row {
@@ -944,11 +924,8 @@ function removePlan() {
 
 /* 组号 A–D：一组小分段（选中＝深字 ＋ 浅胶囊底） */
 .cs__nos {
-  display: flex;
+  @include seg-track-outline;
   align-self: flex-start;
-  padding: 4rpx;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-pill;
 }
 
 .cs__no {

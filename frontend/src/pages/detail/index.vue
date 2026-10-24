@@ -485,17 +485,11 @@ function back() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 .ph {
@@ -512,17 +506,10 @@ function back() {
 
 /* 页头右侧的胶囊按钮 */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill:active {

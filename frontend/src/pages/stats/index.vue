@@ -183,11 +183,7 @@ function barHeight(count: number): string {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .card-head {
@@ -198,9 +194,7 @@ function barHeight(count: number): string {
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 .card-meta {
@@ -227,26 +221,16 @@ function barHeight(count: number): string {
 
 /* ── 周期分段 ── */
 .seg {
-  @include glass;
+  @include seg-track;
   display: flex;
-  padding: 6rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
 }
 
 .seg__item {
-  padding: 12rpx 24rpx;
-  border-radius: $radius-pill;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+  @include seg-item(12rpx 24rpx);
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 /* ── 次数 ／ 时长 ── */

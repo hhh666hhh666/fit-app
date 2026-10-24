@@ -192,11 +192,7 @@ async function save() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .block {
@@ -205,9 +201,7 @@ async function save() {
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 .block__hint {

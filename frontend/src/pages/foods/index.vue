@@ -399,27 +399,16 @@ function copyExport() {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 /* 页头右侧的胶囊按钮 */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6rpx;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill:active {
@@ -428,28 +417,18 @@ function copyExport() {
 
 /* ── 食物／组合 分段 ── */
 .seg {
-  @include glass;
+  @include seg-track;
   display: flex;
-  padding: 6rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
 }
 
 .seg__item {
+  @include seg-item(14rpx 0);
   flex: 1;
-  padding: 14rpx 0;
-  border-radius: $radius-pill;
   text-align: center;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 /* ── 搜索 ── */

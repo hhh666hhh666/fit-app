@@ -924,11 +924,7 @@ function fatText(v: number | null | undefined): string {
 }
 
 .glass {
-  @include glass;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-lg;
-  box-shadow: $glass-shadow;
-  padding: 32rpx 36rpx;
+  @include glass-card;
 }
 
 .hint {
@@ -953,17 +949,10 @@ function fatText(v: number | null | undefined): string {
 
 /* 页头右侧的胶囊按钮 */
 .pill {
-  @include glass($glass-bg-strong);
+  @include glass-pill;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 16rpx 28rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink-2;
 }
 
 .pill:active {
@@ -980,9 +969,7 @@ function fatText(v: number | null | undefined): string {
 }
 
 .card-title {
-  font-size: $text-title;
-  font-weight: $weight-bold;
-  color: $app-ink;
+  @include card-title;
 }
 
 .card-meta {
@@ -1174,12 +1161,8 @@ function fatText(v: number | null | undefined): string {
 
 /* ── 分段控件 ── */
 .seg {
-  @include glass;
+  @include seg-track;
   display: flex;
-  padding: 6rpx;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $shadow-sm;
 }
 
 .seg--full {
@@ -1187,12 +1170,8 @@ function fatText(v: number | null | undefined): string {
 }
 
 .seg__item {
-  padding: 10rpx 28rpx;
-  border-radius: $radius-pill;
+  @include seg-item(10rpx 28rpx);
   text-align: center;
-  font-size: $text-base;
-  color: $app-ink-muted;
-  transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
 }
 
 .seg--full .seg__item {
@@ -1201,9 +1180,7 @@ function fatText(v: number | null | undefined): string {
 }
 
 .seg__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 /* ── 全部记录 ── */
@@ -1321,53 +1298,7 @@ function fatText(v: number | null | undefined): string {
 }
 
 .selbar {
-  @include glass($glass-bg-strong);
-  position: fixed;
-  left: $tabbar-side;
-  right: $tabbar-side;
-  bottom: calc(#{$tabbar-gap} + env(safe-area-inset-bottom));
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  height: 104rpx;
-  padding: 0 12rpx 0 36rpx;
-  box-sizing: border-box;
-  border: 1rpx solid $glass-edge;
-  border-radius: $radius-pill;
-  box-shadow: $glass-shadow-float;
-}
-
-.selbar__count {
-  flex: 1;
-  font-size: $text-md;
-  color: $app-ink;
-}
-
-.selbar__all {
-  padding: 16rpx 20rpx;
-  font-size: $text-base;
-  color: $app-ink-2;
-}
-
-.selbar__del {
-  height: 80rpx;
-  padding: 0 40rpx;
-  display: flex;
-  align-items: center;
-  border-radius: $radius-pill;
-  background: $app-danger;
-  font-size: $text-md;
-  font-weight: $weight-bold;
-  color: $app-surface;
-}
-
-.selbar__del.is-off {
-  opacity: 0.35;
-}
-
-.selbar__all:active,
-.selbar__del:active {
-  opacity: 0.7;
+  @include selbar;
 }
 
 /* ── 弹层（壳是 FtSheet，分组是白卡） ── */
@@ -1388,9 +1319,8 @@ function fatText(v: number | null | undefined): string {
 }
 
 .group {
+  @include sheet-card;
   padding: 4rpx 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .group + .group {
@@ -1473,11 +1403,8 @@ function fatText(v: number | null | undefined): string {
 
 /* 小分段（体重单位、性别）：选中＝深字 ＋ 浅胶囊底 */
 .units {
+  @include seg-track-outline;
   flex-shrink: 0;
-  display: flex;
-  padding: 4rpx;
-  border: 1rpx solid $app-line;
-  border-radius: $radius-pill;
 }
 
 .units__item {
@@ -1488,9 +1415,7 @@ function fatText(v: number | null | undefined): string {
 }
 
 .units__item--on {
-  background: $app-surface-2;
-  color: $app-ink;
-  font-weight: $weight-bold;
+  @include seg-item-on;
 }
 
 /* 性别那一行没有输入框，小分段靠右 */
@@ -1571,9 +1496,8 @@ function fatText(v: number | null | undefined): string {
 
 /* 「怎么算的」：与饮食页同一套排版 */
 .eq {
+  @include sheet-card;
   padding: 8rpx 28rpx;
-  background: $app-surface;
-  border-radius: $radius-lg;
 }
 
 .eq__row {
