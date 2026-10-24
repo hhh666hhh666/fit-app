@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FtIcon from '@/components/FtIcon.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useTrainingStore } from '@/stores/training'
@@ -180,7 +181,7 @@ async function loadPlan(pid: number) {
 /**
  * 进场分两路（ADR 0020）：
  * - 带 `fresh=1`（首页点「开始训练」选了计划/自由训练）＝一定是新会话；
- * - 否则（首页横幅点「继续」、或直接进本页）＝有本机会话就接续，没有才新建。
+ * - 否则（底栏圆钮点「继续」、或直接进本页）＝有本机会话就接续，没有才新建。
  */
 async function bootstrap(q: Record<string, string | undefined>) {
   const existing = q.fresh === '1' ? null : loadSession()
@@ -718,7 +719,7 @@ function comingSoon(tip: string) {
                 <text class="setrow__value ft-num">{{ setValueText(s) }}</text>
                 <text v-if="s.dur != null" class="setrow__dur ft-num">{{ formatClock(s.dur) }}</text>
                 <view class="setrow__checkbox">
-                  <wd-icon name="check" size="14px" />
+                  <FtIcon name="check" :size="14" :stroke="2.4" />
                 </view>
               </template>
 
@@ -760,7 +761,7 @@ function comingSoon(tip: string) {
                   :class="{ 'setrow__check--pending': !isActive(i) }"
                   @click="completeSet(i)"
                 >
-                  <wd-icon name="check" size="14px" :color="isActive(i) ? '#ffffff' : ''" />
+                  <FtIcon name="check" :size="14" :stroke="2.4" :tone="isActive(i) ? 'inverse' : 'inherit'" />
                 </view>
               </template>
             </view>

@@ -18,6 +18,7 @@ import { deletePhoto, fetchPhotoUrl, pickAndUploadPhoto } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -340,7 +341,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
         <!-- 添加区 -->
         <view class="add">
           <view v-if="!selected" class="asearch">
-            <wd-icon name="search" size="15px" color="#8a8f98" />
+            <FtIcon name="search" :size="15" tone="subtle" />
             <input
               v-model="keyword"
               class="asearch__input"

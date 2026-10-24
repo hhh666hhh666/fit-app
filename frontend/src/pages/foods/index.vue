@@ -17,6 +17,7 @@ import { choosePhoto, compress } from '@/utils/photo'
 import { useRecognitionStore } from '@/stores/recognition'
 import { ensureLogin } from '@/utils/guard'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
@@ -261,7 +262,7 @@ function copyExport() {
 
     <view v-if="tab === 'food'" class="foods__body">
       <view class="search">
-        <wd-icon name="search" size="16px" color="#8a8f98" />
+        <FtIcon name="search" :size="16" tone="subtle" />
         <input
           v-model="keyword"
           class="search__input"

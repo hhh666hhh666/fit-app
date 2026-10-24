@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FtIcon from '@/components/FtIcon.vue'
 import { ref } from 'vue'
 import {
   createCombo,
@@ -154,7 +155,7 @@ async function save() {
 
       <view v-else class="picker">
         <view class="psearch">
-          <wd-icon name="search" size="15px" color="#8a8f98" />
+          <FtIcon name="search" :size="15" tone="subtle" />
           <input
             v-model="keyword"
             class="psearch__input"

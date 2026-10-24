@@ -7,6 +7,7 @@ import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 计划编辑/新建（设计稿：.workbuddy/stitch/screen/plan-edit.png）──
 
@@ -431,7 +432,7 @@ function goBack() {
           >动作编排 <text class="pe__sect-sub">[按顺序执行]</text></text
         >
         <view class="pe__gear" @click="openCircuit">
-          <wd-icon name="setting" size="15px" color="#8a8f98" />
+          <FtIcon name="sliders" :size="15" tone="subtle" />
           <text class="pe__gear-text">高级</text>
           <text v-if="circuitCount > 0" class="pe__gear-dot ft-num">{{ circuitCount }}</text>
         </view>

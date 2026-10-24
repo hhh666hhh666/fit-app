@@ -8,6 +8,7 @@ import type { WorkoutDetail } from '@/api/workout'
 import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
+import FtIcon from '@/components/FtIcon.vue'
 
 const detail = ref<WorkoutDetail | null>(null)
 const loading = ref(true)
@@ -318,7 +319,7 @@ function back() {
         </view>
         <view v-if="detail" class="detail__act" @click="onHeadAction">
           <!-- 编辑态：文字「编辑」变 ✓；点它即保存 -->
-          <wd-icon v-if="editing" name="check" size="20px" />
+          <FtIcon v-if="editing" name="check" :size="20" :stroke="2.2" />
           <text v-else class="detail__edit">编辑</text>
         </view>
         <text v-else class="detail__edit detail__edit--off">编辑</text>

@@ -24,30 +24,73 @@ onLaunch(() => {
 </script>
 
 <style lang="scss">
-page {
+/* ── 数字字体：Nunito 700 / 800，自托管、只含拉丁子集（ADR 0041）──
+   0–9 在这套字里本来就等宽（同一个前进宽度），计时器每秒跳也不会左右抖，
+   所以不依赖 `tnum` 特性（它不带）。swap：字体没到之前先用系统字，不白屏。 */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@/assets/fonts/nunito-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('@/assets/fonts/nunito-latin-800-normal.woff2') format('woff2');
+}
+
+/* 纯色兜底放在 body 上（它的底色会铺满整个画布），页面根**必须透明**：
+   下面那层渐变是 z-index:-1 的 fixed 伪元素，页面根一旦有底色就把它盖住了 */
+body {
   background-color: $app-canvas;
+}
+
+page {
+  background-color: transparent;
   color: $app-ink;
+  font-family: $font-text;
   font-size: $text-md;
   line-height: 1.6;
 }
 
-/* ── 通用件（2026-10-11 按「训练日志」设计语言抽出，页面别再各写一份）── */
+/* 晴窗的底是一层渐变 ＋ 光晕，**钉在视口上**不随内容滚：长页滚到底光晕还在原位，
+   玻璃面板底下始终有东西可透。不用 background-attachment: fixed——安卓 WebView
+   上它要么不生效、要么滚动时整屏重绘（每块玻璃都在模糊，那就是掉帧）。 */
+page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: $app-canvas-bg;
+}
+
+/* ── 通用件（按「晴窗」换皮；页面别再各写一份。组件化的版本见 components/Ft*.vue）── */
 
 .ft-page {
   padding: 24rpx 24rpx 48rpx;
 }
 
+/* 玻璃卡片 */
 .ft-card {
-  background: $app-surface;
-  border: 1rpx solid $app-line-soft;
+  background: $glass-bg;
+  -webkit-backdrop-filter: $glass-blur;
+  backdrop-filter: $glass-blur;
+  border: 1rpx solid $glass-edge;
   border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  padding: 28rpx;
+  box-shadow: $glass-shadow;
+  padding: 32rpx;
   margin-bottom: 24rpx;
 }
 
-/* 数字：所有重量/次数/日期/容量用表格数字（等宽对齐，像日志的栏目） */
+/* 数字：重量 / 次数 / 日期 / 容量一律走 Nunito（0–9 等宽，竖排也对得齐） */
 .ft-num {
+  font-family: $font-num;
+  font-weight: $weight-bold;
   font-feature-settings: 'tnum';
   font-variant-numeric: tabular-nums;
 }
@@ -56,26 +99,36 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 88rpx;
-  border-radius: $radius-lg;
-  font-size: $text-lg;
-  background: $app-surface;
-  color: $app-ink;
-  border: 1rpx solid $app-line;
+  height: 92rpx;
+  border-radius: $radius-pill;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  background: $glass-bg-strong;
+  color: $app-ink-2;
+  border: 1rpx solid $glass-edge;
+  box-shadow: $shadow-sm;
   box-sizing: border-box;
+  transition: transform $dur-fast $ease-out, opacity $dur-fast $ease-out;
 }
 
-/* 主按钮：墨黑底白字（全站仅此一种主按钮样式） */
+/* 按压反馈：轻微下沉。全站按钮一个手感 */
+.ft-btn:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* 主按钮：橙色渐变（橙色只给动作——每页最多一个） */
 .ft-btn--primary {
-  background: $app-ink;
-  color: #ffffff;
-  border-color: $app-ink;
-  font-weight: 500;
+  background: $accent-bg;
+  color: $app-surface;
+  border-color: transparent;
+  box-shadow: $accent-shadow;
 }
 
 .ft-btn--ghost {
   background: transparent;
   border-color: $app-line;
+  box-shadow: none;
   color: $app-ink-muted;
 }
 
@@ -107,11 +160,12 @@ page {
   color: $app-ink-subtle;
 }
 
-/* 荧光笔高亮：只给「被划过的数字」用（如 PR）——整块圆角荧光底（对齐设计稿） */
+/* PR 高亮：浅橙底 ＋ 深橙字（晴窗里荧光笔退役；PR 属于「动作的结果」，归橙色） */
 .ft-marker {
   background: $app-highlight;
   border-radius: 16rpx;
   padding: 4rpx 12rpx;
+  color: $accent-strong;
 }
 
 .ft-empty {
@@ -156,7 +210,8 @@ page {
   overflow: hidden;
   pointer-events: none;
   z-index: 10;
-  background: $app-canvas;
+  /* 和 page::before 同一层渐变、同样钉在视口：滑动期间底色严丝合缝 */
+  background: $app-canvas-bg;
   will-change: transform;
   /* 克隆体可能比视口高，滑出时不能让它撑出滚动条 */
   contain: paint;

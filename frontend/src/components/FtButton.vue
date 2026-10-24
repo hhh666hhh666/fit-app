@@ -1,0 +1,103 @@
+<!--
+  按钮（晴窗）：primary＝橙色渐变，**只给动作**，一屏最多一个；secondary＝玻璃胶囊；
+  ghost＝只有描边。按下统一轻微下沉。
+-->
+<script setup lang="ts">
+const props = withDefaults(
+  defineProps<{
+    variant?: 'primary' | 'secondary' | 'ghost'
+    block?: boolean
+    disabled?: boolean
+    size?: 'md' | 'sm'
+  }>(),
+  { variant: 'secondary', block: false, disabled: false, size: 'md' }
+)
+const emit = defineEmits<{ click: [] }>()
+
+function onClick() {
+  if (!props.disabled) emit('click')
+}
+</script>
+
+<template>
+  <view
+    class="ft-button"
+    :class="['ft-button--' + variant, 'ft-button--' + size, { 'is-block': block, 'is-disabled': disabled }]"
+    role="button"
+    :aria-disabled="disabled"
+    @click="onClick"
+  >
+    <slot />
+  </view>
+</template>
+
+<style lang="scss" scoped>
+.ft-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  box-sizing: border-box;
+  border-radius: $radius-pill;
+  border: 1rpx solid transparent;
+  font-weight: $weight-bold;
+  line-height: 1;
+  transition: transform $dur-fast $ease-out, opacity $dur-fast $ease-out;
+}
+
+.ft-button:active {
+  transform: scale(0.97);
+}
+
+.ft-button--md {
+  height: 92rpx;
+  padding: 0 40rpx;
+  font-size: $text-md;
+}
+
+.ft-button--sm {
+  height: 64rpx;
+  padding: 0 28rpx;
+  font-size: $text-base;
+}
+
+.ft-button--primary {
+  background: $accent-bg;
+  color: $app-surface;
+  box-shadow: $accent-shadow;
+}
+
+.ft-button--secondary {
+  background: $glass-bg-strong;
+  -webkit-backdrop-filter: $glass-blur;
+  backdrop-filter: $glass-blur;
+  border-color: $glass-edge;
+  color: $app-ink-2;
+  box-shadow: $shadow-sm;
+}
+
+.ft-button--ghost {
+  background: transparent;
+  border-color: $app-line;
+  color: $app-ink-muted;
+}
+
+.is-block {
+  display: flex;
+  width: 100%;
+}
+
+.is-disabled {
+  opacity: 0.4;
+}
+
+.is-disabled:active {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-button {
+    transition: none;
+  }
+}
+</style>

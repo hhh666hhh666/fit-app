@@ -5,6 +5,7 @@ import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem 
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 动作库（设计稿：.workbuddy/stitch/screen/library.png）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
@@ -196,7 +197,7 @@ function goBack() {
 
     <!-- 搜索 -->
     <view class="search">
-      <wd-icon name="search" size="16px" color="#8a8f98" />
+      <FtIcon name="search" :size="16" tone="subtle" />
       <input
         v-model="keyword"
         class="search__input"
@@ -251,7 +252,7 @@ function goBack() {
           class="erow__check"
           :class="{ 'erow__check--on': selected.has(e.id) }"
         >
-          <wd-icon v-if="selected.has(e.id)" name="check" size="13px" color="#ffffff" />
+          <FtIcon v-if="selected.has(e.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
         </view>
         <view class="erow__mid">
           <text class="erow__name">{{ e.name }}</text>

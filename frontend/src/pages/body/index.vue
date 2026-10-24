@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FtIcon from '@/components/FtIcon.vue'
 import { computed, ref } from 'vue'
 import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
 import {
@@ -732,7 +733,7 @@ function fatText(v: number | null | undefined): string {
             class="mrow__check"
             :class="{ 'mrow__check--on': selected.has(r.id) }"
           >
-            <wd-icon v-if="selected.has(r.id)" name="check" size="13px" color="#ffffff" />
+            <FtIcon v-if="selected.has(r.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
           </view>
           <view class="mrow__dot" :class="{ 'mrow__dot--hollow': i !== 0 }" />
           <view class="mrow__main">

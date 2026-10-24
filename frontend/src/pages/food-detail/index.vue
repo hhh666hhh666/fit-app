@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
+import FtIcon from '@/components/FtIcon.vue'
 
 // ── 食物详情（只读）：预置＝「复制为自定义」；自有＝编辑/删除。食物库列表点条目进入。 ──
 //    只展示「有值」的营养字段（空字段不占版面）；主组固定显示（未测显示 —）。
@@ -154,11 +155,7 @@ function doDelete() {
         <view class="fd__head-side fd__head-side--right">
           <!-- 星标＝收藏（收藏后置顶）；预置与自有都可收藏 -->
           <view v-if="food" class="fd__fav" @click="toggleFavorite">
-            <wd-icon
-              :name="favorited ? 'star-filled' : 'star'"
-              size="20px"
-              :color="favorited ? '#E0A93B' : '#B4B9C0'"
-            />
+            <FtIcon :name="favorited ? 'star-fill' : 'star'" :size="20" :tone="favorited ? 'gold' : 'subtle'" />
           </view>
         </view>
       </view>
