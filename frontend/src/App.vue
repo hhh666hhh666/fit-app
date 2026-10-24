@@ -2,6 +2,7 @@
 import { onLaunch } from '@dcloudio/uni-app'
 import { hydrateCache } from '@/api/cache'
 import { installBackHandler } from '@/utils/backStack'
+import { installPagePush } from '@/utils/pagePush'
 
 // 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
 // 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
@@ -13,6 +14,9 @@ onLaunch(() => {
 
   // 返回键 / Esc 先关最上面的弹层（安卓壳的 onBackPressed 会先问 window.__ftBack）
   installBackHandler()
+
+  // 二级页（navigateTo / redirectTo）从右侧推入；返回与主 tab 切换不经过这里
+  installPagePush()
 
   // 主 tab 的页面 chunk 按页懒加载（各页产物 `pages-*-index.js`）。页面虽然保活了
   // （`switchTab`，ADR 0038），但**第一次**切过去仍要现拉 chunk，那一拍里页面还挂不上，
