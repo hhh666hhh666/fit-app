@@ -232,10 +232,10 @@ async function save() {
 
 <style lang="scss" scoped>
 /* 和 MealSheet 同一套弹层皮：实底面板 ＋ 不透明白卡分组（弹层里不做玻璃） */
+/* 透明的全屏容器；遮罩的颜色在 ft-overlay__hit 上（App.vue「弹层进出」） */
 .cs-mask {
   position: fixed;
   inset: 0;
-  background: $app-mask;
   z-index: 90;
 }
 

@@ -515,10 +515,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 <style lang="scss" scoped>
 /* 弹层是实底（晴窗：底部弹层不做玻璃——底下压着遮罩，没有可透的东西）；
    弹层里的分组用不透明白卡，和页面上的玻璃卡区分开 */
+/* 透明的全屏容器；遮罩的颜色在 ft-overlay__hit 上（App.vue「弹层进出」） */
 .ms-mask {
   position: fixed;
   inset: 0;
-  background: $app-mask;
   z-index: 90;
 }
 

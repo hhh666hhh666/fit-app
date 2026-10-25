@@ -275,32 +275,40 @@ uni-toast .uni-simple-toast__text {
 }
 
 /* ── 弹层进出：FtSheet、MealSheet、ComboEditSheet、PhotoViewer 共用 ──
-   结构约定：遮罩是组件的**根**（类 `ft-overlay`），面板是它的子元素（类 `ft-overlay__panel`）。
-   - 进场：挂载即播（keyframes）——遮罩底色从透明淡进、面板从底部升起，父组件包不包 Transition 都有；
+   结构约定：组件的**根**是一个透明的全屏容器（类 `ft-overlay`），里面两层：
+   `ft-overlay__hit`（遮罩的颜色 ＋ 点它关闭）和 `ft-overlay__panel`（面板，fixed 盖在它上面）。
+   - 进场：挂载即播（keyframes）——遮罩淡进、面板从底部升起，父组件包不包 Transition 都有；
    - 离场：父组件用 `<Transition name="ft-sheet">` 包住 `v-if`。点遮罩、返回键、保存成功……
      不管从哪关，都是父组件把 v-if 置 false，Transition 先播完再卸载；
-   - Vue 只量**根元素**的时长，所以根上那条底色过渡是计时用的，面板的位移和它同长。
-   全屏看图没有面板，用 `ft-overlay--fade` 整层淡进淡出。
+   - ⚠️ **只动 opacity 与 transform**（合成层，不重绘）。0.28.0 曾让根元素动 `background-color`，
+     整屏遮罩每帧都在主线程重绘，安卓 WebView 上进出场明显掉帧（主人真机反馈「生硬、帧率很低」）；
+   - Vue 只量**根元素**的时长：根上那条 opacity 过渡不改值，只是给它计时（量到时长、到点收尾），
+     真正在动的是遮罩层与面板，三者同长；
+   - 面板常驻 `will-change: transform`：不然进场播完浏览器就撤掉它的图层，离场第一帧要把整块面板
+     （记一餐里是长列表 ＋ 图片）重新栅格化，最容易卡的就是这一下。
+   全屏看图没有面板，用 `ft-overlay--fade` 整层淡进淡出（底色在根上，动的是根的 opacity）。
    减少动态效果时不位移、只淡（确认「关上了」的那一下还在）。 */
-.ft-overlay {
-  animation: ft-overlay-in $dur-base $ease-out;
+.ft-overlay__hit {
+  position: absolute;
+  inset: 0;
+  background: $app-mask;
+  animation: ft-fade-in $dur-base $ease-out;
 }
 
 .ft-overlay__panel {
   animation: ft-panel-up $dur-base $ease-out;
-}
-
-/* 点遮罩关闭的那一层：铺满遮罩、垫在面板底下（面板是 fixed ＋ z-index，盖在它上面） */
-.ft-overlay__hit {
-  position: absolute;
-  inset: 0;
+  will-change: transform;
 }
 
 /* 退场中不再接点击：正在离开的弹层上连点两下，不能把同一个动作再触发一次 */
 .ft-overlay.ft-sheet-leave-active {
-  animation: none;
   pointer-events: none;
-  transition: background-color $dur-leave $ease-in, opacity $dur-leave $ease-in;
+  transition: opacity $dur-leave linear;
+}
+
+.ft-overlay.ft-sheet-leave-active .ft-overlay__hit {
+  animation: none;
+  transition: opacity $dur-leave $ease-in;
 }
 
 .ft-overlay.ft-sheet-leave-active .ft-overlay__panel {
@@ -308,11 +316,8 @@ uni-toast .uni-simple-toast__text {
   transition: transform $dur-leave $ease-in;
 }
 
-/* 只在正常动效下撤底色：减少动态效果时整层只淡 opacity，底色一撤就成了「遮罩先没、面板后淡」 */
-@media (prefers-reduced-motion: no-preference) {
-  .ft-overlay:not(.ft-overlay--fade).ft-sheet-leave-to {
-    background-color: transparent;
-  }
+.ft-overlay.ft-sheet-leave-to .ft-overlay__hit {
+  opacity: 0;
 }
 
 /* 盖过下拉时的行内 translateY：从手指松开的位置接着往下走 */
@@ -324,14 +329,12 @@ uni-toast .uni-simple-toast__text {
   animation: ft-fade-in $dur-base $ease-out;
 }
 
-.ft-overlay--fade.ft-sheet-leave-to {
-  opacity: 0;
+.ft-overlay--fade.ft-sheet-leave-active {
+  transition: opacity $dur-leave $ease-in;
 }
 
-@keyframes ft-overlay-in {
-  from {
-    background-color: transparent;
-  }
+.ft-overlay--fade.ft-sheet-leave-to {
+  opacity: 0;
 }
 
 @keyframes ft-panel-up {
@@ -346,24 +349,32 @@ uni-toast .uni-simple-toast__text {
   }
 }
 
+/* 减少动态效果：整层（遮罩连面板）只淡 opacity，不位移 */
 @media (prefers-reduced-motion: reduce) {
   .ft-overlay,
   .ft-overlay--fade {
     animation: ft-fade-in $dur-fast linear;
   }
 
+  .ft-overlay__hit,
   .ft-overlay__panel,
+  .ft-overlay.ft-sheet-leave-active .ft-overlay__hit,
   .ft-overlay.ft-sheet-leave-active .ft-overlay__panel {
     animation: none;
     transition: none;
   }
 
-  .ft-overlay.ft-sheet-leave-active {
+  .ft-overlay.ft-sheet-leave-active,
+  .ft-overlay--fade.ft-sheet-leave-active {
     transition: opacity $dur-fast linear;
   }
 
   .ft-overlay.ft-sheet-leave-to {
     opacity: 0;
+  }
+
+  .ft-overlay.ft-sheet-leave-to .ft-overlay__hit {
+    opacity: 1;
   }
 
   .ft-overlay.ft-sheet-leave-to .ft-overlay__panel {

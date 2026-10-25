@@ -123,10 +123,10 @@ onBeforeUnmount(() => rootEl()?.removeEventListener('input', markTouched, true))
 </template>
 
 <style lang="scss" scoped>
+/* 透明的全屏容器；遮罩的颜色在 ft-overlay__hit 上（App.vue「弹层进出」） */
 .ft-sheet-mask {
   position: fixed;
   inset: 0;
-  background: $app-mask;
   z-index: 90;
 }
 
