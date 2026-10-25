@@ -1,19 +1,21 @@
 /**
- * 二级页推入：`navigateTo` / `redirectTo` 打开的页面，正文从右侧 24px 带淡入滑到位（220ms）。
+ * 二级页推入：`navigateTo` / `redirectTo` 打开的页面，整页从右侧 32px 带淡入滑到位（260ms，与切 tab 同长同曲线）。
  *
  * - **只播入场**：`navigateBack` 回到的上一页一直保活在原地，什么都不播；主 tab 之间走 `switchTab`，
  *   有自己的整屏横移（ADR 0040），这里不拦它。
- * - **动 `left` 不动 `transform`**：二级页多半有 `position: fixed` 的底栏（会话页、编辑页、选择条…），
- *   祖先一带 transform，fixed 就改以它为定位基准、跟着一起滑，动画结束又跳回视口底部（ADR 0037 踩过）。
- *   相对定位的 `left` 不改定位基准：正文滑、钉住的底栏原地不动，只跟着整页一起淡入。
+ * - **只动 transform 与 opacity**：这两样由合成线程播，主线程忙着挂新页、拉数据也不掉帧，120Hz 屏上就是 120 帧。
+ *   0.28.x 动的是 `left`，每帧都要重排 ＋ 重绘整页，帧率上不去。
+ * - **播的时候把 uni-page-body 临时撑成视口大小的 fixed 框**：二级页多半有 `position: fixed` 的底栏
+ *   （会话页、编辑页、选择条…），祖先一带 transform，fixed 就改以它为定位基准（ADR 0037 踩过）。
+ *   基准框本身正好等于视口，底栏就仍落在视口里原来的位置，只是跟着整页一起滑——和原生页面推入一样。
+ *   新页本来就从顶部开始，撑成 fixed 框时内容不跳；文档高度跟着塌成一屏，上一页留下的窗口滚动也顺手归零。
  * - **用 MutationObserver 接新页**：它在节点插进文档后的微任务里回调、早于这一帧绘制，
  *   新页的第一帧就已经在起点上，不会先在原位闪一下再跳出去。只在跳转后的 1.5 秒内观察，平时不挂。
  * - 减少动态效果：不位移，只淡入 150ms。
  */
-import { prefersReducedMotion, SLIDE_EASE } from './nav'
+import { prefersReducedMotion, SLIDE_EASE, SLIDE_MS } from './nav'
 
-const PUSH_MS = 220
-const PUSH_PX = 24
+const PUSH_PX = 32
 /** 跳转后最多等新页多久；过了就不播，页面根本没挂上时动画也没意义 */
 const WAIT_MS = 1500
 
@@ -26,32 +28,44 @@ function stop() {
   if (giveUp) clearTimeout(giveUp)
 }
 
+/** 播的时候临时加在 uni-page-body 上的行内样式，播完逐条清掉 */
+const FRAME: Record<string, string> = {
+  position: 'fixed',
+  top: '0',
+  right: '0',
+  bottom: '0',
+  left: '0',
+  overflow: 'hidden'
+}
+
+function fade(body: HTMLElement) {
+  body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'linear' })
+}
+
 function play(page: Element) {
   const body = page.querySelector('uni-page-body') as HTMLElement | null
   if (!body || typeof body.animate !== 'function') return
   if (prefersReducedMotion()) {
-    body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'linear' })
+    fade(body)
     return
   }
-  // left 只对定位元素生效；uni-page-body 默认是 static，播完还原
-  const wasStatic = getComputedStyle(body).position === 'static'
-  if (wasStatic) body.style.position = 'relative'
+  for (const [k, v] of Object.entries(FRAME)) body.style.setProperty(k, v)
   const anim = body.animate(
     [
-      { left: `${PUSH_PX}px`, opacity: 0 },
-      { left: '0px', opacity: 1 }
+      { transform: `translateX(${PUSH_PX}px)`, opacity: 0 },
+      { transform: 'none', opacity: 1 }
     ],
-    { duration: PUSH_MS, easing: SLIDE_EASE }
+    { duration: SLIDE_MS, easing: SLIDE_EASE }
   )
   let restored = false
   const done = () => {
     if (restored) return
     restored = true
-    if (wasStatic) body.style.position = ''
+    for (const k of Object.keys(FRAME)) body.style.removeProperty(k)
   }
   void Promise.resolve(anim.finished).catch(() => {}).then(done)
   // 兜底：动画被跳过（页面在后台、省电模式）finished 可能迟迟不来，定位也得还原
-  setTimeout(done, PUSH_MS + 250)
+  setTimeout(done, SLIDE_MS + 250)
 }
 
 /** 跳转发起时调用：盯住接下来插进文档的那个页面 */
