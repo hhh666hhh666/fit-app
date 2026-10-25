@@ -8,6 +8,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.view.Display;
+import android.view.WindowManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -87,6 +89,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        preferHighestRefreshRate();
         updater = new WebUpdater(this);
         // 必须在任何页面加载之前：切换靠 rename，此时还没人读 filesDir/web
         updater.applyPending();
@@ -151,6 +154,35 @@ public class MainActivity extends Activity {
             webView.restoreState(savedInstanceState);
         }
         setContentView(webView);
+    }
+
+    /**
+     * 向系统要这块屏幕的最高刷新率（同分辨率下 Hz 最大的那个模式，0.1.7 起）。
+     *
+     * 不要的话，不少机型（MIUI / ColorOS 一类的「智能刷新率」）会把没表态的第三方应用
+     * 锁在 60Hz，WebView 里的动效再怎么只动合成层也只有 60 帧——主人 120Hz 的手机上
+     * 弹层、切页看着「不够丝滑」就是这个。代价是 App 在前台时屏幕一直跑高刷，多耗一点电。
+     * 个别厂商还有自己的白名单，这里要了也不一定给，那就只能在系统设置里手动给本应用开高刷。
+     */
+    private void preferHighestRefreshRate() {
+        try {
+            Display display = getWindowManager().getDefaultDisplay();
+            Display.Mode current = display.getMode();
+            Display.Mode best = current;
+            for (Display.Mode m : display.getSupportedModes()) {
+                // 只在同分辨率里挑：换分辨率会让屏幕闪一下
+                if (m.getPhysicalWidth() == current.getPhysicalWidth()
+                        && m.getPhysicalHeight() == current.getPhysicalHeight()
+                        && m.getRefreshRate() > best.getRefreshRate()) {
+                    best = m;
+                }
+            }
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.preferredDisplayModeId = best.getModeId();
+            getWindow().setAttributes(lp);
+        } catch (Exception ignored) {
+            // 拿不到模式列表就按系统默认，不影响使用
+        }
     }
 
     /**

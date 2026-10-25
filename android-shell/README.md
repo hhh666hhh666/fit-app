@@ -52,7 +52,7 @@ export JAVA_HOME=E:/jdk21
 
 | 版本 | 在哪 | 怎么推 |
 |------|------|--------|
-| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 7 / `0.1.6` |
+| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 8 / `0.1.7` |
 | **H5 产物版本** | 构建脚本自动生成：`package.json` 的 version ＋ 短 commit | 不用手工维护；带 commit 是为了「每次提交都能触发壳的自动更新」 |
 
 改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、资源如图标、依赖）才需要重打 apk 并 +1。
@@ -89,6 +89,12 @@ export JAVA_HOME=E:/jdk21
 不直接靠 H5 的 `navigator.vibrate`：它在 WebView 里能不能震看系统版本与厂商。H5 那边先找这个桥，找不到（旧壳、浏览器）才退回 `navigator.vibrate`，再没有就不震。
 
 ⚠️ 这个对象任何加载进来的页面都能调，只放无害的能力，别往里加读写数据的口子。
+
+## 屏幕刷新率：要最高的那档
+
+`MainActivity.preferHighestRefreshRate()`（0.1.7 起）在启动时，从同分辨率的显示模式里挑刷新率最高的一个，设成窗口的 `preferredDisplayModeId`。
+不设的话，不少机型（MIUI、ColorOS 这类「智能刷新率」）会把没表态的应用锁在 60Hz，WebView 里动效只动合成层也只有 60 帧。
+代价是 App 在前台时屏幕一直跑高刷，多耗一点电。个别厂商另有白名单，要了也不一定给，那就在系统设置里手动给本应用开高刷。
 
 ## 图标
 
