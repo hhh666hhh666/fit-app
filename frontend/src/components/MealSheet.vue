@@ -67,7 +67,55 @@ const combos = ref<FoodComboVO[]>([])
 const lastBatch = ref<number[]>([])
 const comboSheet = ref({ show: false, preset: null as ComboItem[] | null })
 
+// ── 进场期间不改内容 ──
+// 面板从底下升上来的那 220ms 里，内容一变（数据回来、两百行食物列表挂上）就得重排并重新栅格化整块面板，
+// 高刷屏上看着就是「上弹不够丝滑」。所以：数据赶在第一帧之前齐了（缓存命中，全是微任务）就跟着面板一起升；
+// 赶不上第一帧的，等面板停稳再换上、淡入一下。食物列表先只挂前 FOODS_EARLY 行（一屏只看得见六七行），
+// 没有动画在播了再补齐（面板停稳、或淡入播完）——补那一百多行要占主线程几十毫秒，动画中途补就是一顿。
+const FOODS_EARLY = 30
+const entering = ref(true)
+/** 内容是面板停稳后才换上的：淡入，不硬闪 */
+const late = ref(false)
+/** 食物列表补齐了没有 */
+const allFoods = ref(false)
+const shownFoods = computed(() => (allFoods.value ? foods.value : foods.value.slice(0, FOODS_EARLY)))
+const panelRef = ref<unknown>(null)
+/** 第一帧画过了没有：画过了，再来的数据就等面板停稳 */
+let painted = false
+let enterDone: () => void = () => {}
+const entered = new Promise<void>((resolve) => {
+  enterDone = resolve
+})
+
+function settleEnter() {
+  if (!entering.value) return
+  entering.value = false
+  enterDone()
+  // 内容已跟着面板升上来了：现在补齐；还没到的，等它淡入完再补（见 init）
+  if (!loading.value) allFoods.value = true
+}
+
+/** uni 在 H5 上给 `<view ref>` 的是组件实例，元素在 $el 上 */
+function panelEl(): HTMLElement | null {
+  const raw = panelRef.value as { $el?: HTMLElement } | HTMLElement | null
+  return ((raw as { $el?: HTMLElement } | null)?.$el ?? raw) as HTMLElement | null
+}
+
 onMounted(() => {
+  requestAnimationFrame(() => {
+    painted = true
+  })
+  const el = panelEl()
+  if (!el || typeof el.getAnimations !== 'function' || el.getAnimations().length === 0) {
+    // 减少动态效果时面板不动，没有「进场中」
+    settleEnter()
+  } else {
+    el.addEventListener('animationend', (e) => {
+      if (e.target === el) settleEnter()
+    })
+  }
+  // 兜底：动画被跳过（页面在后台、省电模式）animationend 可能不来
+  setTimeout(settleEnter, 400)
   void init()
 })
 
@@ -84,7 +132,14 @@ async function init() {
   } catch {
     // request 层已统一提示
   } finally {
+    if (painted) {
+      // 第一帧之后才到：等面板停稳（已停稳就不等），淡入换上
+      await entered
+      late.value = true
+    }
     loading.value = false
+    if (late.value) setTimeout(() => (allFoods.value = true), 200)
+    else if (!entering.value) allFoods.value = true // 减少动态效果：一开始就没有进场
   }
 }
 
@@ -330,7 +385,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   <!-- 遮罩是根、面板是它的子元素（父组件的 Transition 只认单根，进出场样式在 App.vue「弹层进出」）；点遮罩＝点垫在面板底下的 __hit 层（uni 包装过的事件上 .self 永远不触发） -->
   <view class="ms-mask ft-overlay" @touchmove.stop.prevent>
     <view class="ft-overlay__hit" @click="emit('close')" />
-    <view class="ms ft-overlay__panel" role="dialog" :aria-label="MEAL_LABEL[meal]" @touchmove.stop>
+    <view ref="panelRef" class="ms ft-overlay__panel" role="dialog" :aria-label="MEAL_LABEL[meal]" @touchmove.stop>
       <view class="ms__handle" />
       <view class="ms__head">
         <view class="ms__ico" :class="'ms__ico--' + meal">
@@ -343,10 +398,11 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
         </view>
       </view>
 
-      <scroll-view scroll-y class="ms__body">
-        <view v-if="loading" class="ms__loading">加载中…</view>
+      <scroll-view scroll-y class="ms__body" :class="{ 'ms__body--late': late }">
+        <!-- 进场中不显示「加载中」：缓存命中时它只会闪一下 -->
+        <view v-if="loading && !entering" class="ms__loading">加载中…</view>
 
-        <template v-else>
+        <template v-else-if="!loading">
           <!-- 照片：点图看大图；角标给「更换」「删除」（ADR 0014） -->
           <view class="photo">
             <view v-if="photoUrl" class="photo__box">
@@ -424,7 +480,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
             <!-- 食物列表 -->
             <view v-else class="foods">
-              <view v-for="f in foods" :key="f.id" class="frow" @click="selectFood(f)">
+              <view v-for="f in shownFoods" :key="f.id" class="frow" @click="selectFood(f)">
                 <view class="frow__mid">
                   <view class="frow__line">
                     <text class="frow__name">{{ f.name }}</text>
@@ -607,10 +663,15 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   justify-content: center;
 }
 
+/* 定高（原来是 max-height 72vh）：加载中和加载完一样高，面板升到一半不会因为内容到了突然变高、跳一下；
+   屏幕矮（键盘弹起）时照样能被 flex 压缩 */
 .ms__body {
-  flex: 1;
+  flex: 0 1 72vh;
   min-height: 0;
-  max-height: 72vh;
+}
+
+.ms__body--late {
+  animation: ft-fade-in $dur-fast $ease-out;
 }
 
 .ms__loading {

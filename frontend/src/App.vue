@@ -284,8 +284,11 @@ uni-toast .uni-simple-toast__text {
      整屏遮罩每帧都在主线程重绘，安卓 WebView 上进出场明显掉帧（主人真机反馈「生硬、帧率很低」）；
    - Vue 只量**根元素**的时长：根上那条 opacity 过渡不改值，只是给它计时（量到时长、到点收尾），
      真正在动的是遮罩层与面板，三者同长；
-   - 面板常驻 `will-change: transform`：不然进场播完浏览器就撤掉它的图层，离场第一帧要把整块面板
-     （记一餐里是长列表 ＋ 图片）重新栅格化，最容易卡的就是这一下。
+   - 面板的 `will-change: transform` **只在离场时挂**（leave-active）：Vue 先挂 leave-active、隔一帧才换
+     leave-to 起跑，图层就在面板还没动的那一帧先备好，离场第一帧不用临时把整块面板（记一餐里是长列表 ＋ 图片）
+     重新栅格化。⚠️ 别改成常驻：will-change: transform 和 transform 一样会让面板成为 fixed 后代的定位基准，
+     面板里套的全屏看图、组合编辑、uni 的 picker 弹窗就只铺满面板、不铺满屏幕（0.28.1 / 0.28.2 踩过）；
+   - 内容重的弹层（记一餐）进场那 220ms 里不换内容，见 MealSheet「进场期间不改内容」。
    全屏看图没有面板，用 `ft-overlay--fade` 整层淡进淡出（底色在根上，动的是根的 opacity）。
    减少动态效果时不位移、只淡（确认「关上了」的那一下还在）。 */
 .ft-overlay__hit {
@@ -297,7 +300,6 @@ uni-toast .uni-simple-toast__text {
 
 .ft-overlay__panel {
   animation: ft-panel-up $dur-base $ease-out;
-  will-change: transform;
 }
 
 /* 退场中不再接点击：正在离开的弹层上连点两下，不能把同一个动作再触发一次 */
@@ -314,6 +316,7 @@ uni-toast .uni-simple-toast__text {
 .ft-overlay.ft-sheet-leave-active .ft-overlay__panel {
   animation: none;
   transition: transform $dur-leave $ease-in;
+  will-change: transform;
 }
 
 .ft-overlay.ft-sheet-leave-to .ft-overlay__hit {
