@@ -3,6 +3,10 @@ server:
   # ⚠️ 只影响本机裸跑（mvn spring-boot:run / java -jar）；容器内由 compose 注入 SERVER_PORT=8080，
   #    与 nginx 反代、healthcheck、部署脚本是一套，不要跟着改。
   port: ${SERVER_PORT:8083}
+  # 认反代传来的 X-Forwarded-Proto/For：线上 TLS 在宿主 nginx 终止，后端自己只看得到 http。
+  # 不认的话一旦开了 CORS 白名单（apk 需要），浏览器同源的 https 请求会被判成跨域 → 403 Invalid CORS request。
+  # native = Tomcat RemoteIpValve，只信任内网段（Docker 网络在内）来的转发头。
+  forward-headers-strategy: native
   servlet:
     encoding:
       charset: UTF-8

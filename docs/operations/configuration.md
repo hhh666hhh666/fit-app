@@ -119,3 +119,9 @@ mvn -B -ntp spring-boot:run
 本机开发即使把 `.env` 里给 apk 的白名单一起注入后端，也不影响浏览器经 Vite 访问：
 `frontend/vite.config.ts` 的 `/api` 代理会去掉 `Origin` 头，让后端按同源请求处理。
 ⚠️ 绕过代理、从浏览器直连 `:8083` 仍会被判跨域 `403 Invalid CORS request`——那是白名单在正常工作，不是故障。
+
+⚠️ 线上一旦配了白名单，「同源」的判定就依赖后端看到正确的协议：TLS 在宿主 nginx 终止，
+后端靠 `server.forward-headers-strategy: native` 读 `X-Forwarded-Proto` 才知道外层是 https。
+这条链上任何一环丢了这个头（宿主反代没设、web 容器 nginx 没透传），网页版的 POST 就会
+`403 Invalid CORS request`。自查：`curl -X POST https://<域名>/api/auth/login -H 'Origin: https://<域名>'`
+不应返回 403。
