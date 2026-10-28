@@ -41,4 +41,8 @@ Status: accepted
 > 本卡选的「网站更新、App 无需重发」**仍然成立**，只是新版要等下一次启动；
 > 客户端形态本身（uni-app 网页 ＋ 自写 WebView 壳）不变。代价是 API 变跨域，
 > 后端须配 `FITAPP_CORS_ALLOWED_ORIGINS`（漏配的症状是「页面能开、数据全网络异常」）。
-
+>
+> ⚠️ **后续（2026-10-24）**：**「组件库改用 wot-design-uni」这一条已作废**。全站实际只用到它的 `wd-icon`，
+> 「晴窗」地基（0.22.0）换成自带 SVG 的 `FtIcon` 并卸载了 wot-design-uni，此后**不用任何组件库**，
+> 基础组件是自研的 `Ft*` 系列（见 [ADR 0041](./0041-design-language-qingchuang.md) 与 [前端说明](../design/前端.md)）。
+> 客户端形态（uni-app 网页 ＋ 自写 WebView 壳）不受影响。
