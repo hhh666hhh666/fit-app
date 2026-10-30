@@ -1,5 +1,6 @@
 package com.example.fitapp.config;
 
+import com.example.fitapp.security.AgentTokenInterceptor;
 import com.example.fitapp.security.JwtInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import java.util.Arrays;
 public class WebConfig implements WebMvcConfigurer {
 
     private final JwtInterceptor jwtInterceptor;
+    private final AgentTokenInterceptor agentTokenInterceptor;
 
     /**
      * 允许跨域的前端来源（逗号分隔）。默认空 = 不注册任何 CORS。
@@ -34,10 +36,17 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/login",
                         "/api/auth/register",
+                        // 外部 agent 取数只认 agent 令牌；/docs 公开、不含用户数据（ADR 0043）
+                        "/api/agent/current",
+                        "/api/agent/history",
+                        "/api/agent/photos/**",
+                        "/api/agent/docs",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/v3/api-docs/**"
                 );
+        registry.addInterceptor(agentTokenInterceptor)
+                .addPathPatterns("/api/agent/current", "/api/agent/history", "/api/agent/photos/**");
     }
 
     @Override

@@ -482,7 +482,7 @@ public class DietService {
     // ── 辅助 ──
 
     /** 实际摄入 = per100 × grams ÷ 100（四舍五入 2 位）。 */
-    private static BigDecimal actual(BigDecimal per100, BigDecimal grams) {
+    public static BigDecimal actual(BigDecimal per100, BigDecimal grams) {
         if (per100 == null || grams == null) {
             return BigDecimal.ZERO;
         }

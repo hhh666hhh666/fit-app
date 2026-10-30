@@ -329,7 +329,7 @@ public class FoodService {
         return result;
     }
 
-    private Map<String, Object> toJsonMap(Food f) {
+    public Map<String, Object> toJsonMap(Food f) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", f.getName());
         m.put("unit", f.getUnit());
