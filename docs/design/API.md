@@ -33,6 +33,13 @@
 - 白名单与跨域策略见后端 `config/WebConfig.java` 的注释。
 - ⚠️ **路由层只挡「没登录」，不挡「没有数据权限」**：越权（拿别人的 id 来读写）必须由服务端判定，并在接口层测试里断言它会失败。
 
+## 日记接口
+
+`/api/diary`（[ADR 0044](../adr/0044-diary-markdown-photos-and-record-refs.md)）走登录态 JWT，外部 agent 令牌访问不了。有两处要注意：
+
+- **图片读取**（`/api/diary/photos/{id}` 与 `/thumb`）直出二进制，图已删返回真实的 HTTP 404，前端据此显示「图片已删除」。
+- **记录引用**（`/api/diary/refs`）解析不到的键给 `exists=false`，不报错：一篇日记里有一条引用失效很正常。
+
 ## 外部 agent 取数接口
 
 面向外部调用方的只读接口（[ADR 0043](../adr/0043-external-agent-read-api.md)），有几处与上面的约定不同：

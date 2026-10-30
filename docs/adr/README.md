@@ -67,6 +67,7 @@ Status: accepted
 - [ADR 0041](./0041-design-language-qingchuang.md)：设计语言由「训练日志」整体换成「晴窗」——冷调浅底、苹果式玻璃、橙色只给动作；训练入口嵌进底栏中间（四个主页面通用），进行中横幅取消。
 - [ADR 0042](./0042-daily-energy-weight-as-of-date.md)：每日总消耗改用那天结束前最后一次测得的体重，之前没有就不算；收窄 ADR 0029 的「最新体重」。
 - [ADR 0043](./0043-external-agent-read-api.md)：外部 agent 只读取数接口——当前状态与历史两个接口、专用令牌、服务端流式输出，不做增量、不限时间范围。
+- [ADR 0044](./0044-diary-markdown-photos-and-record-refs.md)：日记——Markdown 原文存储、一天多篇，图片插在正文（共用配额，相册分两栏，无引用满 30 天清理），记录引用实时读取，不进外部 agent 接口。
 
 ## 与其他文档的分工
 
