@@ -20,6 +20,8 @@ import java.time.Period;
  * <p>口径（ADR 0029）：总额 ＝ 基础代谢（Mifflin-St Jeor）× 生活活动系数 ＋ 当日手填的训练消耗。
  * **生活活动系数只含日常生活，专门训练不在里面**——这是防重复计算的唯一机制，改系数取值前必须先读 ADR 0029。</p>
  *
+ * <p>体重取**那天结束前最后一次测得的值**（ADR 0042），不是全局最新：否则翻历史会用上后来才量的体重。</p>
+ *
  * <p>缺输入就不算：档案缺一项或没有体重记录时返回 `complete=false`，绝不用人群均值兜底
  * （那会产出「看着精确其实是编的」数字）。</p>
  */
@@ -54,25 +56,34 @@ public class EnergyService {
 
     /** 某一天的每日总消耗拆解。 */
     public EnergyVO compute(Long userId, LocalDate date) {
+        UserProfile p = userProfileMapper.selectById(userId);
+        BodyRecord weight = bodyRecordMapper.selectLastWithWeightBefore(userId, date.plusDays(1).atStartOfDay());
+        return compute(p, weight, date, trainingKcal(userId, date));
+    }
+
+    /**
+     * 按已备好的输入算一天：批量算多天时（外部 agent 的每日汇总）一次取好输入，免得每天查三次库。
+     *
+     * @param weight 那天结束前最后一条有体重的测定（ADR 0042）；没有就不算
+     */
+    public EnergyVO compute(UserProfile p, BodyRecord weight, LocalDate date, int trainingKcal) {
         EnergyVO vo = new EnergyVO();
         vo.setDate(date);
-        vo.setTrainingKcal(trainingKcal(userId, date));
+        vo.setTrainingKcal(trainingKcal);
 
-        UserProfile p = userProfileMapper.selectById(userId);
-        BodyRecord latest = bodyRecordMapper.selectLatestWithWeight(userId);
         if (p == null) {
             vo.setComplete(false);
             vo.setMissing(MISSING_PROFILE);
             return vo;
         }
-        if (latest == null || latest.getWeight() == null) {
+        if (weight == null || weight.getWeight() == null) {
             vo.setComplete(false);
             vo.setMissing(MISSING_WEIGHT);
             return vo;
         }
 
         int age = ageOf(p.getBirthDate(), date);
-        int bmr = bmr(p.getSex(), latest.getWeight(), p.getHeightCm(), age);
+        int bmr = bmr(p.getSex(), weight.getWeight(), p.getHeightCm(), age);
         BigDecimal factor = factorOf(p.getActivityLevel());
         int base = BigDecimal.valueOf(bmr).multiply(factor).setScale(0, RoundingMode.HALF_UP).intValue();
 
@@ -80,8 +91,8 @@ public class EnergyService {
         vo.setSex(p.getSex());
         vo.setAge(age);
         vo.setHeightCm(p.getHeightCm());
-        vo.setWeightKg(latest.getWeight());
-        vo.setWeightAt(latest.getMeasuredAt());
+        vo.setWeightKg(weight.getWeight());
+        vo.setWeightAt(weight.getMeasuredAt());
         vo.setActivityLevel(p.getActivityLevel());
         vo.setActivityFactor(factor);
         vo.setBmr(bmr);

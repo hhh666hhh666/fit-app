@@ -68,7 +68,7 @@ class EnergyServiceTest {
         // 30 岁：1996-10-17
         when(userProfileMapper.selectById(7L)).thenReturn(
                 profile("male", "light", "175", LocalDate.of(1996, 10, 17)));
-        when(bodyRecordMapper.selectLatestWithWeight(7L)).thenReturn(weight("70"));
+        when(bodyRecordMapper.selectLastWithWeightBefore(eq(7L), any())).thenReturn(weight("70"));
         when(workoutMapper.selectBurnedBetween(eq(7L), any(), any())).thenReturn(320);
 
         EnergyVO vo = service().compute(7L, today);
@@ -89,7 +89,7 @@ class EnergyServiceTest {
         LocalDate today = LocalDate.of(2026, 10, 17);
         when(userProfileMapper.selectById(7L)).thenReturn(
                 profile("female", "sedentary", "160", LocalDate.of(1996, 10, 17)));
-        when(bodyRecordMapper.selectLatestWithWeight(7L)).thenReturn(weight("55"));
+        when(bodyRecordMapper.selectLastWithWeightBefore(eq(7L), any())).thenReturn(weight("55"));
         when(workoutMapper.selectBurnedBetween(eq(7L), any(), any())).thenReturn(0);
 
         EnergyVO vo = service().compute(7L, today);
@@ -104,7 +104,7 @@ class EnergyServiceTest {
     @Test
     void missingProfile_doesNotGuess() {
         when(userProfileMapper.selectById(7L)).thenReturn(null);
-        when(bodyRecordMapper.selectLatestWithWeight(7L)).thenReturn(weight("70"));
+        when(bodyRecordMapper.selectLastWithWeightBefore(eq(7L), any())).thenReturn(weight("70"));
         when(workoutMapper.selectBurnedBetween(eq(7L), any(), any())).thenReturn(100);
 
         EnergyVO vo = service().compute(7L, LocalDate.of(2026, 10, 17));
@@ -120,7 +120,7 @@ class EnergyServiceTest {
     void missingWeight_doesNotGuess() {
         when(userProfileMapper.selectById(7L)).thenReturn(
                 profile("male", "light", "175", LocalDate.of(1996, 10, 17)));
-        when(bodyRecordMapper.selectLatestWithWeight(7L)).thenReturn(null);
+        when(bodyRecordMapper.selectLastWithWeightBefore(eq(7L), any())).thenReturn(null);
         when(workoutMapper.selectBurnedBetween(eq(7L), any(), any())).thenReturn(0);
 
         EnergyVO vo = service().compute(7L, LocalDate.of(2026, 10, 17));
@@ -131,11 +131,27 @@ class EnergyServiceTest {
     }
 
     @Test
+    void weight_queriedAsOfEndOfRequestedDay() {
+        LocalDate day = LocalDate.of(2026, 10, 10);
+        when(userProfileMapper.selectById(7L)).thenReturn(
+                profile("male", "light", "175", LocalDate.of(1996, 10, 17)));
+        // 只有截止到「次日 0 点」的查询才返回：查成全局最新，这条桩就对不上，体重会是 null
+        when(bodyRecordMapper.selectLastWithWeightBefore(7L, day.plusDays(1).atStartOfDay()))
+                .thenReturn(weight("70"));
+        when(workoutMapper.selectBurnedBetween(eq(7L), any(), any())).thenReturn(0);
+
+        EnergyVO vo = service().compute(7L, day);
+
+        assertTrue(vo.getComplete());
+        assertEquals(new BigDecimal("70"), vo.getWeightKg());
+    }
+
+    @Test
     void trainingKcal_queriedForRequestedDayOnly() {
         LocalDate day = LocalDate.of(2026, 10, 10);
         when(userProfileMapper.selectById(7L)).thenReturn(
                 profile("male", "light", "175", LocalDate.of(1996, 10, 17)));
-        when(bodyRecordMapper.selectLatestWithWeight(7L)).thenReturn(weight("70"));
+        when(bodyRecordMapper.selectLastWithWeightBefore(eq(7L), any())).thenReturn(weight("70"));
         when(workoutMapper.selectBurnedBetween(7L, day.atStartOfDay(), day.plusDays(1).atStartOfDay()))
                 .thenReturn(250);
 

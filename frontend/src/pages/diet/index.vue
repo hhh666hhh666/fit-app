@@ -131,6 +131,9 @@ const kcalTarget = computed(() => {
 
 /** 每日总消耗与缺口（ADR 0029）：口径在服务端，这里只负责摆与念。 */
 const energy = computed(() => overview.value?.energy ?? null)
+const burnLabel = computed(() => (isToday.value ? '今日消耗' : '当日消耗'))
+/** 翻到第一次称重之前的日子：消耗按当时体重算（ADR 0042），这种缺口补档案也补不上，不给入口。 */
+const noWeightYet = computed(() => !isToday.value && energy.value?.missing === 'weight')
 const gapLabel = computed(() => gapText(overview.value?.gap))
 
 function openEnergySheet() {
@@ -312,10 +315,13 @@ const fullHeight = computed(() => {
 
           <!-- 每日总消耗与热量缺口（ADR 0029）：目标那一行不动，新信息另起一行 -->
           <view v-if="energy?.complete" class="burn">
-            <text class="burn__t ft-num">今日消耗 {{ energy.totalKcal }}</text>
+            <text class="burn__t ft-num">{{ burnLabel }} {{ energy.totalKcal }}</text>
             <text class="burn__sep">·</text>
             <text class="burn__gap ft-num">{{ gapLabel }}</text>
             <text class="burn__how" role="button" @click="openEnergySheet">怎么算的</text>
+          </view>
+          <view v-else-if="energy && noWeightYet" class="burn burn--miss">
+            <text class="burn__t">这天之前还没量过体重，算不出消耗</text>
           </view>
           <view v-else-if="energy" class="burn burn--miss" role="button" @click="goProfile">
             <text class="burn__t">档案没填完，暂时算不出今日消耗</text>
@@ -437,7 +443,7 @@ const fullHeight = computed(() => {
 
     <!-- 「怎么算的」弹层：算式与代入值全部来自服务端（ADR 0029） -->
     <Transition name="ft-sheet">
-      <FtSheet v-if="energySheet.show" title="今日消耗怎么算的" @close="energySheet.show = false">
+      <FtSheet v-if="energySheet.show" :title="`${burnLabel}怎么算的`" @close="energySheet.show = false">
         <scroll-view scroll-y class="esheet">
           <template v-if="energy?.complete">
             <view class="eq">

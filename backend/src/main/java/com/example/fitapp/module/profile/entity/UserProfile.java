@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
  * 个人档案：基本不变的身体基础信息，一个用户一份。表结构以迁移脚本 {@code V28__user_profile.sql} 为准。
  *
  * <p>与「身体档案」（`body_record`）区分：那边是体重／体脂／围度的**测定序列**，这边是身高性别这类不变值。
- * **体重不进这张表**，始终取 `body_record` 的最新一条。</p>
+ * **体重不进这张表**，始终来自 `body_record`；算某天的消耗时取那天结束前最后一条（ADR 0042）。</p>
  */
 @Data
 @TableName("user_profile")

@@ -92,19 +92,19 @@ export function getBodyRecords(limit = 20, offset = 0) {
 }
 
 export function createBodyRecord(payload: BodySavePayload) {
-  return mutating('body', () => unwrap(request.post<BodyRecordRow>('/body', payload)))
+  return mutating(['body', 'diet'], () => unwrap(request.post<BodyRecordRow>('/body', payload)))
 }
 
 /** 修改一次测定（点明细行进编辑弹层）：时刻与五项数值整体覆盖。 */
 export function updateBodyRecord(id: number, payload: BodySavePayload) {
-  return mutating('body', () => unwrap(request.put<BodyRecordRow>(`/body/${id}`, payload)))
+  return mutating(['body', 'diet'], () => unwrap(request.put<BodyRecordRow>(`/body/${id}`, payload)))
 }
 
 export function deleteBodyRecord(id: number) {
-  return mutating('body', () => unwrap(request.delete<void>(`/body/${id}`)))
+  return mutating(['body', 'diet'], () => unwrap(request.delete<void>(`/body/${id}`)))
 }
 
 /** 批量删除（长按多选）：一次事务删多条，任一条不归属则整批不动。 */
 export function batchDeleteBodyRecords(ids: number[]) {
-  return mutating('body', () => unwrap(request.post<void>('/body/batch-delete', { ids })))
+  return mutating(['body', 'diet'], () => unwrap(request.post<void>('/body/batch-delete', { ids })))
 }

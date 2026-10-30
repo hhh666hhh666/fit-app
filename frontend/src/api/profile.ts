@@ -2,7 +2,7 @@ import request, { unwrap } from './request'
 import { mutating, read } from './cache'
 
 // ── 个人档案与每日消耗（ADR 0029／0030）──
-// 个人档案＝身高／性别／出生日期／生活活动档，基本不变；体重仍取身体档案最新一条。
+// 个人档案＝身高／性别／出生日期／生活活动档，基本不变；体重仍来自身体档案（算某天的消耗取那天结束前最后一条，ADR 0042）。
 
 /** 某一档生活活动量（只含日常生活，**不含**专门训练）。 */
 export type ActivityLevel = 'sedentary' | 'light' | 'active'
@@ -54,5 +54,5 @@ export function getProfile() {
 }
 
 export function saveProfile(payload: ProfileSavePayload) {
-  return mutating('body', () => unwrap(request.put<ProfileInfo>('/profile', payload)))
+  return mutating(['body', 'diet'], () => unwrap(request.put<ProfileInfo>('/profile', payload)))
 }
