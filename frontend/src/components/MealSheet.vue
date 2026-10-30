@@ -22,7 +22,7 @@ import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -211,7 +211,7 @@ function removePhoto() {
   if (!p) return
   void ask({
     title: '删除这张照片？',
-    content: '删除后不可恢复；这一餐的饮食条目不受影响。',
+    content: `这一餐的饮食条目不受影响。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

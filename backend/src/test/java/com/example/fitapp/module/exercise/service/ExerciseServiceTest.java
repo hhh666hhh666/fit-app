@@ -31,10 +31,13 @@ import static org.mockito.Mockito.when;
 class ExerciseServiceTest {
 
     @Mock
+    private ExerciseTrash exerciseTrash;
+
+    @Mock
     private ExerciseMapper exerciseMapper;
 
     private ExerciseService service() {
-        return new ExerciseService(exerciseMapper);
+        return new ExerciseService(exerciseMapper, exerciseTrash);
     }
 
     @Test

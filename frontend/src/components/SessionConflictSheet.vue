@@ -1,7 +1,7 @@
 <!--
   「上一次训练还没结束」二选一（ADR 0020）：底栏圆钮长按、计划页「开始训练」撞上本机还没结束的
   会话时弹。继续上次＝橙色主按钮；结束并开新的＝红字按钮，点了还要再确认一次——会话到结束时才入库，
-  开新的会把上一次记的组全部丢掉。
+  开新的会把上一次移到回收站（ADR 0047）。
   不用系统确认框：它的取消位会被安卓返回键点到，危险动作不能放在那（utils/confirm.ts）。
 -->
 <script setup lang="ts">
@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import FtSheet from '@/components/FtSheet.vue'
 import FtButton from '@/components/FtButton.vue'
 import { formatClock } from '@/utils/format'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 import { netElapsedSec, type Session } from '@/utils/session'
 
 const props = defineProps<{ session: Session }>()
@@ -23,8 +23,8 @@ async function startFresh() {
     title: '结束上一次、开新的？',
     content:
       done.value > 0
-        ? `上一次记的 ${done.value} 组还没入库，开新的会把它们丢掉，不能恢复。`
-        : '上一次还没记任何一组，开新的会把它清掉。',
+        ? `上一次记的 ${done.value} 组还没入库。${TRASH_HINT}`
+        : `上一次还没记任何一组。${TRASH_HINT}`,
     confirmText: '结束并开新的',
     danger: true
   })

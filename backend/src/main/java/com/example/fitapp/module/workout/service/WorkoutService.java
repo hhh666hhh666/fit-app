@@ -63,6 +63,7 @@ public class WorkoutService {
     private final WorkoutSetMapper setMapper;
     private final PlanMapper planMapper;
     private final ExerciseMapper exerciseMapper;
+    private final WorkoutTrash workoutTrash;
 
     @Transactional
     public WorkoutDetailVO create(Long userId, WorkoutCreateDTO dto) {
@@ -230,8 +231,7 @@ public class WorkoutService {
 
     @Transactional
     public void delete(Long userId, Long id) {
-        requireOwn(userId, id);
-        deleteOne(id);
+        deleteOne(userId, requireOwn(userId, id));
     }
 
     /**
@@ -243,16 +243,16 @@ public class WorkoutService {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        List<Long> distinct = ids.stream().distinct().toList();
-        for (Long id : distinct) {
-            requireOwn(userId, id);
-        }
-        for (Long id : distinct) {
-            deleteOne(id);
+        List<Workout> distinct = ids.stream().distinct().map(id -> requireOwn(userId, id)).toList();
+        for (Workout w : distinct) {
+            deleteOne(userId, w);
         }
     }
 
-    private void deleteOne(Long id) {
+    /** 先存进回收站（ADR 0047），再按原来的顺序删行。 */
+    private void deleteOne(Long userId, Workout w) {
+        workoutTrash.put(userId, w);
+        Long id = w.getId();
         workoutMapper.deleteSetsByWorkoutId(id);
         blockMapper.delete(Wrappers.<WorkoutBlock>lambdaQuery().eq(WorkoutBlock::getWorkoutId, id));
         workoutMapper.deleteById(id);

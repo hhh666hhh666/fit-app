@@ -11,6 +11,8 @@ public class StorageVO {
 
     /** 图片已用（字节，原图 ＋ 缩略图；含餐照和日记图片）。 */
     private Long photoBytes;
+    /** 其中回收站里的照片占多少（ADR 0047）。 */
+    private Long trashBytes;
 
     /** 照片张数（相册入口与「我的」页展示用；含餐照和日记图片）。 */
     private Integer photoCount;

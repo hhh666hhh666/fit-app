@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.service;
 
+import com.example.fitapp.module.trash.mapper.TrashItemMapper;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
@@ -52,6 +53,12 @@ import static org.mockito.Mockito.when;
 class DietServiceTest {
 
     @Mock
+    private TrashItemMapper trashItemMapper;
+
+    @Mock
+    private MealPhotoTrash mealPhotoTrash;
+
+    @Mock
     private MealLogMapper mealLogMapper;
 
     @Mock
@@ -78,7 +85,7 @@ class DietServiceTest {
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, energyService, photoStorage, diaryPhotoMapper);
+                settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
     }
@@ -203,9 +210,9 @@ class DietServiceTest {
         verify(photoStorage).write(eq(path), eq("image/jpeg"), any(), any());
     }
 
-    /** 删除要先删行、后删文件——反过来的失败态是「记录指向不存在的图」，更难收拾。 */
+    /** 删除进回收站（ADR 0047）：删行，但文件要留着，恢复时才找得回来。 */
     @Test
-    void deletePhoto_removesRowThenFile() {
+    void deletePhoto_movesToTrashAndKeepsFile() {
         MealPhoto p = new MealPhoto();
         p.setId(3L);
         p.setUserId(7L);
@@ -214,8 +221,9 @@ class DietServiceTest {
 
         service().deletePhoto(7L, 3L);
 
+        verify(mealPhotoTrash).put(7L, p);
         verify(mealPhotoMapper).deleteById(3L);
-        verify(photoStorage).delete("7/2026-10-12/lunch");
+        verify(photoStorage, never()).delete(any());
     }
 
     @Test
@@ -228,7 +236,7 @@ class DietServiceTest {
     @Test
     void savePhoto_overQuota_throws() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, energyService, photoStorage, diaryPhotoMapper);
+                settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);

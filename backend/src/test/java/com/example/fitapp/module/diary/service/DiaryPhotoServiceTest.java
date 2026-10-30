@@ -45,6 +45,9 @@ class DiaryPhotoServiceTest {
     }
 
     @Mock
+    private DiaryPhotoTrash photoTrash;
+
+    @Mock
     private DiaryPhotoMapper photoMapper;
 
     @Mock
@@ -57,7 +60,7 @@ class DiaryPhotoServiceTest {
     private PhotoStorage photoStorage;
 
     private DiaryPhotoService service() {
-        return new DiaryPhotoService(photoMapper, refMapper, dietService, photoStorage);
+        return new DiaryPhotoService(photoMapper, refMapper, dietService, photoStorage, photoTrash);
     }
 
     private static MockMultipartFile jpeg() {
@@ -155,11 +158,13 @@ class DiaryPhotoServiceTest {
         when(refMapper.selectCount(any())).thenReturn(0L).thenReturn(1L);
         when(photoMapper.selectById(9L)).thenReturn(photo(9L));
 
-        service().releaseEntry(3L, true);
+        List<DiaryPhoto> taken = service().releaseEntry(3L, true);
 
+        assertEquals(1, taken.size());
+        assertEquals(9L, taken.get(0).getId());
         verify(photoMapper).deleteById(9L);
         verify(photoMapper, never()).deleteById(10L);
-        verify(photoStorage).delete("7/diary/p9");
-        verify(photoStorage, never()).delete("7/diary/p10");
+        // 文件要留到回收站真正清理时才删（ADR 0047）
+        verify(photoStorage, never()).delete(any());
     }
 }

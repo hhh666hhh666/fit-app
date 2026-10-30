@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
 import { hydrateCache } from '@/api/cache'
 import { installBackHandler } from '@/utils/backStack'
 import { installPagePush } from '@/utils/pagePush'
+import { flushAbandoned } from '@/utils/abandoned-session'
 
 // 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
 // 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
@@ -29,6 +30,9 @@ onLaunch(() => {
     void import('@/pages/profile/index.vue')
   }, 200)
 })
+
+// 断网时丢掉的训练先存在本机，回到前台就补传一次（ADR 0047）
+onShow(() => void flushAbandoned())
 </script>
 
 <style lang="scss">

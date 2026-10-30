@@ -17,6 +17,7 @@ import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -46,6 +47,7 @@ public class FoodService {
     private final FoodMapper foodMapper;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    private final FoodTrash foodTrash;
 
     /** 列表/搜索：预置 + 自有合并，按浏览次数降序（常用上浮，同值按名称）。 */
     public List<Food> list(Long userId, String q) {
@@ -218,8 +220,9 @@ public class FoodService {
         return updated;
     }
 
+    @Transactional
     public void delete(Long userId, Long id) {
-        requireOwn(userId, id);
+        foodTrash.put(userId, requireOwn(userId, id));
         foodMapper.deleteById(id);
     }
 

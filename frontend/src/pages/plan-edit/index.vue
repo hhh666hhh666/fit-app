@@ -12,7 +12,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 计划编辑/新建（晴窗，ADR 0041）──
 
@@ -372,7 +372,7 @@ function removePlan() {
   if (!isEdit.value) return
   void ask({
     title: '删除计划',
-    content: '删除后，周表里引用它的安排也会一并移除。',
+    content: `周表里引用它的安排也会一并移除。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

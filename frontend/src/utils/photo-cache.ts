@@ -114,6 +114,11 @@ export function isPhotoEmpty(key: string): boolean {
   return emptyKeys.has(key)
 }
 
+/** 从回收站恢复后调用：之前记下的「这张没有了」不再成立。 */
+export function clearEmptyMarks(): void {
+  emptyKeys.clear()
+}
+
 /** 整份清空（登出 / 401 / 换账号）：内存与磁盘一起清。 */
 export function clearPhotoCache(): void {
   for (const entry of store.values()) URL.revokeObjectURL(entry.url)

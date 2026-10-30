@@ -8,7 +8,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ensureLogin } from '@/utils/guard'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 相册（ADR 0014）：全部照片按日期倒序的网格（每行 3 张、日期分组、触底加载）──
 //    分「餐照」「日记」两栏（ADR 0044）：两者共用配额，都要能在这里看和清理。
@@ -174,15 +174,15 @@ const viewerCaption = computed(() => {
   return r.meal ? `${r.date} · ${MEAL_LABEL[r.meal]}` : `${r.date} · 日记`
 })
 
-/** 就地删除当前这张（二次确认，不可恢复；饮食条目和日记正文都不受影响）。 */
+/** 就地删除当前这张（二次确认，进回收站；饮食条目和日记正文都不受影响）。 */
 function removeCurrent() {
   const r = rows.value[viewer.value.index]
   if (!r) return
   void ask({
     title: '删除这张照片？',
     content: r.meal
-      ? '删除后不可恢复；这一餐的饮食条目不受影响。'
-      : '删除后不可恢复；用到它的日记会显示「图片已删除」。',
+      ? `这一餐的饮食条目不受影响。${TRASH_HINT}`
+      : `用到它的日记会显示「图片已删除」，恢复后回到原位。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

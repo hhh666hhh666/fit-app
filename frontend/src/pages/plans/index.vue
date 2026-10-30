@@ -5,7 +5,8 @@ import { useScheduleStore } from '@/stores/schedule'
 import { getPlan, type PlanDetail, type PlanListItem } from '@/api/plan'
 import { formatDateLabel, formatThousands } from '@/utils/format'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
-import { clearSession, loadSession, type Session } from '@/utils/session'
+import { loadSession, type Session } from '@/utils/session'
+import { abandonCurrentSession } from '@/utils/abandoned-session'
 import { ensureLogin } from '@/utils/guard'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
@@ -109,7 +110,7 @@ function resumeLast() {
 function startOver() {
   const id = conflict.value?.planId
   conflict.value = null
-  clearSession()
+  abandonCurrentSession()
   uni.navigateTo({ url: `/pages/session/index?plan=${id}&fresh=1` })
 }
 </script>

@@ -5,6 +5,7 @@ import { batchDeleteDiary, listDiary, type DiaryListItem } from '@/api/diary'
 import { clearAll } from '@/api/cache'
 import { formatTimeLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
+import { TRASH_HINT } from '@/utils/confirm'
 import { plainPreview } from '@/utils/markdown-lite'
 import { loadDraft } from '@/utils/diary-draft'
 import FtButton from '@/components/FtButton.vue'
@@ -288,6 +289,7 @@ async function confirmDelete() {
               <text class="dl__sub">只删只属于这些日记的图。不勾的话，图片留在相册。</text>
             </view>
           </view>
+          <text class="dl__sub">{{ TRASH_HINT }}</text>
           <FtButton variant="danger" block :disabled="deleting" @click="confirmDelete">删除</FtButton>
         </view>
       </FtSheet>

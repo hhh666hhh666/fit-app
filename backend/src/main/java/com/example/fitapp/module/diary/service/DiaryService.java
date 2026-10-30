@@ -34,6 +34,7 @@ public class DiaryService {
 
     private final DiaryEntryMapper entryMapper;
     private final DiaryPhotoService photoService;
+    private final DiaryTrash diaryTrash;
 
     public List<DiaryListItemVO> list(Long userId, String month, String keyword, int limit, int offset) {
         QueryWrapper<DiaryEntry> q = new QueryWrapper<DiaryEntry>()
@@ -85,13 +86,10 @@ public class DiaryService {
     /** 批量删除：先整体校验归属，任一不归属则整批不动。图默认留在相册，见 ADR 0046。 */
     @Transactional
     public void batchDelete(Long userId, List<Long> ids, boolean withPhotos) {
-        List<Long> distinct = ids.stream().distinct().toList();
-        for (Long id : distinct) {
-            requireOwn(userId, id);
-        }
-        for (Long id : distinct) {
-            photoService.releaseEntry(id, withPhotos);
-            entryMapper.deleteById(id);
+        List<DiaryEntry> distinct = ids.stream().distinct().map(id -> requireOwn(userId, id)).toList();
+        for (DiaryEntry e : distinct) {
+            diaryTrash.put(userId, e, photoService.releaseEntry(e.getId(), withPhotos));
+            entryMapper.deleteById(e.getId());
         }
     }
 

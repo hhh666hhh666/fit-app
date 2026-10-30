@@ -11,7 +11,7 @@ import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
 import FtIcon from '@/components/FtIcon.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('log')
@@ -201,7 +201,7 @@ function doDelete() {
   if (ids.length === 0) return
   void ask({
     title: '删除训练记录',
-    content: `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
+    content: `删除选中的 ${ids.length} 条记录？${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

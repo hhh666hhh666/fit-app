@@ -8,7 +8,7 @@ import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 食物详情（只读）：预置＝「复制为自定义」；自有＝编辑/删除。食物库列表点条目进入。 ──
 //    只展示「有值」的营养字段（空字段不占版面）；主组固定显示（未测显示 —）。
@@ -124,7 +124,7 @@ function doDelete() {
   if (!f || deleting.value) return
   void ask({
     title: '删除食物',
-    content: `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。`,
+    content: `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

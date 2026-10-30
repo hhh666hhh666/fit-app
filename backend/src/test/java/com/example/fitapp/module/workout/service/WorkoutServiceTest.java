@@ -52,6 +52,9 @@ import static org.mockito.Mockito.when;
 class WorkoutServiceTest {
 
     @Mock
+    private WorkoutTrash workoutTrash;
+
+    @Mock
     private WorkoutMapper workoutMapper;
     @Mock
     private WorkoutBlockMapper blockMapper;
@@ -63,7 +66,7 @@ class WorkoutServiceTest {
     private ExerciseMapper exerciseMapper;
 
     private WorkoutService service() {
-        return new WorkoutService(workoutMapper, blockMapper, setMapper, planMapper, exerciseMapper);
+        return new WorkoutService(workoutMapper, blockMapper, setMapper, planMapper, exerciseMapper, workoutTrash);
     }
 
     /** 造一个动作库里的动作（带肌群码）——有氧判定要看 `muscle`。 */

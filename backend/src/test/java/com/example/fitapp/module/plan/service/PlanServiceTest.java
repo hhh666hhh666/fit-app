@@ -39,6 +39,9 @@ import static org.mockito.Mockito.when;
 class PlanServiceTest {
 
     @Mock
+    private PlanTrash planTrash;
+
+    @Mock
     private PlanMapper planMapper;
 
     @Mock
@@ -55,7 +58,7 @@ class PlanServiceTest {
 
     private PlanService service() {
         return new PlanService(planMapper, planExerciseMapper, planExerciseSetMapper,
-                weekScheduleMapper, exerciseMapper);
+                weekScheduleMapper, exerciseMapper, planTrash);
     }
 
     private static Exercise exercise(long id, Long ownerId, boolean archived) {

@@ -6,6 +6,9 @@
 //    要让人在两个动作之间选，用 FtSheet 放两个按钮，别塞进确认框的两个位子。
 import { PALETTE } from './palette'
 
+/** 删除确认框里的统一说法（ADR 0047）。 */
+export const TRASH_HINT = '会移到回收站，30 天内可恢复。'
+
 export interface AskOptions {
   title: string
   content?: string

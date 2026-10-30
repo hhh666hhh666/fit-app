@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,13 +28,16 @@ import static org.mockito.Mockito.when;
 class DiaryServiceTest {
 
     @Mock
+    private DiaryTrash diaryTrash;
+
+    @Mock
     private DiaryEntryMapper entryMapper;
 
     @Mock
     private DiaryPhotoService photoService;
 
     private DiaryService service() {
-        return new DiaryService(entryMapper, photoService);
+        return new DiaryService(entryMapper, photoService, diaryTrash);
     }
 
     private static DiarySaveDTO dto(LocalDateTime at, String title, String content) {
@@ -100,11 +104,14 @@ class DiaryServiceTest {
 
     @Test
     void 批量删除要放掉图片() {
-        when(entryMapper.selectOne(any())).thenReturn(new DiaryEntry());
+        DiaryEntry e = new DiaryEntry();
+        e.setId(1L);
+        when(entryMapper.selectOne(any())).thenReturn(e);
 
         service().batchDelete(7L, List.of(1L, 1L), true);
 
         verify(photoService).releaseEntry(1L, true);
+        verify(diaryTrash).put(eq(7L), eq(e), any());
         verify(entryMapper).deleteById(1L);
     }
 

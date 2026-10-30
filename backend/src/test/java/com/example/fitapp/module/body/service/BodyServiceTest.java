@@ -38,10 +38,13 @@ import static org.mockito.Mockito.when;
 class BodyServiceTest {
 
     @Mock
+    private BodyTrash bodyTrash;
+
+    @Mock
     private BodyRecordMapper bodyRecordMapper;
 
     private BodyService service() {
-        return new BodyService(bodyRecordMapper);
+        return new BodyService(bodyRecordMapper, bodyTrash);
     }
 
     private static BodyRecord rec(long id, LocalDateTime at, String weight,

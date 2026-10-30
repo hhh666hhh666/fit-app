@@ -51,10 +51,13 @@ class FoodServiceTest {
             Validation.buildDefaultValidatorFactory().getValidator();
 
     @Mock
+    private FoodTrash foodTrash;
+
+    @Mock
     private FoodMapper foodMapper;
 
     private FoodService service() {
-        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR);
+        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR, foodTrash);
     }
 
     private static FoodSaveDTO dto(String name) {

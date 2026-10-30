@@ -310,6 +310,8 @@ export function getTrend(params?: { from?: string; to?: string; days?: number })
 export interface StorageInfo {
   /** 图片已用（字节，原图 ＋ 缩略图）。 */
   photoBytes: number
+  /** 其中回收站里的照片占多少（字节）。 */
+  trashBytes: number
   /** 照片张数。 */
   photoCount: number
   /** 图片上限（字节）。 */

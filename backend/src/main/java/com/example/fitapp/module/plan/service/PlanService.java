@@ -49,6 +49,7 @@ public class PlanService {
     private final PlanExerciseSetMapper planExerciseSetMapper;
     private final WeekScheduleMapper weekScheduleMapper;
     private final ExerciseMapper exerciseMapper;
+    private final PlanTrash planTrash;
 
     public List<PlanListItemVO> list(Long userId) {
         List<PlanListItemVO> rows = planMapper.selectListItems(userId);
@@ -109,7 +110,8 @@ public class PlanService {
 
     @Transactional
     public void delete(Long userId, Long id) {
-        requireOwn(userId, id);
+        // 快照要在删行之前存（ADR 0047），周安排占过哪几格也记在里面
+        planTrash.put(userId, requireOwn(userId, id));
         deleteSetsOfPlan(id);
         planExerciseMapper.delete(
                 Wrappers.<PlanExercise>lambdaQuery().eq(PlanExercise::getPlanId, id));

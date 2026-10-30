@@ -10,7 +10,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 动作库（晴窗，ADR 0041）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
@@ -131,7 +131,7 @@ function doDelete() {
   if (!ids.length) return
   void ask({
     title: '删除自定义动作',
-    content: `删除选中的 ${ids.length} 个动作？动作会从动作库下架，历史训练记录仍会保留。`,
+    content: `删除选中的 ${ids.length} 个动作？历史训练记录仍会保留。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

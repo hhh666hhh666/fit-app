@@ -129,6 +129,11 @@ function fmtBytes(n: number | undefined): string {
 
 const photoUsedText = computed(() => fmtBytes(storage.value?.photoBytes))
 const photoQuotaText = computed(() => fmtBytes(storage.value?.photoQuotaBytes))
+const storageHint = computed(() => {
+  const trash = storage.value?.trashBytes ?? 0
+  const head = trash > 0 ? `含回收站 ${fmtBytes(trash)}` : '餐照和日记图片合计'
+  return `${head}；达到上限后将无法再上传新照片`
+})
 const photoCountText = computed(() =>
   storage.value ? `共 ${storage.value.photoCount} 张` : '—'
 )
@@ -197,6 +202,10 @@ function goSettings() {
 
 function goAlbum() {
   uni.navigateTo({ url: '/pages/album/index' })
+}
+
+function goTrash() {
+  uni.navigateTo({ url: '/pages/trash/index' })
 }
 
 function goRecognitionLogs() {
@@ -270,6 +279,7 @@ function logout() {
         />
         <FtListRow title="食物库" :value="foodSummary" arrow @click="goFoods" />
         <FtListRow title="照片" :value="photoCountText" arrow @click="goAlbum" />
+        <FtListRow title="回收站" arrow @click="goTrash" />
         <FtListRow title="设置" value="饮食目标 · 图片压缩" arrow @click="goSettings" />
       </view>
 
@@ -286,7 +296,7 @@ function logout() {
             :style="{ width: photoPct }"
           />
         </view>
-        <text class="storage__hint">目前只统计餐照；达到上限后将无法再上传新照片</text>
+        <text class="storage__hint">{{ storageHint }}</text>
       </view>
 
       <!-- 识别用量（ADR 0018）：外卡两值，点进明细分页 -->

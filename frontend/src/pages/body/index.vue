@@ -37,7 +37,7 @@ import {
   weightUnitShort,
   type WeightUnit
 } from '@/utils/weight'
-import { ask } from '@/utils/confirm'
+import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
 
@@ -227,8 +227,8 @@ function doDelete() {
     title: '删除身体档案记录',
     content:
       ids.length === 1
-        ? '删除这条记录？删除后不可恢复。'
-        : `删除选中的 ${ids.length} 条记录？删除后不可恢复。`,
+        ? `删除这条记录？${TRASH_HINT}`
+        : `删除选中的 ${ids.length} 条记录？${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {

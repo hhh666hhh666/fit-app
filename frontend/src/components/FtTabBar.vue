@@ -22,7 +22,8 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import SessionConflictSheet from '@/components/SessionConflictSheet.vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatDateLabel } from '@/utils/format'
-import { clearSession, loadSession, type Session } from '@/utils/session'
+import { loadSession, type Session } from '@/utils/session'
+import { abandonCurrentSession } from '@/utils/abandoned-session'
 import { getResumeFx, type ResumeFx } from '@/utils/resume-fx'
 import {
   animateWhenConnected,
@@ -202,7 +203,7 @@ function resumeLast() {
 
 function startOver() {
   conflict.value = false
-  clearSession()
+  abandonCurrentSession()
   session.value = null
   openPicker()
 }

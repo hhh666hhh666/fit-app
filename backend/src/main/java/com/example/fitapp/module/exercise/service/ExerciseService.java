@@ -27,6 +27,7 @@ public class ExerciseService {
             Set.of("chest", "back", "leg", "shoulder", "arm", "core", "cardio");
 
     private final ExerciseMapper exerciseMapper;
+    private final ExerciseTrash exerciseTrash;
 
     public List<ExerciseVO> list(Long userId, String muscle, String keyword) {
         List<Exercise> rows = exerciseMapper.selectList(
@@ -61,11 +62,13 @@ public class ExerciseService {
         return toVO(e);
     }
 
-    /** 删除 = 下架（archived=1），历史记录照常显示。 */
+    /** 删除 = 下架（archived=1），历史记录照常显示；回收站里留一条恢复入口（ADR 0047）。 */
+    @org.springframework.transaction.annotation.Transactional
     public void archive(Long userId, Long id) {
         Exercise e = requireOwn(userId, id);
         e.setArchived(true);
         exerciseMapper.updateById(e);
+        exerciseTrash.put(userId, e);
     }
 
     /** 批量下架：先校验全部归属，再统一更新，避免部分动作被误下架。 */
@@ -73,11 +76,12 @@ public class ExerciseService {
     public void batchArchive(Long userId, List<Long> ids) {
         if (ids == null || ids.isEmpty()) return;
         List<Long> distinct = ids.stream().distinct().toList();
-        for (Long id : distinct) requireOwn(userId, id);
+        List<Exercise> own = distinct.stream().map(id -> requireOwn(userId, id)).toList();
         exerciseMapper.update(null, Wrappers.<Exercise>update()
                 .in("id", distinct)
                 .eq("user_id", userId)
                 .set("archived", true));
+        own.forEach(e -> exerciseTrash.put(userId, e));
     }
 
     private Exercise requireOwn(Long userId, Long id) {

@@ -14,8 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -31,8 +29,7 @@ import java.util.regex.Pattern;
  * 日记图片（ADR 0044）：上传、读取、相册、按正文同步引用。
  *
  * <p>图片常驻相册（ADR 0046）：从正文去掉或删除日记都不会动它，只有主人明确要删才删。
- * 引用表只用来判断一张图是不是「只属于这篇」。
- * 文件一律在数据库提交之后才删：最坏留一个无害的孤儿文件（ADR 0026）。
+ * 引用表只用来判断一张图是不是「只属于这篇」。删除一律进回收站（ADR 0047），文件留到真正清理时才删。
  */
 @Slf4j
 @Service
@@ -46,6 +43,7 @@ public class DiaryPhotoService {
     private final DiaryPhotoRefMapper refMapper;
     private final DietService dietService;
     private final PhotoStorage photoStorage;
+    private final DiaryPhotoTrash photoTrash;
 
     /** 上传一张图，返回它的 id。 */
     public Long upload(Long userId, MultipartFile file) {
@@ -111,7 +109,7 @@ public class DiaryPhotoService {
                 }).toList();
     }
 
-    /** 从相册删一张：引用它的日记之后显示「图片已删除」，正文不动。 */
+    /** 从相册删一张：进回收站；引用它的日记显示「图片已删除」，正文不动，恢复后回到原位。 */
     @Transactional
     public void delete(Long userId, Long id) {
         DiaryPhoto p = photoMapper.selectOne(Wrappers.<DiaryPhoto>lambdaQuery()
@@ -120,9 +118,9 @@ public class DiaryPhotoService {
         if (p == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "照片不存在");
         }
+        photoTrash.put(userId, p);
         refMapper.delete(Wrappers.<DiaryPhotoRef>lambdaQuery().eq(DiaryPhotoRef::getPhotoId, id));
         photoMapper.deleteById(id);
-        deleteFilesAfterCommit(List.of(p.getPath()));
     }
 
     /** 保存日记后按正文同步引用。只认这个用户自己的图：正文里写别人的 id 不算引用，读取时也取不到。 */
@@ -148,27 +146,27 @@ public class DiaryPhotoService {
     }
 
     /**
-     * 删除一篇日记时调用：图默认留在相册；{@code withPhotos} 时只删只属于它的图，
-     * 其他日记还在用的图保留。
+     * 删除一篇日记时调用：图默认留在相册；{@code withPhotos} 时把只属于它的图从相册拿走并返回，
+     * 由调用方存进这篇日记的快照（ADR 0046、0047）。其他日记还在用的图保留。
      */
     @Transactional
-    public void releaseEntry(Long entryId, boolean withPhotos) {
+    public List<DiaryPhoto> releaseEntry(Long entryId, boolean withPhotos) {
         List<DiaryPhotoRef> refs = refsOf(entryId);
         refMapper.delete(Wrappers.<DiaryPhotoRef>lambdaQuery().eq(DiaryPhotoRef::getEntryId, entryId));
         if (!withPhotos) {
-            return;
+            return List.of();
         }
-        List<String> paths = new ArrayList<>();
+        List<DiaryPhoto> taken = new ArrayList<>();
         for (DiaryPhotoRef r : refs) {
             if (refCount(r.getPhotoId()) == 0) {
                 DiaryPhoto p = photoMapper.selectById(r.getPhotoId());
                 if (p != null) {
                     photoMapper.deleteById(p.getId());
-                    paths.add(p.getPath());
+                    taken.add(p);
                 }
             }
         }
-        deleteFilesAfterCommit(paths);
+        return taken;
     }
 
     /** 正文里写到的、确实属于这个用户的图。 */
@@ -201,21 +199,5 @@ public class DiaryPhotoService {
 
     private long refCount(Long photoId) {
         return refMapper.selectCount(Wrappers.<DiaryPhotoRef>lambdaQuery().eq(DiaryPhotoRef::getPhotoId, photoId));
-    }
-
-    private void deleteFilesAfterCommit(List<String> paths) {
-        if (paths.isEmpty()) {
-            return;
-        }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            paths.forEach(photoStorage::delete);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                paths.forEach(photoStorage::delete);
-            }
-        });
     }
 }

@@ -19,6 +19,7 @@ import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
 import com.example.fitapp.module.nutrition.storage.PhotoStorage;
+import com.example.fitapp.module.trash.mapper.TrashItemMapper;
 import com.example.fitapp.module.nutrition.vo.DailyNutritionRow;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
@@ -86,6 +87,8 @@ public class DietService {
 
     /** 日记图片的占用要和餐照一起算（ADR 0044）；这里只读占用，不依赖日记的业务。 */
     private final DiaryPhotoMapper diaryPhotoMapper;
+    private final TrashItemMapper trashItemMapper;
+    private final MealPhotoTrash mealPhotoTrash;
 
     /** 餐照总占用上限（字节，原图＋缩略图）；达上限即拒绝上传（ADR 0013，值在 application.yml）。 */
     @Value("${fitapp.storage.photo-quota-bytes:21474836480}")
@@ -293,31 +296,32 @@ public class DietService {
 
     /** 容量闸（ADR 0013）：餐照和日记图片共用一个上限（ADR 0044），超限直接拒绝。 */
     public void checkPhotoQuota(Long userId, long delta) {
-        long used = mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId);
+        // 回收站里的文件还在磁盘上，要算进去（ADR 0047）
+        long used = mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId)
+                + trashItemMapper.sumPhotoBytes(userId);
         if (used + delta > photoQuotaBytes) {
             throw new BusinessException(ResultCode.BAD_REQUEST,
-                    "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
+                    "照片空间已满（上限 " + quotaText() + "），请先到相册或回收站清理");
         }
     }
 
-    /** 删除一张餐照（ADR 0013）。不存在 → 404。 */
+    /** 把一张餐照移到回收站（ADR 0047）：文件留在原处，到期或彻底删除才删。不存在 → 404。 */
+    @Transactional
     public void deletePhoto(Long userId, Long id) {
         MealPhoto p = getPhoto(userId, id);
         if (p == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "照片不存在");
         }
+        mealPhotoTrash.put(userId, p);
         mealPhotoMapper.deleteById(p.getId());
-        // 顺序要紧：行删成功之后才删文件。反过来的话，一旦删行失败就会留下
-        // 「记录指向不存在的图」——那比留个孤儿文件麻烦得多。
-        if (p.getPath() != null) {
-            photoStorage.delete(p.getPath());
-        }
     }
 
     /** 存储占用（ADR 0013）：目前只统计图片一类（原图 ＋ 缩略图），含餐照和日记图片。 */
     public StorageVO storage(Long userId) {
         StorageVO vo = new StorageVO();
-        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId));
+        long trashBytes = trashItemMapper.sumPhotoBytes(userId);
+        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId) + trashBytes);
+        vo.setTrashBytes(trashBytes);
         vo.setPhotoCount((int) (mealPhotoMapper.countByUser(userId) + diaryPhotoMapper.countByUser(userId)));
         vo.setPhotoQuotaBytes(photoQuotaBytes);
         return vo;

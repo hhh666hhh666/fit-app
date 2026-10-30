@@ -210,6 +210,11 @@ export async function fetchMealPhoto(id: number, thumb: boolean): Promise<{ url:
   return { url, deleted: !url && isPhotoEmpty(key) }
 }
 
+/** 回收站列表里的缩略图；取不到返回 null。 */
+export function fetchTrashThumb(id: number): Promise<string | null> {
+  return fetchCached(`${API_BASE}/trash/${id}/thumb`, `trash-thumb:${id}`)
+}
+
 // ── 日记图片（ADR 0044）：共用压缩、配额和 blob 缓存，按 id 取 ──
 
 /** 选图 →（按档压缩）→ 上传，返回图片 id；取消或失败返回 null（失败已 toast）。 */
@@ -261,7 +266,7 @@ export async function fetchDiaryPhoto(id: number, thumb: boolean): Promise<{ url
   return { url, deleted: !url && isPhotoEmpty(key) }
 }
 
-/** 删除一张日记图片（不可恢复）。成功返回 true；失败已 toast。 */
+/** 把一张日记图片移到回收站。成功返回 true；失败已 toast。 */
 export async function deleteDiaryPhoto(id: number): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/diary/photos/${id}`, { method: 'DELETE', headers: authHeader() })
@@ -284,7 +289,7 @@ export async function deleteDiaryPhoto(id: number): Promise<boolean> {
   }
 }
 
-/** 删除一张餐照。成功返回 true；失败已 toast。 */
+/** 把一张餐照移到回收站。成功返回 true；失败已 toast。 */
 export async function deletePhoto(id: number): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/diet/photos/${id}`, { method: 'DELETE', headers: authHeader() })

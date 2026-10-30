@@ -80,6 +80,10 @@
       "style": { "navigationBarTitleText": "照片" }
     },
     {
+      "path": "pages/trash/index",
+      "style": { "navigationBarTitleText": "回收站" }
+    },
+    {
       "path": "pages/recognition-log/index",
       "style": { "navigationBarTitleText": "识别明细" }
     },

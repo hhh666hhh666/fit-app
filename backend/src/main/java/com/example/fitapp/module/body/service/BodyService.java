@@ -37,6 +37,7 @@ import java.util.function.Function;
 public class BodyService {
 
     private final BodyRecordMapper bodyRecordMapper;
+    private final BodyTrash bodyTrash;
 
     @Transactional
     public BodyRecordVO create(Long userId, BodySaveDTO dto) {
@@ -75,7 +76,7 @@ public class BodyService {
 
     @Transactional
     public void delete(Long userId, Long id) {
-        requireOwn(userId, id);
+        bodyTrash.put(userId, requireOwn(userId, id));
         bodyRecordMapper.deleteById(id);
     }
 
@@ -88,12 +89,10 @@ public class BodyService {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        List<Long> distinct = ids.stream().distinct().toList();
-        for (Long id : distinct) {
-            requireOwn(userId, id);
-        }
-        for (Long id : distinct) {
-            bodyRecordMapper.deleteById(id);
+        List<BodyRecord> distinct = ids.stream().distinct().map(id -> requireOwn(userId, id)).toList();
+        for (BodyRecord r : distinct) {
+            bodyTrash.put(userId, r);
+            bodyRecordMapper.deleteById(r.getId());
         }
     }
 
