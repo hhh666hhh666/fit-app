@@ -108,9 +108,10 @@ page::before {
 /* ── uni 自带的确认框 / 操作菜单 / 轻提示：换成晴窗的皮 ──
    uni.showModal / showActionSheet / showToast 在 H5 是运行时自己渲染的 DOM（`uni-modal`、
    `uni-actionsheet`、`uni-toast`），默认是 3px 圆角、纯黑字、iOS 蓝确认、50% 纯黑遮罩。这里按类名覆盖：
-   确认框＝实底圆角卡 ＋ 两枚胶囊钮（左取消灰底、右确认白底），按钮字色由 utils/confirm.ts 的
-   confirmColor / cancelColor 内联给（深字或危险红）；操作菜单＝贴底实底面板；轻提示＝深色胶囊。
-   ⚠️ 类名是 uni 运行时的内部结构，升级 uni-app 后打开一个确认框看一眼。 */
+   确认框＝实底圆角卡 ＋ 两枚同款描边胶囊钮（同 FtButton 的 ghost / danger），按钮字色由 utils/confirm.ts 的
+   confirmColor / cancelColor 内联给（深字或危险红）；操作菜单＝贴底实底面板；轻提示＝深色胶囊；
+   加载中（uni.showLoading，也是 uni-toast）＝深色胶囊 ＋ 细圆环。
+   ⚠️ 类名是 uni 运行时的内部结构，升级 uni-app 后打开一个确认框、走一次上传看一眼。 */
 uni-modal .uni-mask,
 uni-actionsheet .uni-mask {
   background: $app-mask;
@@ -161,16 +162,8 @@ uni-modal .uni-modal__btn::after {
 uni-modal .uni-modal__btn {
   border-radius: $radius-pill;
   font-weight: $weight-bold;
-  transition: opacity $dur-fast $ease-out;
-}
-
-uni-modal .uni-modal__btn_default {
-  background: $app-surface-2;
-}
-
-uni-modal .uni-modal__btn_primary {
-  background: $app-surface;
   box-shadow: inset 0 0 0 1rpx $app-line;
+  transition: opacity $dur-fast $ease-out;
 }
 
 uni-modal .uni-modal__btn:active {
@@ -233,6 +226,45 @@ uni-toast .uni-simple-toast__text {
   padding: 20rpx 36rpx;
   font-size: $text-md;
   line-height: 1.5;
+}
+
+/* 加载中：运行时默认是定宽 7.6em 的方块，上图标下文字，套上全圆角就成了一团椭圆；
+   改成随文字宽度的横向胶囊。图标默认是辐条 SVG 背景图，换成细圆环 */
+uni-toast .uni-toast {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  box-sizing: border-box;
+  width: auto;
+  min-height: 0;
+  padding: 20rpx 36rpx;
+  font-size: $text-md;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+uni-toast .uni-toast .uni-loading {
+  flex: none;
+  box-sizing: border-box;
+  /* 运行时给图标的 38px 带 !important，只能同样压 */
+  width: 32rpx !important;
+  height: 32rpx !important;
+  margin: 0;
+  border: 4rpx solid $viewer-chip;
+  border-top-color: $viewer-ink;
+  border-radius: 50%;
+  background: none;
+  animation: ft-spin 800ms linear infinite;
+}
+
+uni-toast .uni-toast .uni-toast__content {
+  margin: 0;
+}
+
+@keyframes ft-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── 切页转场：旧页克隆层滑出（ADR 0040）──
