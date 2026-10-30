@@ -57,3 +57,5 @@ Status: accepted · 2026-10-30
 - 日记明文进库和备份，服务器和 OSS 上的备份都能读到内容。将来要加密时，已有正文要一起迁移。
 
 > 关联：ADR 0013、ADR 0014、ADR 0020、ADR 0026、ADR 0035、ADR 0043
+
+> ⚠️ **后续（2026-10-31）**：图片的删除与清理规则被 [ADR 0046](./0046-diary-photos-stay-in-album.md) 取代；删除日记和相册删图都进回收站（[ADR 0047](./0047-trash-snapshot-table.md)）。

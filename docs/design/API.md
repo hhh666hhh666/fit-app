@@ -40,6 +40,16 @@
 - **图片读取**（`/api/diary/photos/{id}` 与 `/thumb`）直出二进制，图已删返回真实的 HTTP 404，前端据此显示「图片已删除」。
 - **记录引用**（`/api/diary/refs`）解析不到的键给 `exists=false`，不报错：一篇日记里有一条引用失效很正常。
 
+## 回收站接口
+
+`/api/trash`（[ADR 0047](../adr/0047-trash-snapshot-table.md)）走登录态 JWT，字段以接口文档运行时为准。有三处要注意：
+
+- **删除接口语义变了**：一次训练、日记、餐照、日记图片、身体档案、计划、自定义动作、自建食物的删除接口都是移到回收站，不再物理删除。餐次条目和食物组合仍是物理删除。
+- **恢复**（`POST /api/trash/restore`）任一条不归属则整批不动；有话要告诉主人时带 `note`；丢掉的训练带 `session`，由前端写回本机。
+- **丢掉的训练**（`POST /api/trash/sessions`）按用户和开始时刻去重，重复补传算成功。
+
+餐照接口按 id：`/api/diet/photos/{id}` 与 `/thumb`，某一餐的列表是 `/api/diet/photos/of-meal`（[ADR 0045](../adr/0045-meal-photos-multiple-per-meal.md)）。
+
 ## 外部 agent 取数接口
 
 面向外部调用方的只读接口（[ADR 0043](../adr/0043-external-agent-read-api.md)），有几处与上面的约定不同：

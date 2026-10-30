@@ -65,3 +65,5 @@ Status: accepted · 2026-10-30
 - 这份文档是 [API 文档](../design/API.md)「不维护 endpoint 表」的例外：外部调用方拿不到本仓库，需要一份随后端发布的说明。文档与实现同改。
 
 > 关联：ADR 0001、ADR 0003、ADR 0029、ADR 0035、ADR 0042
+
+> ⚠️ **后续（2026-10-31）**：餐照取图地址改为按 id（[ADR 0045](./0045-meal-photos-multiple-per-meal.md)）；回收站里的数据不在接口结果里（[ADR 0047](./0047-trash-snapshot-table.md)）。
