@@ -8,8 +8,8 @@
 import request, { onAuthFail, unwrap } from './request'
 import { clearPhotoCache } from '@/utils/photo-cache'
 
-/** 域只有五个：域内任一处改动 → 域内全部重取（粗，但漏不掉）。 */
-export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food'
+/** 域内任一处改动 → 域内全部重取（粗，但漏不掉）。 */
+export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food' | 'diary'
 
 interface Entry {
   /** 存 Promise：同一 URL 的并发调用自动合并成一次请求。 */

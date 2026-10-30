@@ -172,7 +172,7 @@ function copyDocs() {
                 </view>
               </view>
             </view>
-            <text v-else class="doc__pre" selectable>{{ b.text }}</text>
+            <text v-else-if="b.type === 'code'" class="doc__pre" selectable>{{ b.text }}</text>
           </template>
         </view>
       </view>

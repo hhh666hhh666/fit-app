@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
-import { listAlbum, type AlbumPhoto, type MealKey } from '@/api/nutrition'
-import { deletePhoto, fetchPhotoThumbUrl, fetchPhotoUrl } from '@/utils/photo'
+import { listAlbum, type MealKey } from '@/api/nutrition'
+import { listDiaryAlbum } from '@/api/diary'
+import { deleteDiaryPhoto, deletePhoto, fetchDiaryPhoto, fetchPhotoThumbUrl, fetchPhotoUrl } from '@/utils/photo'
 import { invalidatePhoto } from '@/utils/photo-cache'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
@@ -10,7 +11,8 @@ import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ensureLogin } from '@/utils/guard'
 import { ask } from '@/utils/confirm'
 
-// ── 相册（ADR 0014）：全部餐照按日期倒序的网格（每行 3 张、日期分组、触底加载）──
+// ── 相册（ADR 0014）：全部照片按日期倒序的网格（每行 3 张、日期分组、触底加载）──
+//    分「餐照」「日记」两栏（ADR 0044）：两者共用配额，都要能在这里看和清理。
 //    列表只加载**缩略图**；点开看大图时才按需拉原图（走 PhotoViewer，可左右翻、可就地删）。
 //    ⚠️ 图片地址归 utils/photo-cache.ts 的 LRU 所有（ADR 0035）：这里不 revoke，换/删图走 invalidatePhoto。
 
@@ -23,12 +25,27 @@ const MEAL_LABEL: Record<MealKey, string> = {
   snack: '加餐'
 }
 
-const rows = ref<AlbumPhoto[]>([])
+type AlbumTab = 'meal' | 'diary'
+
+const TABS: { key: AlbumTab; label: string }[] = [
+  { key: 'meal', label: '餐照' },
+  { key: 'diary', label: '日记' }
+]
+
+/** 一张照片；meal 为空的是日记图片（按上传日期分组）。 */
+interface AlbumRow {
+  id: number
+  date: string
+  meal?: MealKey
+}
+
+const tab = ref<AlbumTab>('meal')
+const rows = ref<AlbumRow[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
 const finished = ref(false)
 
-/** 缩略图地址：key = `${date}|${meal}`；'' ＝ 取不到（不反复重试）。 */
+/** 缩略图地址：key 见 keyOf；'' ＝ 取不到（不反复重试）。 */
 const thumbs = ref<Record<string, string>>({})
 
 /** 看大图：urls 与 rows 一一对应，未加载的位置为 null。 */
@@ -39,8 +56,24 @@ onShow(() => {
   void reload()
 })
 
-function keyOf(r: AlbumPhoto) {
-  return `${r.logDate}|${r.meal}`
+function switchTab(t: AlbumTab) {
+  if (tab.value === t) return
+  tab.value = t
+  rows.value = []
+  void reload()
+}
+
+async function fetchPage(offset: number): Promise<AlbumRow[]> {
+  if (tab.value === 'meal') {
+    const list = await listAlbum(offset, PAGE_SIZE)
+    return list.map((r) => ({ id: r.id, date: r.logDate, meal: r.meal }))
+  }
+  const list = await listDiaryAlbum(offset, PAGE_SIZE)
+  return list.map((r) => ({ id: r.id, date: r.createdAt.slice(0, 10) }))
+}
+
+function keyOf(r: AlbumRow) {
+  return r.meal ? `${r.date}|${r.meal}` : `diary|${r.id}`
 }
 
 /** 只清本地索引，不释放地址——地址仍归照片缓存，下次进页还能直接命中。 */
@@ -49,25 +82,31 @@ function clearThumbs() {
 }
 
 async function reload() {
+  // 请求回来时可能已经切到另一栏：丢弃，不能把餐照塞进日记栏
+  const current = tab.value
   loading.value = true
   finished.value = false
   clearThumbs()
   try {
-    rows.value = await listAlbum(0, PAGE_SIZE)
-    finished.value = rows.value.length < PAGE_SIZE
+    const list = await fetchPage(0)
+    if (current !== tab.value) return
+    rows.value = list
+    finished.value = list.length < PAGE_SIZE
     loadThumbs()
   } catch {
     // request 层已统一提示
   } finally {
-    loading.value = false
+    if (current === tab.value) loading.value = false
   }
 }
 
 async function loadMore() {
   if (loading.value || loadingMore.value || finished.value) return
+  const current = tab.value
   loadingMore.value = true
   try {
-    const more = await listAlbum(rows.value.length, PAGE_SIZE)
+    const more = await fetchPage(rows.value.length)
+    if (current !== tab.value) return
     rows.value = rows.value.concat(more)
     finished.value = more.length < PAGE_SIZE
     loadThumbs()
@@ -86,7 +125,10 @@ function loadThumbs() {
     const k = keyOf(r)
     if (thumbs.value[k] !== undefined) continue
     thumbs.value[k] = ''
-    void fetchPhotoThumbUrl(r.logDate, r.meal).then((u) => {
+    const fetched = r.meal
+      ? fetchPhotoThumbUrl(r.date, r.meal)
+      : fetchDiaryPhoto(r.id, true).then((d) => d.url)
+    void fetched.then((u) => {
       thumbs.value[k] = u ?? ''
     })
   }
@@ -94,18 +136,18 @@ function loadThumbs() {
 
 /** 按日期分组（Map 保持插入顺序＝日期倒序）。 */
 const groups = computed(() => {
-  const map = new Map<string, AlbumPhoto[]>()
+  const map = new Map<string, AlbumRow[]>()
   for (const r of rows.value) {
-    const arr = map.get(r.logDate)
+    const arr = map.get(r.date)
     if (arr) arr.push(r)
-    else map.set(r.logDate, [r])
+    else map.set(r.date, [r])
   }
   return [...map.entries()].map(([date, items]) => ({ date, items }))
 })
 
 // ── 看大图 ──
 
-function openViewer(r: AlbumPhoto) {
+function openViewer(r: AlbumRow) {
   const i = rows.value.findIndex((x) => x.id === r.id)
   if (i < 0) return
   viewer.value = { show: true, index: i, urls: rows.value.map(() => null) }
@@ -116,7 +158,7 @@ function openViewer(r: AlbumPhoto) {
 async function loadOriginal(i: number) {
   const r = rows.value[i]
   if (!r || !viewer.value.show || viewer.value.urls[i]) return
-  const url = await fetchPhotoUrl(r.logDate, r.meal)
+  const url = r.meal ? await fetchPhotoUrl(r.date, r.meal) : (await fetchDiaryPhoto(r.id, false)).url
   if (viewer.value.show) viewer.value.urls[i] = url
 }
 
@@ -131,24 +173,27 @@ function closeViewer() {
 
 const viewerCaption = computed(() => {
   const r = rows.value[viewer.value.index]
-  return r ? `${r.logDate} · ${MEAL_LABEL[r.meal]}` : ''
+  if (!r) return ''
+  return r.meal ? `${r.date} · ${MEAL_LABEL[r.meal]}` : `${r.date} · 日记`
 })
 
-/** 就地删除当前这张（二次确认，不可恢复；饮食条目不受影响）。 */
+/** 就地删除当前这张（二次确认，不可恢复；饮食条目和日记正文都不受影响）。 */
 function removeCurrent() {
   const r = rows.value[viewer.value.index]
   if (!r) return
   void ask({
     title: '删除这张照片？',
-    content: '删除后不可恢复；这一餐的饮食条目不受影响。',
+    content: r.meal
+      ? '删除后不可恢复；这一餐的饮食条目不受影响。'
+      : '删除后不可恢复；用到它的日记会显示「图片已删除」。',
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {
     if (!confirm) return
-    const ok = await deletePhoto(r.logDate, r.meal)
+    const ok = r.meal ? await deletePhoto(r.date, r.meal) : await deleteDiaryPhoto(r.id)
     if (!ok) return
     // 照片已删：这张的原图与缩略图一起失效（缓存自己 revoke），本地索引同步去掉
-    invalidatePhoto(r.logDate, r.meal)
+    if (r.meal) invalidatePhoto(r.date, r.meal)
     const k = keyOf(r)
     delete thumbs.value[k]
     rows.value = rows.value.filter((x) => x.id !== r.id)
@@ -171,7 +216,19 @@ function dateText(iso: string): string {
     <view class="album__body">
       <FtPageHeader title="照片" back>
         <template #right>
-          <text v-if="rows.length" class="album__count ft-num">{{ rows.length }} 张</text>
+          <view class="seg" role="tablist">
+            <view
+              v-for="t in TABS"
+              :key="t.key"
+              class="seg__item"
+              :class="{ 'seg__item--on': tab === t.key }"
+              role="tab"
+              :aria-selected="tab === t.key"
+              @click="switchTab(t.key)"
+            >
+              {{ t.label }}
+            </view>
+          </view>
         </template>
       </FtPageHeader>
 
@@ -183,13 +240,14 @@ function dateText(iso: string): string {
           <view class="grid">
             <view v-for="r in g.items" :key="r.id" class="cell" role="button" @click="openViewer(r)">
               <image v-if="thumbs[keyOf(r)]" class="cell__img" :src="thumbs[keyOf(r)]" mode="aspectFill" />
-              <text class="cell__tag" :class="'cell__tag--' + r.meal">{{ MEAL_LABEL[r.meal] }}</text>
+              <text v-if="r.meal" class="cell__tag" :class="'cell__tag--' + r.meal">{{ MEAL_LABEL[r.meal] }}</text>
             </view>
           </view>
         </view>
 
         <view v-if="rows.length === 0" class="glass">
-          <FtEmpty title="还没有照片" sub="记录一餐时拍一张，就会出现在这里。" />
+          <FtEmpty v-if="tab === 'meal'" title="还没有照片" sub="记录一餐时拍一张，就会出现在这里。" />
+          <FtEmpty v-else title="还没有日记图片" sub="写日记时插一张图，就会出现在这里。" />
         </view>
         <view v-else-if="loadingMore" class="album__hint">加载中…</view>
         <view v-else-if="finished" class="album__hint ft-num">共 {{ rows.length }} 张</view>
@@ -223,11 +281,20 @@ function dateText(iso: string): string {
   @include glass-card;
 }
 
-.album__count {
+.seg {
+  @include seg-track;
+  display: flex;
   flex-shrink: 0;
-  padding-bottom: 12rpx;
-  font-size: $text-base;
-  color: $app-ink-muted;
+  margin-bottom: 8rpx;
+}
+
+.seg__item {
+  @include seg-item;
+  text-align: center;
+}
+
+.seg__item--on {
+  @include seg-item-on;
 }
 
 .album__hint {

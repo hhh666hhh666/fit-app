@@ -76,9 +76,22 @@ function evict(): void {
   }
 }
 
+/** 日记图片（ADR 0044）的原图与缩略图各一把键。 */
+export function diaryPhotoKey(id: number, thumb: boolean): string {
+  return `${thumb ? 'diary-thumb' : 'diary-full'}:${id}`
+}
+
 /** 换图 / 删图后精确作废某餐（原图与缩略图一起，内存与磁盘都清，含「没有照片」的负缓存）。 */
 export function invalidatePhoto(date: string, meal: string): void {
-  const keys = [photoKey(date, meal), thumbKey(date, meal)]
+  dropKeys([photoKey(date, meal), thumbKey(date, meal)])
+}
+
+/** 删掉一张日记图片后作废它（下次取会得到 404，正文显示「图片已删除」）。 */
+export function invalidateDiaryPhoto(id: number): void {
+  dropKeys([diaryPhotoKey(id, false), diaryPhotoKey(id, true)])
+}
+
+function dropKeys(keys: string[]): void {
   for (const key of keys) {
     emptyKeys.delete(key)
     const entry = store.get(key)

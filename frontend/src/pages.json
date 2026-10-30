@@ -84,6 +84,14 @@
       "style": { "navigationBarTitleText": "识别明细" }
     },
     {
+      "path": "pages/diary/index",
+      "style": { "navigationBarTitleText": "日记", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/diary-entry/index",
+      "style": { "navigationBarTitleText": "日记" }
+    },
+    {
       "path": "pages/agent/index",
       "style": { "navigationBarTitleText": "外部 agent" }
     }

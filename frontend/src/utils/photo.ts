@@ -5,6 +5,8 @@ import { API_BASE } from '@/api/base'
 import { invalidate } from '@/api/cache'
 import {
   cachePhoto,
+  diaryPhotoKey,
+  invalidateDiaryPhoto,
   invalidatePhoto,
   isPhotoEmpty,
   markPhotoEmpty,
@@ -195,6 +197,80 @@ export function fetchPhotoThumbUrl(date: string, meal: string): Promise<string |
     `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
     thumbKey(date, meal)
   )
+}
+
+// ── 日记图片（ADR 0044）：共用压缩、配额和 blob 缓存，按 id 取 ──
+
+/** 选图 →（按档压缩）→ 上传，返回图片 id；取消或失败返回 null（失败已 toast）。 */
+export async function pickAndUploadDiaryPhoto(quality: PhotoQuality): Promise<number | null> {
+  const picked = await choosePhoto()
+  if (picked.cancelled) return null
+  if (!picked.path) {
+    console.warn('[photo] 打开相机/相册失败：', picked.error)
+    uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+    return null
+  }
+  uni.showLoading({ title: '上传中…' })
+  try {
+    const original = await (await fetch(picked.path)).blob()
+    const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
+    if (blob.size > MAX_BYTES) {
+      uni.showToast({ title: '照片超过 10MB，请换更低的压缩档', icon: 'none' })
+      return null
+    }
+    const fd = new FormData()
+    fd.append('file', blob, blob.type === 'image/png' ? 'photo.png' : 'photo.jpg')
+    const res = await fetch(`${API_BASE}/diary/photos`, { method: 'POST', headers: authHeader(), body: fd })
+    let body: { code?: number; message?: string; data?: number } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      /* 非 JSON（如 nginx 错误页） */
+    }
+    uni.hideLoading()
+    if (res.ok && body && body.code === 0 && body.data != null) {
+      // 存储占用变了，相册也多了一张
+      invalidate('diet', 'diary')
+      return body.data
+    }
+    uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
+    return null
+  } catch {
+    uni.hideLoading()
+    // 断网时插不了图，但文字还能接着写（ADR 0044）
+    uni.showToast({ title: '图片没传上去，文字可以先写', icon: 'none' })
+    return null
+  }
+}
+
+/** 取一张日记图片。deleted＝接口明确说没有这张（要显示「图片已删除」），和网络失败区分开。 */
+export async function fetchDiaryPhoto(id: number, thumb: boolean): Promise<{ url: string | null; deleted: boolean }> {
+  const key = diaryPhotoKey(id, thumb)
+  const url = await fetchCached(`${API_BASE}/diary/photos/${id}${thumb ? '/thumb' : ''}`, key)
+  return { url, deleted: !url && isPhotoEmpty(key) }
+}
+
+/** 删除一张日记图片（不可恢复）。成功返回 true；失败已 toast。 */
+export async function deleteDiaryPhoto(id: number): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/diary/photos/${id}`, { method: 'DELETE', headers: authHeader() })
+    let body: { code?: number; message?: string } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      /* 非 JSON（如 nginx 错误页） */
+    }
+    if (res.ok && body && body.code === 0) {
+      invalidateDiaryPhoto(id)
+      invalidate('diet', 'diary')
+      return true
+    }
+    uni.showToast({ title: (body && body.message) || '删除失败', icon: 'none' })
+    return false
+  } catch {
+    uni.showToast({ title: '删除失败', icon: 'none' })
+    return false
+  }
 }
 
 /** 删除某餐照片（不可恢复）。成功返回 true；失败已 toast。 */

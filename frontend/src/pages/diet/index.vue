@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   addWater,
   getDay,
@@ -59,6 +59,12 @@ const sheetMeal = ref<MealKey | null>(null)
 
 const trend = ref<TrendPoint[]>([])
 const metric = ref<Metric>('kcal')
+
+// 日记里的记录引用会带日期跳进来（ADR 0044）；未来的日期不接受，和翻日期的口径一致
+onLoad((query) => {
+  const d = query?.date
+  if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= todayStr) dateStr.value = d
+})
 
 onShow(() => {
   if (!ensureLogin()) return

@@ -209,21 +209,21 @@ const todayHint = computed(() => {
   return '今天没有安排'
 })
 
-function goLibrary() {
-  uni.navigateTo({url: '/pages/library/index'})
+function goDiary() {
+  uni.navigateTo({url: '/pages/diary/index'})
 }
 </script>
 
 <template>
   <FtTabPage :page="tab" class="home">
     <view class="home__body">
-      <!-- 页头：上标＝周几 · 今天的安排，大标题＝日期；右侧胶囊进动作库 -->
+      <!-- 页头：上标＝周几 · 今天的安排，大标题＝日期；右侧胶囊进日记 -->
       <view class="home__head">
         <view class="home__head-main">
           <text class="home__hint">{{ todayWeek }} · {{ todayHint }}</text>
           <text class="home__date">{{ todayDate }}</text>
         </view>
-        <view class="home__pill" role="button" @click="goLibrary">动作库</view>
+        <view class="home__pill" role="button" @click="goDiary">日记</view>
       </view>
 
       <!-- 今天吃了：数字区与条形点开「饮食」页，六个入口直接记 -->
