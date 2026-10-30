@@ -13,7 +13,7 @@ public interface MealPhotoMapper extends BaseMapper<MealPhoto> {
 
     /** 指定日各餐的照片存在性（**不取 BLOB**）。 */
     @Select("""
-            SELECT meal FROM meal_photo
+            SELECT DISTINCT meal FROM meal_photo
             WHERE user_id = #{userId} AND log_date = #{date}
             """)
     List<String> selectMealsWithPhoto(@Param("userId") Long userId, @Param("date") LocalDate date);
@@ -35,13 +35,13 @@ public interface MealPhotoMapper extends BaseMapper<MealPhoto> {
 
     /**
      * 相册列表：按日期倒序、同日按早→晚（**不取 BLOB**，只出元数据）。
-     * 缩略图由前端逐个走 `/api/diet/photos/{date}/{meal}/thumb` 取。
+     * 缩略图由前端逐个走 `/api/diet/photos/{id}/thumb` 取。
      */
     @Select("""
             SELECT id, user_id, log_date, meal, mime, size_bytes, path, thumb_bytes, created_at, updated_at
             FROM meal_photo
             WHERE user_id = #{userId}
-            ORDER BY log_date DESC, FIELD(meal, 'breakfast', 'lunch', 'dinner', 'snack')
+            ORDER BY log_date DESC, FIELD(meal, 'breakfast', 'lunch', 'dinner', 'snack'), id
             LIMIT #{offset}, #{limit}
             """)
     List<MealPhoto> selectAlbum(@Param("userId") Long userId,

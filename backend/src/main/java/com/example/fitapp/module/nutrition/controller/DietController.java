@@ -67,28 +67,12 @@ public class DietController {
         return Result.success();
     }
 
-    /** 上传/替换某餐照片（multipart；字段名 file）。 */
+    /** 给某餐加一张照片（multipart；字段名 file），返回它的 id。 */
     @PostMapping("/photos")
-    public Result<Void> uploadPhoto(@RequestParam String date,
+    public Result<Long> uploadPhoto(@RequestParam String date,
                                     @RequestParam String meal,
                                     @RequestParam("file") MultipartFile file) {
-        dietService.savePhoto(UserContext.requireUserId(), date, meal, file);
-        return Result.success();
-    }
-
-    /** 直出图片二进制（不走 Result 信封）；前端带 token fetch → blob 展示。 */
-    @GetMapping("/photos/{date}/{meal}")
-    public ResponseEntity<byte[]> photo(@PathVariable String date, @PathVariable String meal) {
-        DietService.PhotoData d = dietService.readPhoto(UserContext.requireUserId(), date, meal, false);
-        if (d == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(d.mime()))
-                .contentLength(d.data().length)
-                // 照片会被替换——客户端不存缓存，每次取新图
-                .cacheControl(CacheControl.noStore())
-                .body(d.data());
+        return Result.success(dietService.savePhoto(UserContext.requireUserId(), date, meal, file));
     }
 
     /** 相册列表（按日期倒序、同日早→晚；只出元数据，图片数据由前端逐个取）。 */
@@ -98,25 +82,41 @@ public class DietController {
         return Result.success(dietService.album(UserContext.requireUserId(), offset, limit));
     }
 
+    /** 某一餐的全部照片（只出元数据）。 */
+    @GetMapping("/photos/of-meal")
+    public Result<List<MealPhoto>> mealPhotos(@RequestParam String date, @RequestParam String meal) {
+        return Result.success(dietService.mealPhotos(UserContext.requireUserId(), date, meal));
+    }
+
+    /** 直出图片二进制（不走 Result 信封）；前端带 token fetch → blob 展示。 */
+    @GetMapping("/photos/{id}")
+    public ResponseEntity<byte[]> photo(@PathVariable Long id) {
+        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, false));
+    }
+
     /** 缩略图（相册与列表用；无缩略图的老数据回退原图）。 */
-    @GetMapping("/photos/{date}/{meal}/thumb")
-    public ResponseEntity<byte[]> photoThumb(@PathVariable String date, @PathVariable String meal) {
-        DietService.PhotoData d = dietService.readPhoto(UserContext.requireUserId(), date, meal, true);
+    @GetMapping("/photos/{id}/thumb")
+    public ResponseEntity<byte[]> photoThumb(@PathVariable Long id) {
+        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, true));
+    }
+
+    /** 删除一张餐照。 */
+    @DeleteMapping("/photos/{id}")
+    public Result<Void> deletePhoto(@PathVariable Long id) {
+        dietService.deletePhoto(UserContext.requireUserId(), id);
+        return Result.success();
+    }
+
+    private static ResponseEntity<byte[]> photoResponse(DietService.PhotoData d) {
         if (d == null) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(d.mime()))
                 .contentLength(d.data().length)
+                // 客户端自己有 blob 缓存（ADR 0035），这里不再叠一层
                 .cacheControl(CacheControl.noStore())
                 .body(d.data());
-    }
-
-    /** 删除某餐照片（不可恢复）。 */
-    @DeleteMapping("/photos/{date}/{meal}")
-    public Result<Void> deletePhoto(@PathVariable String date, @PathVariable String meal) {
-        dietService.deletePhoto(UserContext.requireUserId(), date, meal);
-        return Result.success();
     }
 
     /** 存储占用（ADR 0013）：目前只统计图片一类（已用 / 张数 / 上限）。 */

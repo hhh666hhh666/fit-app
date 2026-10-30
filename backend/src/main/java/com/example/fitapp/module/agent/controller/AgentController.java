@@ -50,14 +50,14 @@ public class AgentController {
         agentDataService.writeHistory(userId, from, to, response.getOutputStream());
     }
 
-    @GetMapping("/photos/{date}/{meal}")
-    public ResponseEntity<byte[]> photo(@PathVariable String date, @PathVariable String meal) {
-        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), date, meal, false));
+    @GetMapping("/photos/{id}")
+    public ResponseEntity<byte[]> photo(@PathVariable Long id) {
+        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, false));
     }
 
-    @GetMapping("/photos/{date}/{meal}/thumb")
-    public ResponseEntity<byte[]> photoThumb(@PathVariable String date, @PathVariable String meal) {
-        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), date, meal, true));
+    @GetMapping("/photos/{id}/thumb")
+    public ResponseEntity<byte[]> photoThumb(@PathVariable Long id) {
+        return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, true));
     }
 
     /** 接口文档（Markdown）：公开，不含任何用户数据；App 的文档页与 agent 读的是同一份。 */

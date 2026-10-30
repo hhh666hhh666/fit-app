@@ -475,8 +475,8 @@ public class AgentDataService {
                 break;
             }
             for (MealPhoto p : page) {
-                String url = "/api/agent/photos/" + p.getLogDate() + "/" + p.getMeal();
-                g.writeObject(new AgentHistoryRows.Photo(p.getLogDate(), p.getMeal(), p.getMime(), p.getSizeBytes(),
+                String url = "/api/agent/photos/" + p.getId();
+                g.writeObject(new AgentHistoryRows.Photo(p.getId(), p.getLogDate(), p.getMeal(), p.getMime(), p.getSizeBytes(),
                         p.getThumbBytes(), url, url + "/thumb"));
             }
             g.flush();

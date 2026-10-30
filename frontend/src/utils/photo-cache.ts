@@ -30,12 +30,12 @@ let totalBytes = 0
 const emptyKeys = new Set<string>()
 
 /** 原图与缩略图各一把键。 */
-export function photoKey(date: string, meal: string): string {
-  return `full:${date}|${meal}`
+export function photoKey(id: number): string {
+  return `meal-full:${id}`
 }
 
-export function thumbKey(date: string, meal: string): string {
-  return `thumb:${date}|${meal}`
+export function thumbKey(id: number): string {
+  return `meal-thumb:${id}`
 }
 
 /** 取一个已缓存的内存地址（命中即刷新 LRU 位次）；没有返回 null。 */
@@ -81,9 +81,9 @@ export function diaryPhotoKey(id: number, thumb: boolean): string {
   return `${thumb ? 'diary-thumb' : 'diary-full'}:${id}`
 }
 
-/** 换图 / 删图后精确作废某餐（原图与缩略图一起，内存与磁盘都清，含「没有照片」的负缓存）。 */
-export function invalidatePhoto(date: string, meal: string): void {
-  dropKeys([photoKey(date, meal), thumbKey(date, meal)])
+/** 删图后精确作废这一张（原图与缩略图一起，内存与磁盘都清，含「没有照片」的负缓存）。 */
+export function invalidatePhoto(id: number): void {
+  dropKeys([photoKey(id), thumbKey(id)])
 }
 
 /** 删掉一张日记图片后作废它（下次取会得到 404，正文显示「图片已删除」）。 */
@@ -104,12 +104,12 @@ function dropKeys(keys: string[]): void {
   void dropFromDisk(keys)
 }
 
-/** 记下「这餐确实没有照片」（接口回 404 时）；换图/删图会连带清掉。 */
+/** 记下「这张确实没有了」（接口回 404 时）；删图会连带清掉。 */
 export function markPhotoEmpty(key: string): void {
   emptyKeys.add(key)
 }
 
-/** 是否已知「没有照片」。 */
+/** 是否已知「这张没有了」。 */
 export function isPhotoEmpty(key: string): boolean {
   return emptyKeys.has(key)
 }

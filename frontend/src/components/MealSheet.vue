@@ -8,13 +8,15 @@ import {
   listCombos,
   listFoods,
   updateMeal,
+  listMealPhotos,
+  type AlbumPhoto,
   type ComboItem,
   type FoodComboVO,
   type FoodItem,
   type MealItem,
   type MealKey
 } from '@/api/nutrition'
-import { deletePhoto, fetchPhotoUrl, pickAndUploadPhoto } from '@/utils/photo'
+import { deletePhoto, fetchMealPhoto, pickAndUploadPhotos } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
@@ -45,9 +47,11 @@ const loading = ref(true)
 const saving = ref(false)
 
 // ── 照片 ──
-const photoUrl = ref<string | null>(null)
-/** 全屏看图开关（单张：给 PhotoViewer 传长度 1 的数组）。 */
-const viewer = ref(false)
+// 一餐可以有多张（ADR 0045）：列表只显示缩略图，点开才拉原图
+const photos = ref<AlbumPhoto[]>([])
+const thumbs = ref<Record<number, string>>({})
+/** 全屏看图：urls 与 photos 一一对应，未加载的位置为 null。 */
+const viewer = ref({ show: false, index: 0, urls: [] as (string | null)[] })
 
 // ── 选食物 ──
 /** 轻量列表条数上限（预置 1800+ 条：搜索走服务端，初始只带前 N 条）。 */
@@ -128,7 +132,7 @@ async function init() {
     const day = await getDay(props.date)
     const group = day.meals.find((m) => m.meal === props.meal)
     items.value = group ? group.items : []
-    await Promise.all([loadPhoto(), searchFoods(), loadCombos()])
+    await Promise.all([loadPhotos(), searchFoods(), loadCombos()])
   } catch {
     // request 层已统一提示
   } finally {
@@ -164,26 +168,47 @@ async function searchFoods() {
 
 // ── 照片 ──
 
-async function loadPhoto() {
-  photoUrl.value = await fetchPhotoUrl(props.date, props.meal)
+async function loadPhotos() {
+  photos.value = await listMealPhotos(props.date, props.meal)
+  for (const p of photos.value) {
+    if (thumbs.value[p.id]) continue
+    void fetchMealPhoto(p.id, true).then((r) => {
+      if (r.url) thumbs.value[p.id] = r.url
+    })
+  }
 }
 
 async function shoot() {
   const quality = diet.settings?.photoQuality ?? 'medium'
-  const ok = await pickAndUploadPhoto(props.date, props.meal, quality)
-  if (ok) {
-    await loadPhoto()
+  const uploaded = await pickAndUploadPhotos(props.date, props.meal, quality)
+  if (uploaded > 0) {
+    await loadPhotos()
     emit('changed')
   }
 }
 
-/** 点图看大图（单张，可双指缩放）。 */
-function viewPhoto() {
-  if (photoUrl.value) viewer.value = true
+/** 点缩略图看大图（可左右翻、可双指缩放）。 */
+function viewPhoto(i: number) {
+  viewer.value = { show: true, index: i, urls: photos.value.map(() => null) }
+  void loadOriginal(i)
 }
 
-/** 删除这一餐的照片（二次确认、不可恢复）。 */
+async function loadOriginal(i: number) {
+  const p = photos.value[i]
+  viewer.value.index = i
+  if (!p || viewer.value.urls[i]) return
+  const { url } = await fetchMealPhoto(p.id, false)
+  if (viewer.value.show) viewer.value.urls[i] = url
+}
+
+function closeViewer() {
+  viewer.value = { show: false, index: 0, urls: [] }
+}
+
+/** 删除看大图时当前这张（二次确认）。 */
 function removePhoto() {
+  const p = photos.value[viewer.value.index]
+  if (!p) return
   void ask({
     title: '删除这张照片？',
     content: '删除后不可恢复；这一餐的饮食条目不受影响。',
@@ -191,9 +216,10 @@ function removePhoto() {
     danger: true
   }).then(async (confirm) => {
     if (!confirm) return
-    const ok = await deletePhoto(props.date, props.meal)
+    const ok = await deletePhoto(p.id)
     if (!ok) return
-    photoUrl.value = null
+    photos.value = photos.value.filter((x) => x.id !== p.id)
+    closeViewer()
     uni.showToast({ title: '已删除', icon: 'none' })
     emit('changed')
   })
@@ -403,13 +429,14 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
         <view v-if="loading && !entering" class="ms__loading">加载中…</view>
 
         <template v-else-if="!loading">
-          <!-- 照片：点图看大图；角标给「更换」「删除」（ADR 0014） -->
+          <!-- 照片：一排缩略图 ＋「添加」，点开全屏可翻页、可删（ADR 0045） -->
           <view class="photo">
-            <view v-if="photoUrl" class="photo__box">
-              <image class="photo__img" :src="photoUrl" mode="aspectFit" @click="viewPhoto" />
-              <view class="photo__ops">
-                <text class="photo__op" @click.stop="shoot">更换</text>
-                <text class="photo__op" @click.stop="removePhoto">删除</text>
+            <view v-if="photos.length" class="photo__grid">
+              <view v-for="(p, i) in photos" :key="p.id" class="photo__cell" role="button" @click="viewPhoto(i)">
+                <image v-if="thumbs[p.id]" class="photo__img" :src="thumbs[p.id]" mode="aspectFill" />
+              </view>
+              <view class="photo__add" role="button" aria-label="再加几张照片" @click="shoot">
+                <FtIcon name="plus" :size="18" :stroke="2" />
               </view>
             </view>
             <view v-else class="photo__empty" role="button" @click="shoot">
@@ -555,14 +582,18 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
         />
       </Transition>
 
-      <!-- 全屏看图（单张；与相册共用同一组件） -->
+      <!-- 全屏看图（与相册共用同一组件） -->
       <Transition name="ft-sheet">
         <PhotoViewer
-          v-if="viewer && photoUrl"
-          :urls="[photoUrl]"
+          v-if="viewer.show"
+          :urls="viewer.urls"
+          :index="viewer.index"
           :caption="`${date} · ${MEAL_LABEL[meal]}`"
-          @close="viewer = false"
-        />
+          @close="closeViewer"
+          @change="loadOriginal"
+        >
+          <view class="vw-del" role="button" @click="removePhoto">删除</view>
+        </PhotoViewer>
       </Transition>
     </view>
   </view>
@@ -690,33 +721,51 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   margin-bottom: 24rpx;
 }
 
-.photo__box {
-  position: relative;
-}
-
-/* aspectFit：按原图比例完整显示、不裁切（竖拍的餐盘不再被拦腰切） */
-.photo__img {
-  width: 100%;
-  height: 480rpx;
-  border-radius: $radius-lg;
-  background: $app-surface-2;
-}
-
-/* 角标：更换 / 删除——压在照片上，用遮罩色的深底白字 */
-.photo__ops {
-  position: absolute;
-  right: 16rpx;
-  bottom: 16rpx;
-  display: flex;
+.photo__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 12rpx;
 }
 
-.photo__op {
-  padding: 8rpx 22rpx;
+.photo__cell,
+.photo__add {
+  aspect-ratio: 1;
+  border-radius: $radius-md;
+  overflow: hidden;
+  @include press(fill);
+}
+
+.photo__cell {
+  background: $app-surface-2;
+}
+
+.photo__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.photo__add {
+  border: 2rpx dashed $app-line-dash;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $app-ink-muted;
+}
+
+/* 看图浮层里的「删除」：深底胶囊，和说明胶囊并排（同相册） */
+.vw-del {
+  flex-shrink: 0;
+  height: 80rpx;
+  padding: 0 32rpx;
+  display: flex;
+  align-items: center;
   border-radius: $radius-pill;
-  background: $app-mask;
-  font-size: $text-sm;
-  color: $app-surface;
+  background: $viewer-chip;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $viewer-ink;
+  @include press(dim);
 }
 
 .photo__empty {

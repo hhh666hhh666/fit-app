@@ -333,6 +333,11 @@ export function listAlbum(offset = 0, limit = 60) {
   return read<AlbumPhoto[]>('/diet/photos', { offset, limit }, 'diet', false)
 }
 
+/** 某一餐的全部照片（只有元数据），按上传先后。 */
+export function listMealPhotos(date: string, meal: string) {
+  return read<AlbumPhoto[]>('/diet/photos/of-meal', { date, meal }, 'diet')
+}
+
 // ── 食物组合（一串食物 ＋ 固定克数；ADR 0012）──
 
 /** 组合里的一条：foodId 为 null 表示那样食物已被删（仍列出名字，但无单位与热量、不计入合计）。 */

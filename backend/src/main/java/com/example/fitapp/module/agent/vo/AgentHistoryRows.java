@@ -42,7 +42,7 @@ public final class AgentHistoryRows {
     public record Water(LocalDate date, Integer ml) {
     }
 
-    public record Photo(LocalDate date, String meal, String mime, Integer sizeBytes, Integer thumbBytes,
+    public record Photo(Long id, LocalDate date, String meal, String mime, Integer sizeBytes, Integer thumbBytes,
                         String url, String thumbUrl) {
     }
 

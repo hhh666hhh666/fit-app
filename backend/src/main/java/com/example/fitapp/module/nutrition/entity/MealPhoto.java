@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 每餐一张的照片（重拍即替换；每用户 + 日期 + 餐次至多一行）。
+ * 餐照（一餐可以有多张，ADR 0045）。
  *
  * <p>图片实体**存在文件系统**（见 {@link com.example.fitapp.module.nutrition.storage.PhotoStorage}，
  * ADR 0026），本行只留元数据与相对路径。
@@ -31,7 +31,7 @@ public class MealPhoto {
 
     private Integer sizeBytes;
 
-    /** 图片相对路径（不含扩展名与根目录）：{userId}/{logDate}/{meal}。见 ADR 0026。 */
+    /** 图片相对路径（不含扩展名与根目录）：{userId}/{logDate}/{meal}，新照片再带随机串。见 ADR 0026、0045。 */
     private String path;
 
     /** 缩略图字节数（缩略图文件在文件系统里）；老数据无缩略图时为 NULL。 */

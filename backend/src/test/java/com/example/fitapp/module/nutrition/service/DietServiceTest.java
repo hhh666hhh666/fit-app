@@ -36,6 +36,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -155,20 +156,18 @@ class DietServiceTest {
         verify(mealLogMapper, never()).deleteById(any(Long.class));
     }
 
+    /** 首次写入其实成功、只是响应阶段才断连时，重试查到同路径的行就不再插入（ADR 0045）。 */
     @Test
-    void savePhoto_replacesExistingInsteadOfAppending() {
+    void savePhoto_retryFindsSamePath_doesNotInsertAgain() {
         MealPhoto existing = new MealPhoto();
         existing.setId(3L);
         existing.setUserId(7L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(existing);
         MockMultipartFile file = new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
-        service().savePhoto(7L, "2026-10-12", "lunch", file);
+        assertEquals(3L, service().savePhoto(7L, "2026-10-12", "lunch", file));
 
-        verify(mealPhotoMapper).updateById(existing);
         verify(mealPhotoMapper, never()).insert(any(MealPhoto.class));
-        assertEquals("image/jpeg", existing.getMime());
-        assertEquals(3, existing.getSizeBytes());
     }
 
     @Test
@@ -197,10 +196,11 @@ class DietServiceTest {
 
         ArgumentCaptor<MealPhoto> captor = ArgumentCaptor.forClass(MealPhoto.class);
         verify(mealPhotoMapper).insert(captor.capture());
-        // 路径键与唯一键 uk_mp_user_date_meal 同构：重拍即同路径覆盖，不堆孤儿
-        assertEquals("7/2026-10-12/lunch", captor.getValue().getPath());
+        // 一餐可以有多张（ADR 0045）：路径带随机串，新图不会覆盖同餐的其他图
+        String path = captor.getValue().getPath();
+        assertTrue(path.startsWith("7/2026-10-12/lunch-"));
         assertNull(captor.getValue().getImage());
-        verify(photoStorage).write(eq("7/2026-10-12/lunch"), eq("image/jpeg"), any(), any());
+        verify(photoStorage).write(eq(path), eq("image/jpeg"), any(), any());
     }
 
     /** 删除要先删行、后删文件——反过来的失败态是「记录指向不存在的图」，更难收拾。 */
@@ -212,7 +212,7 @@ class DietServiceTest {
         p.setPath("7/2026-10-12/lunch");
         when(mealPhotoMapper.selectOne(any())).thenReturn(p);
 
-        service().deletePhoto(7L, "2026-10-12", "lunch");
+        service().deletePhoto(7L, 3L);
 
         verify(mealPhotoMapper).deleteById(3L);
         verify(photoStorage).delete("7/2026-10-12/lunch");
@@ -273,7 +273,7 @@ class DietServiceTest {
     void deletePhoto_absent_throws() {
         // 实现改成「先查出该行（拿 path）再删」，所以这里要桩 selectOne 而不是 delete
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);
-        assertThrows(BusinessException.class, () -> service().deletePhoto(7L, "2026-10-12", "lunch"));
+        assertThrows(BusinessException.class, () -> service().deletePhoto(7L, 3L));
     }
 
     @Test

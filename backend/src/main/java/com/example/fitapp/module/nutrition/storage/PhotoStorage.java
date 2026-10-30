@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 餐照的**文件存储**（ADR 0026）：图片实体落在服务器磁盘上，库里只留一个相对路径。
@@ -43,9 +44,14 @@ public class PhotoStorage {
         return root;
     }
 
-    /** 相对键（不含扩展名）：{userId}/{logDate}/{meal}。仅由服务端用库内字段拼成，不接受外部输入。 */
+    /** 老照片的相对键（不含扩展名）：{userId}/{logDate}/{meal}。仅由服务端用库内字段拼成，不接受外部输入。 */
     public static String relKey(Long userId, LocalDate date, String meal) {
         return userId + "/" + date + "/" + meal;
+    }
+
+    /** 新照片的相对键：一餐可以有多张（ADR 0045），带随机串才不会覆盖同餐的其他图。 */
+    public static String uniqueKey(Long userId, LocalDate date, String meal) {
+        return relKey(userId, date, meal) + "-" + UUID.randomUUID().toString().replace("-", "");
     }
 
     /** mime → 扩展名。 */

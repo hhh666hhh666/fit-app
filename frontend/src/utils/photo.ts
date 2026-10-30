@@ -31,6 +31,8 @@ const QUALITY_MAP: Record<Exclude<PhotoQuality, 'lossless'>, number> = {
 
 const TOKEN_KEY = 'fitapp_token'
 const MAX_BYTES = 10 * 1024 * 1024
+/** 一次最多选几张。 */
+const MAX_PICK = 9
 
 function authHeader(): Record<string, string> {
   const token = (uni.getStorageSync(TOKEN_KEY) as string) || ''
@@ -103,54 +105,72 @@ export async function compress(blob: Blob, quality: number): Promise<Blob> {
   })
 }
 
+/** 选多张照片；取消或失败返回空数组（失败已 toast）。 */
+function choosePhotos(count: number): Promise<string[]> {
+  return new Promise((resolve) => {
+    uni.chooseImage({
+      count,
+      sizeType: ['original'],
+      sourceType: ['album', 'camera'],
+      success: (res) => resolve((res.tempFilePaths as string[] | undefined) ?? []),
+      fail: (err) => {
+        const msg = String((err as { errMsg?: string } | undefined)?.errMsg || '')
+        if (!msg.includes('cancel')) {
+          console.warn('[photo] 打开相机/相册失败：', msg)
+          uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+        }
+        resolve([])
+      }
+    })
+  })
+}
+
 /**
- * 选图 →（按档压缩）→ 上传替换该餐照片。
- * 返回 true=已上传；false=取消选择或失败（失败已 toast）。
+ * 选图 →（按档压缩）→ 逐张上传到这一餐（一餐可以有多张，ADR 0045）。
+ * 返回传成功的张数；取消或全部失败时为 0（失败已 toast）。
  */
-export async function pickAndUploadPhoto(
-  date: string,
-  meal: string,
-  quality: PhotoQuality
-): Promise<boolean> {
-  const picked = await choosePhoto()
-  if (picked.cancelled) return false
-  if (!picked.path) {
-    // 真失败：让用户看见原因，别再静默（否则表现就是「点了没反应」）
-    console.warn('[photo] 打开相机/相册失败：', picked.error)
-    uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
-    return false
-  }
-  const path = picked.path
+export async function pickAndUploadPhotos(date: string, meal: string, quality: PhotoQuality): Promise<number> {
+  const paths = await choosePhotos(MAX_PICK)
+  if (paths.length === 0) return 0
+  let uploaded = 0
+  uni.showLoading({ title: '上传中…' })
   try {
-    const original = await (await fetch(path)).blob()
-    const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
-    if (blob.size > MAX_BYTES) {
-      uni.showToast({ title: '照片超过 10MB，请换更低的压缩档', icon: 'none' })
-      return false
+    for (const path of paths) {
+      const original = await (await fetch(path)).blob()
+      const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
+      if (blob.size > MAX_BYTES) {
+        uni.hideLoading()
+        uni.showToast({ title: '照片超过 10MB，请换更低的压缩档', icon: 'none' })
+        return uploaded
+      }
+      const fd = new FormData()
+      fd.append('file', blob, blob.type === 'image/png' ? 'photo.png' : 'photo.jpg')
+      const res = await fetch(
+        `${API_BASE}/diet/photos?date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`,
+        { method: 'POST', headers: authHeader(), body: fd }
+      )
+      let body: { code?: number; message?: string } | null = null
+      try {
+        body = await res.json()
+      } catch {
+        /* 非 JSON（如 nginx 错误页） */
+      }
+      if (!res.ok || !body || body.code !== 0) {
+        uni.hideLoading()
+        uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
+        return uploaded
+      }
+      uploaded++
     }
-    const fd = new FormData()
-    fd.append('file', blob, blob.type === 'image/png' ? 'photo.png' : 'photo.jpg')
-    const res = await fetch(
-      `${API_BASE}/diet/photos?date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`,
-      { method: 'POST', headers: authHeader(), body: fd }
-    )
-    let body: { code?: number; message?: string } | null = null
-    try {
-      body = await res.json()
-    } catch {
-      /* 非 JSON（如 nginx 错误页） */
-    }
-    if (res.ok && body && body.code === 0) {
-      // 换过图：这张的缓存立刻作废，存储占用也跟着变（ADR 0035）
-      invalidatePhoto(date, meal)
-      invalidate('diet')
-      return true
-    }
-    uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
-    return false
+    uni.hideLoading()
+    return uploaded
   } catch {
+    uni.hideLoading()
     uni.showToast({ title: '照片处理失败', icon: 'none' })
-    return false
+    return uploaded
+  } finally {
+    // 哪怕只传成功一部分：这一餐的照片和存储占用都变了（ADR 0035）
+    if (uploaded > 0) invalidate('diet')
   }
 }
 
@@ -158,7 +178,7 @@ export async function pickAndUploadPhoto(
 async function fetchCached(url: string, key: string): Promise<string | null> {
   const hit = peekPhoto(key)
   if (hit) return hit
-  // 已知这餐没照片：不再为它跑一次 404（大多数餐次都没拍照）
+  // 已知这张没有了：不再为它跑一次 404
   if (isPhotoEmpty(key)) return null
   // 磁盘里可能有上个进程留下的那张
   const fromDisk = await readPhotoFromDisk(key)
@@ -180,23 +200,14 @@ async function fetchCached(url: string, key: string): Promise<string | null> {
 }
 
 /**
- * 取某餐照片的临时地址（缓存里的 objectURL）；无照片返回 null。
- * ⚠️ 调用方**不许 revoke**——地址归缓存所有（ADR 0035）；换图／删图走 `invalidatePhoto`，
+ * 取一张餐照。deleted＝接口明确说没有这张，和网络失败区分开。
+ * ⚠️ 调用方**不许 revoke** 拿到的地址——它归缓存所有（ADR 0035）；删图走 `invalidatePhoto`，
  * 缓存自己按 LRU 淘汰。撤销一个正在 `<img>` 上显示的地址会当场变裂图。
  */
-export function fetchPhotoUrl(date: string, meal: string): Promise<string | null> {
-  return fetchCached(
-    `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
-    photoKey(date, meal)
-  )
-}
-
-/** 取某餐照片的**缩略图**地址（相册与列表用）；无照片返回 null。老数据无缩略图时后端回退原图。 */
-export function fetchPhotoThumbUrl(date: string, meal: string): Promise<string | null> {
-  return fetchCached(
-    `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}/thumb`,
-    thumbKey(date, meal)
-  )
+export async function fetchMealPhoto(id: number, thumb: boolean): Promise<{ url: string | null; deleted: boolean }> {
+  const key = thumb ? thumbKey(id) : photoKey(id)
+  const url = await fetchCached(`${API_BASE}/diet/photos/${id}${thumb ? '/thumb' : ''}`, key)
+  return { url, deleted: !url && isPhotoEmpty(key) }
 }
 
 // ── 日记图片（ADR 0044）：共用压缩、配额和 blob 缓存，按 id 取 ──
@@ -273,13 +284,10 @@ export async function deleteDiaryPhoto(id: number): Promise<boolean> {
   }
 }
 
-/** 删除某餐照片（不可恢复）。成功返回 true；失败已 toast。 */
-export async function deletePhoto(date: string, meal: string): Promise<boolean> {
+/** 删除一张餐照。成功返回 true；失败已 toast。 */
+export async function deletePhoto(id: number): Promise<boolean> {
   try {
-    const res = await fetch(
-      `${API_BASE}/diet/photos/${encodeURIComponent(date)}/${encodeURIComponent(meal)}`,
-      { method: 'DELETE', headers: authHeader() }
-    )
+    const res = await fetch(`${API_BASE}/diet/photos/${id}`, { method: 'DELETE', headers: authHeader() })
     let body: { code?: number; message?: string } | null = null
     try {
       body = await res.json()
@@ -287,7 +295,7 @@ export async function deletePhoto(date: string, meal: string): Promise<boolean> 
       /* 非 JSON（如 nginx 错误页） */
     }
     if (res.ok && body && body.code === 0) {
-      invalidatePhoto(date, meal)
+      invalidatePhoto(id)
       invalidate('diet')
       return true
     }

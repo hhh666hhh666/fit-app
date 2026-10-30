@@ -217,9 +217,10 @@ public class DietService {
         mealLogMapper.deleteById(id);
     }
 
-    // ── 照片（每餐一张；上传即替换）──
+    // ── 照片（一餐可以有多张，ADR 0045）──
 
-    public void savePhoto(Long userId, String dateStr, String meal, MultipartFile file) {
+    /** 上传一张餐照，返回它的 id。 */
+    public Long savePhoto(Long userId, String dateStr, String meal, MultipartFile file) {
         if (!MEAL_ORDER.contains(meal)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
         }
@@ -229,50 +230,46 @@ public class DietService {
 
         // 缩略图与数据库无关，放在重试之外：它是 CPU 密集活，重试时重算一遍没有意义。
         byte[] thumb = makeThumb(bytes);
+        // 路径也放在重试之外：幂等靠它——首次写入其实成功、只是响应阶段才断连时，
+        // 重试会查到同路径的那一行，不会多出一张。
+        String relKey = PhotoStorage.uniqueKey(userId, date, meal);
 
         // 「查旧行 → 容量闸 → 写库」整块交给重试：三步都打数据库，而共用 MySQL 容器被
         // OOM-killer 杀掉重启的那几秒，正是它们会失败的地方（原委见 TransientRetry 的注释）。
-        // 幂等靠唯一键 uk_mp_user_date_meal：首次写入其实成功、只是响应阶段才断连时，
-        // 重试会查到自己刚写的那一行，走 update 分支收成同一行，不会多出一条。
+        Long[] id = new Long[1];
         TransientRetry.run("上传餐照", PHOTO_WRITE_ATTEMPTS, () -> {
             MealPhoto existing = mealPhotoMapper.selectOne(Wrappers.<MealPhoto>lambdaQuery()
-                    .eq(MealPhoto::getUserId, userId)
-                    .eq(MealPhoto::getLogDate, date)
-                    .eq(MealPhoto::getMeal, meal));
+                    .eq(MealPhoto::getPath, relKey));
+            if (existing != null) {
+                id[0] = existing.getId();
+                return;
+            }
 
-            // 容量闸（ADR 0013）：达上限直接拒绝。替换时按**净增**算（旧图会被换掉）。
+            // 容量闸（ADR 0013）：达上限直接拒绝。
             // 它抛的 BusinessException 不属可重试族，会直接穿过 TransientRetry 冒到全局处理器。
-            long oldSize = (existing == null || existing.getSizeBytes() == null) ? 0L : existing.getSizeBytes();
-            checkPhotoQuota(userId, bytes.length - oldSize);
+            checkPhotoQuota(userId, bytes.length);
 
             // 落盘放在写库之前：文件写不成就别动数据库。反过来（先写库、文件失败）会留下
             // 「记录指向不存在的图」；而写库失败时重试会往同一路径再写一遍——同路径覆盖，
-            // 天然幂等，也不会堆积孤儿（键与唯一键 uk_mp_user_date_meal 同构）。
-            String relKey = PhotoStorage.relKey(userId, date, meal);
+            // 天然幂等，也不会堆积孤儿。
             try {
                 photoStorage.write(relKey, mime, bytes, thumb);
             } catch (IOException e) {
                 throw new BusinessException(ResultCode.SYSTEM_ERROR, "照片保存失败，请稍后重试");
             }
 
-            if (existing == null) {
-                MealPhoto p = new MealPhoto();
-                p.setUserId(userId);
-                p.setLogDate(date);
-                p.setMeal(meal);
-                p.setMime(mime);
-                p.setSizeBytes(bytes.length);
-                p.setPath(relKey);
-                p.setThumbBytes(thumb == null ? null : thumb.length);
-                mealPhotoMapper.insert(p);
-            } else {
-                existing.setMime(mime);
-                existing.setSizeBytes(bytes.length);
-                existing.setPath(relKey);
-                existing.setThumbBytes(thumb == null ? null : thumb.length);
-                mealPhotoMapper.updateById(existing);
-            }
+            MealPhoto p = new MealPhoto();
+            p.setUserId(userId);
+            p.setLogDate(date);
+            p.setMeal(meal);
+            p.setMime(mime);
+            p.setSizeBytes(bytes.length);
+            p.setPath(relKey);
+            p.setThumbBytes(thumb == null ? null : thumb.length);
+            mealPhotoMapper.insert(p);
+            id[0] = p.getId();
         });
+        return id[0];
     }
 
     /** 校验上传的照片（大小、类型）并读出内容；餐照和日记图片共用。 */
@@ -303,9 +300,9 @@ public class DietService {
         }
     }
 
-    /** 删除某餐照片（不可恢复；ADR 0013）。不存在 → 404。 */
-    public void deletePhoto(Long userId, String dateStr, String meal) {
-        MealPhoto p = getPhoto(userId, dateStr, meal);
+    /** 删除一张餐照（ADR 0013）。不存在 → 404。 */
+    public void deletePhoto(Long userId, Long id) {
+        MealPhoto p = getPhoto(userId, id);
         if (p == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "照片不存在");
         }
@@ -373,21 +370,29 @@ public class DietService {
                 .toPlainString() + " GB";
     }
 
-    /** 读照片元数据；不存在返回 null（由 Controller 转 404）。 */
-    public MealPhoto getPhoto(Long userId, String dateStr, String meal) {
-        LocalDate date = parseDate(dateStr);
+    /** 读照片元数据；不存在或不是这个用户的返回 null（由 Controller 转 404）。 */
+    public MealPhoto getPhoto(Long userId, Long id) {
         return mealPhotoMapper.selectOne(Wrappers.<MealPhoto>lambdaQuery()
+                .eq(MealPhoto::getId, id)
+                .eq(MealPhoto::getUserId, userId));
+    }
+
+    /** 某一餐的全部照片（只出元数据），按上传先后。 */
+    public List<MealPhoto> mealPhotos(Long userId, String dateStr, String meal) {
+        return mealPhotoMapper.selectList(Wrappers.<MealPhoto>lambdaQuery()
+                .select(MealPhoto::getId, MealPhoto::getLogDate, MealPhoto::getMeal, MealPhoto::getSizeBytes)
                 .eq(MealPhoto::getUserId, userId)
-                .eq(MealPhoto::getLogDate, date)
-                .eq(MealPhoto::getMeal, meal));
+                .eq(MealPhoto::getLogDate, parseDate(dateStr))
+                .eq(MealPhoto::getMeal, meal)
+                .orderByAsc(MealPhoto::getId));
     }
 
     /**
      * 读取餐照二进制。{@code wantThumb=true} 时优先缩略图、没有就回退原图（老数据无缩略图）。
      * 返回 null 表示这张图确实取不到（文件丢了、或记录不在）——由 Controller 转 404。
      */
-    public PhotoData readPhoto(Long userId, String dateStr, String meal, boolean wantThumb) {
-        MealPhoto p = getPhoto(userId, dateStr, meal);
+    public PhotoData readPhoto(Long userId, Long id, boolean wantThumb) {
+        MealPhoto p = getPhoto(userId, id);
         if (p == null) {
             return null;
         }

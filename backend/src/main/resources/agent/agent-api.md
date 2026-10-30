@@ -41,7 +41,7 @@ GET /api/agent/history?from=2026-01-01&to=2026-03-31
 - `meals`：餐次条目；`per100` 是记录时的营养快照，`actual` 是按克数算出的实际摄入
 - `body`：身体档案，每条记哪项填哪项，没量的项为 null
 - `water`：每日饮水
-- `photos`：餐照元数据和下载路径
+- `photos`：餐照元数据和下载路径；一餐可以有多张，每张有自己的 `id`
 - `days`：每日汇总，只含当天至少有一条饮食、饮水或训练记录的日子
 - `exercises`：被引用的动作和主人自建的动作
 - `foods`：被引用的食物和主人自建的食物，含完整营养（每 100g 或 100ml，只有已填的项）
@@ -50,9 +50,9 @@ GET /api/agent/history?from=2026-01-01&to=2026-03-31
 
 ⚠️ **流式响应中途失败时，HTTP 状态码仍是 200，但 JSON 会残缺。把 JSON 解析失败当作本次拉取失败，然后重试。**
 
-### GET /api/agent/photos/{date}/{meal}
+### GET /api/agent/photos/{id}
 
-餐照原图，路径直接取自 `photos[].url`。末尾加 `/thumb` 是缩略图（长边不超过 320px，取自 `photos[].thumbUrl`）。`meal` 为 `breakfast`、`lunch`、`dinner` 或 `snack`。没有图时返回 HTTP 404。
+餐照原图，路径直接取自 `photos[].url`。末尾加 `/thumb` 是缩略图（长边不超过 320px，取自 `photos[].thumbUrl`）。`id` 是 `photos[].id`，按日期和餐次取图的旧路径已经取消。没有图时返回 HTTP 404。
 
 ### GET /api/agent/docs
 

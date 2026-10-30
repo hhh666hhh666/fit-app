@@ -3,8 +3,7 @@ import { computed, ref } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import { listAlbum, type MealKey } from '@/api/nutrition'
 import { listDiaryAlbum } from '@/api/diary'
-import { deleteDiaryPhoto, deletePhoto, fetchDiaryPhoto, fetchPhotoThumbUrl, fetchPhotoUrl } from '@/utils/photo'
-import { invalidatePhoto } from '@/utils/photo-cache'
+import { deleteDiaryPhoto, deletePhoto, fetchDiaryPhoto, fetchMealPhoto } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
@@ -14,7 +13,7 @@ import { ask } from '@/utils/confirm'
 // ── 相册（ADR 0014）：全部照片按日期倒序的网格（每行 3 张、日期分组、触底加载）──
 //    分「餐照」「日记」两栏（ADR 0044）：两者共用配额，都要能在这里看和清理。
 //    列表只加载**缩略图**；点开看大图时才按需拉原图（走 PhotoViewer，可左右翻、可就地删）。
-//    ⚠️ 图片地址归 utils/photo-cache.ts 的 LRU 所有（ADR 0035）：这里不 revoke，换/删图走 invalidatePhoto。
+//    ⚠️ 图片地址归 utils/photo-cache.ts 的 LRU 所有（ADR 0035）：这里不 revoke，删图走 invalidatePhoto。
 
 const PAGE_SIZE = 60
 
@@ -73,7 +72,7 @@ async function fetchPage(offset: number): Promise<AlbumRow[]> {
 }
 
 function keyOf(r: AlbumRow) {
-  return r.meal ? `${r.date}|${r.meal}` : `diary|${r.id}`
+  return `${r.meal ? 'meal' : 'diary'}|${r.id}`
 }
 
 /** 只清本地索引，不释放地址——地址仍归照片缓存，下次进页还能直接命中。 */
@@ -125,11 +124,9 @@ function loadThumbs() {
     const k = keyOf(r)
     if (thumbs.value[k] !== undefined) continue
     thumbs.value[k] = ''
-    const fetched = r.meal
-      ? fetchPhotoThumbUrl(r.date, r.meal)
-      : fetchDiaryPhoto(r.id, true).then((d) => d.url)
-    void fetched.then((u) => {
-      thumbs.value[k] = u ?? ''
+    const fetched = r.meal ? fetchMealPhoto(r.id, true) : fetchDiaryPhoto(r.id, true)
+    void fetched.then((d) => {
+      thumbs.value[k] = d.url ?? ''
     })
   }
 }
@@ -158,7 +155,7 @@ function openViewer(r: AlbumRow) {
 async function loadOriginal(i: number) {
   const r = rows.value[i]
   if (!r || !viewer.value.show || viewer.value.urls[i]) return
-  const url = r.meal ? await fetchPhotoUrl(r.date, r.meal) : (await fetchDiaryPhoto(r.id, false)).url
+  const { url } = r.meal ? await fetchMealPhoto(r.id, false) : await fetchDiaryPhoto(r.id, false)
   if (viewer.value.show) viewer.value.urls[i] = url
 }
 
@@ -190,10 +187,8 @@ function removeCurrent() {
     danger: true
   }).then(async (confirm) => {
     if (!confirm) return
-    const ok = r.meal ? await deletePhoto(r.date, r.meal) : await deleteDiaryPhoto(r.id)
+    const ok = r.meal ? await deletePhoto(r.id) : await deleteDiaryPhoto(r.id)
     if (!ok) return
-    // 照片已删：这张的原图与缩略图一起失效（缓存自己 revoke），本地索引同步去掉
-    if (r.meal) invalidatePhoto(r.date, r.meal)
     const k = keyOf(r)
     delete thumbs.value[k]
     rows.value = rows.value.filter((x) => x.id !== r.id)
