@@ -19,6 +19,38 @@ import java.util.List;
 public interface WorkoutMapper extends BaseMapper<Workout> {
 
     /**
+     * 记录引用卡片（ADR 0044）：按 id 取，或取某个时间段内的训练。
+     * 日期按开始时刻归属（跨零点算开始那天），字段形状和日志列表一样，`createdAt` 在这里放的是开始时刻。
+     */
+    @Select("""
+            <script>
+            SELECT w.id, w.title, w.duration_sec AS durationSec, w.calories AS calories,
+                   w.total_volume AS totalVolume, COALESCE(w.started_at, w.created_at) AS createdAt,
+                   EXISTS (SELECT 1 FROM workout_block wb2
+                           LEFT JOIN exercise e2 ON e2.id = wb2.exercise_id
+                           WHERE wb2.workout_id = w.id
+                             AND (e2.muscle IS NULL OR e2.muscle &lt;&gt; 'cardio')) AS hasStrength,
+                   (SELECT COALESCE(SUM(ws2.floors), 0) FROM workout_set ws2
+                    JOIN workout_block wb3 ON wb3.id = ws2.block_id
+                    WHERE wb3.workout_id = w.id) AS totalFloors
+            FROM workout w
+            WHERE w.user_id = #{userId}
+            <if test="ids != null">
+              AND w.id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+            </if>
+            <if test="start != null">
+              AND COALESCE(w.started_at, w.created_at) &gt;= #{start}
+              AND COALESCE(w.started_at, w.created_at) &lt; #{end}
+            </if>
+            ORDER BY COALESCE(w.started_at, w.created_at)
+            </script>
+            """)
+    List<WorkoutListItemVO> selectRefItems(@Param("userId") Long userId,
+                                           @Param("ids") Collection<Long> ids,
+                                           @Param("start") LocalDateTime start,
+                                           @Param("end") LocalDateTime end);
+
+    /**
      * 日志列表：每条带「第一个动作名」概要与**层数合计**，按时间倒序。
      * `start`／`end` 非空时按月过滤（左闭右开）；`offset` 供触底分页。
      *

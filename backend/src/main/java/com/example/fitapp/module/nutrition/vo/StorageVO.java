@@ -9,10 +9,10 @@ import lombok.Data;
 @Data
 public class StorageVO {
 
-    /** 图片已用（字节，原图 ＋ 缩略图）。 */
+    /** 图片已用（字节，原图 ＋ 缩略图；含餐照和日记图片）。 */
     private Long photoBytes;
 
-    /** 照片张数（相册入口与「我的」页展示用）。 */
+    /** 照片张数（相册入口与「我的」页展示用；含餐照和日记图片）。 */
     private Integer photoCount;
 
     /** 图片上限（字节，来自配置 `fitapp.storage.photo-quota-bytes`）。 */

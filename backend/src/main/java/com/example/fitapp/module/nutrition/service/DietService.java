@@ -3,6 +3,7 @@ package com.example.fitapp.module.nutrition.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
 import com.example.fitapp.common.TransientRetry;
 import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
@@ -82,6 +83,9 @@ public class DietService {
 
     /** 餐照的文件存储（ADR 0026）：图片实体在磁盘上，库里只留路径。 */
     private final PhotoStorage photoStorage;
+
+    /** 日记图片的占用要和餐照一起算（ADR 0044）；这里只读占用，不依赖日记的业务。 */
+    private final DiaryPhotoMapper diaryPhotoMapper;
 
     /** 餐照总占用上限（字节，原图＋缩略图）；达上限即拒绝上传（ADR 0013，值在 application.yml）。 */
     @Value("${fitapp.storage.photo-quota-bytes:21474836480}")
@@ -219,23 +223,9 @@ public class DietService {
         if (!MEAL_ORDER.contains(meal)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
         }
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片为空");
-        }
-        if (file.getSize() > MAX_PHOTO_BYTES) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片超过 10MB");
-        }
+        byte[] bytes = readValidPhoto(file);
         String mime = file.getContentType();
-        if (mime == null || !PHOTO_MIME.contains(mime)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "只支持 JPEG/PNG/WebP 图片");
-        }
         LocalDate date = parseDate(dateStr);
-        byte[] bytes;
-        try {
-            bytes = file.getBytes();
-        } catch (IOException e) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片读取失败");
-        }
 
         // 缩略图与数据库无关，放在重试之外：它是 CPU 密集活，重试时重算一遍没有意义。
         byte[] thumb = makeThumb(bytes);
@@ -252,13 +242,8 @@ public class DietService {
 
             // 容量闸（ADR 0013）：达上限直接拒绝。替换时按**净增**算（旧图会被换掉）。
             // 它抛的 BusinessException 不属可重试族，会直接穿过 TransientRetry 冒到全局处理器。
-            long used = mealPhotoMapper.sumBytes(userId);
             long oldSize = (existing == null || existing.getSizeBytes() == null) ? 0L : existing.getSizeBytes();
-            long delta = bytes.length - oldSize;
-            if (used + delta > photoQuotaBytes) {
-                throw new BusinessException(ResultCode.BAD_REQUEST,
-                        "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
-            }
+            checkPhotoQuota(userId, bytes.length - oldSize);
 
             // 落盘放在写库之前：文件写不成就别动数据库。反过来（先写库、文件失败）会留下
             // 「记录指向不存在的图」；而写库失败时重试会往同一路径再写一遍——同路径覆盖，
@@ -290,6 +275,34 @@ public class DietService {
         });
     }
 
+    /** 校验上传的照片（大小、类型）并读出内容；餐照和日记图片共用。 */
+    public static byte[] readValidPhoto(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "照片为空");
+        }
+        if (file.getSize() > MAX_PHOTO_BYTES) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "照片超过 10MB");
+        }
+        String mime = file.getContentType();
+        if (mime == null || !PHOTO_MIME.contains(mime)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "只支持 JPEG/PNG/WebP 图片");
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "照片读取失败");
+        }
+    }
+
+    /** 容量闸（ADR 0013）：餐照和日记图片共用一个上限（ADR 0044），超限直接拒绝。 */
+    public void checkPhotoQuota(Long userId, long delta) {
+        long used = mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId);
+        if (used + delta > photoQuotaBytes) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "照片空间已满（上限 " + quotaText() + "），请先到相册清理旧照片");
+        }
+    }
+
     /** 删除某餐照片（不可恢复；ADR 0013）。不存在 → 404。 */
     public void deletePhoto(Long userId, String dateStr, String meal) {
         MealPhoto p = getPhoto(userId, dateStr, meal);
@@ -304,11 +317,11 @@ public class DietService {
         }
     }
 
-    /** 存储占用（ADR 0013）：目前只统计图片一类（原图 ＋ 缩略图）。 */
+    /** 存储占用（ADR 0013）：目前只统计图片一类（原图 ＋ 缩略图），含餐照和日记图片。 */
     public StorageVO storage(Long userId) {
         StorageVO vo = new StorageVO();
-        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId));
-        vo.setPhotoCount((int) mealPhotoMapper.countByUser(userId));
+        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId));
+        vo.setPhotoCount((int) (mealPhotoMapper.countByUser(userId) + diaryPhotoMapper.countByUser(userId)));
         vo.setPhotoQuotaBytes(photoQuotaBytes);
         return vo;
     }
@@ -324,7 +337,7 @@ public class DietService {
      * 生成长边 ≤320 的 JPEG 缩略图。解码失败（异常格式等）返回 null——
      * 读取端遇到空会回退用原图，所以这里不抛错、不阻断上传。
      */
-    private static byte[] makeThumb(byte[] src) {
+    public static byte[] makeThumb(byte[] src) {
         try (ByteArrayInputStream in = new ByteArrayInputStream(src)) {
             BufferedImage img = ImageIO.read(in);
             if (img == null) {
