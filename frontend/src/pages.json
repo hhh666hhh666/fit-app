@@ -82,6 +82,10 @@
     {
       "path": "pages/recognition-log/index",
       "style": { "navigationBarTitleText": "识别明细" }
+    },
+    {
+      "path": "pages/agent/index",
+      "style": { "navigationBarTitleText": "外部 agent" }
     }
   ],
   "tabBar": {

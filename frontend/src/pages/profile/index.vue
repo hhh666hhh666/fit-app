@@ -6,9 +6,10 @@ import { clearAll, resetCaches } from '@/api/cache'
 import { getBodyOverview } from '@/api/body'
 import { formatWeight, getWeightUnit } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
+import { getAgentTokenStatus, type AgentTokenStatus } from '@/api/agent'
 import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
-import { formatThousands } from '@/utils/format'
+import { formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import FtListRow from '@/components/FtListRow.vue'
@@ -29,6 +30,7 @@ const exerciseCount = ref(0)
 const foodCount = ref(-1)
 const storage = ref<StorageInfo | null>(null)
 const recUsage = ref<RecognitionUsage | null>(null)
+const agentToken = ref<AgentTokenStatus | null>(null)
 /** 最新体重：身体档案入口右侧的那一格不再是死「—」（ADR 0030 顺带修）。 */
 const latestWeight = ref<number | null>(null)
 const weightUnit = ref(getWeightUnit())
@@ -45,13 +47,14 @@ onShow(() => {
   void loadBody()
   void loadStorage()
   void loadRecognitionUsage()
+  void loadAgentToken()
 })
 
 /** 下拉＝清缓存后重取本页全部数字（ADR 0035 的逃生门）。 */
 onPullDownRefresh(async () => {
   clearAll()
   schedule.load()
-  await Promise.all([loadStats(), loadBody(), loadStorage(), loadRecognitionUsage()])
+  await Promise.all([loadStats(), loadBody(), loadStorage(), loadRecognitionUsage(), loadAgentToken()])
   uni.stopPullDownRefresh()
 })
 
@@ -98,6 +101,22 @@ async function loadRecognitionUsage() {
     // unwrap 已提示
   }
 }
+
+/** agent 令牌状态（ADR 0043）：小卡只说有没有、最近用过没；生成与吊销在详情页。 */
+async function loadAgentToken() {
+  try {
+    agentToken.value = await getAgentTokenStatus()
+  } catch {
+    // unwrap 已提示
+  }
+}
+
+const agentTokenText = computed(() => {
+  const t = agentToken.value
+  if (!t) return '—'
+  if (!t.exists) return '未生成'
+  return t.lastUsedAt ? `${formatDateTimeLabel(t.lastUsedAt)} 用过` : '尚未使用'
+})
 
 /** 字节数转人话（B / KB / MB / GB）。 */
 function fmtBytes(n: number | undefined): string {
@@ -182,6 +201,10 @@ function goAlbum() {
 
 function goRecognitionLogs() {
   uni.navigateTo({ url: '/pages/recognition-log/index' })
+}
+
+function goAgent() {
+  uni.navigateTo({ url: '/pages/agent/index' })
 }
 
 function logout() {
@@ -276,6 +299,18 @@ function logout() {
           </view>
         </view>
         <text class="storage__hint">营养成分表识别的 token 累计（不含费用）；点开看每次调用明细</text>
+      </view>
+
+      <!-- 外部 agent（ADR 0043）：令牌管理与接口文档都在详情页 -->
+      <view class="glass storage storage--tap" @click="goAgent">
+        <view class="storage__head">
+          <text class="card-title">外部 agent</text>
+          <view class="storage__go">
+            <text class="storage__val ft-num">{{ agentTokenText }}</text>
+            <FtIcon name="chevron-right" :size="18" tone="subtle" />
+          </view>
+        </view>
+        <text class="storage__hint">让自己的 agent 只读拉取数据做分析；点开管理令牌、看接口文档</text>
       </view>
 
       <view class="prof__logout">
