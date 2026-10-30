@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { parseMarkdown } from '@/utils/markdown-lite'
+import { parseMarkdown, type PhotoSource } from '@/utils/markdown-lite'
 import { resolveDiaryRefs, type DiaryRef } from '@/api/diary'
 import { refSub, refTitle, refUrl } from '@/utils/diary-ref'
-import { fetchDiaryPhoto } from '@/utils/photo'
+import { fetchDiaryPhoto, fetchMealPhoto } from '@/utils/photo'
 import FtIcon from '@/components/FtIcon.vue'
 import FtMdInline from '@/components/FtMdInline.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
@@ -17,18 +17,24 @@ const props = defineProps<{ source: string; refresh?: number }>()
 type PhotoState = { status: 'loading' } | { status: 'ok'; url: string } | { status: 'deleted' } | { status: 'failed' }
 
 const blocks = computed(() => parseMarkdown(props.source, { rich: true }))
-const photos = ref<Record<number, PhotoState>>({})
+const photos = ref<Record<string, PhotoState>>({})
 const refs = ref<Record<string, DiaryRef>>({})
 const refsFailed = ref(false)
 const viewer = ref({ show: false, index: 0 })
 
-const photoIds = computed(() => {
-  const ids: number[] = []
+/** 日记图片和餐照的 id 各算各的，所以用「来源:id」当键。 */
+function photoKeyOf(b: { source: PhotoSource; id: number }): string {
+  return `${b.source}:${b.id}`
+}
+
+const images = computed(() => {
+  const out = new Map<string, { source: PhotoSource; id: number }>()
   for (const b of blocks.value) {
-    if (b.type === 'image' && !ids.includes(b.id)) ids.push(b.id)
+    if (b.type === 'image') out.set(photoKeyOf(b), { source: b.source, id: b.id })
   }
-  return ids
+  return out
 })
+const photoKeys = computed(() => [...images.value.keys()])
 
 const refKeys = computed(() => {
   const keys: string[] = []
@@ -38,18 +44,20 @@ const refKeys = computed(() => {
   return keys
 })
 
-async function loadPhoto(id: number) {
-  photos.value[id] = { status: 'loading' }
-  const r = await fetchDiaryPhoto(id, false)
-  if (r.url) photos.value[id] = { status: 'ok', url: r.url }
-  else photos.value[id] = { status: r.deleted ? 'deleted' : 'failed' }
+async function loadPhoto(key: string) {
+  const img = images.value.get(key)
+  if (!img) return
+  photos.value[key] = { status: 'loading' }
+  const r = await (img.source === 'meal' ? fetchMealPhoto(img.id, false) : fetchDiaryPhoto(img.id, false))
+  if (r.url) photos.value[key] = { status: 'ok', url: r.url }
+  else photos.value[key] = { status: r.deleted ? 'deleted' : 'failed' }
 }
 
 watch(
-  photoIds,
-  (ids) => {
-    for (const id of ids) {
-      if (!photos.value[id]) void loadPhoto(id)
+  photoKeys,
+  (keys) => {
+    for (const key of keys) {
+      if (!photos.value[key]) void loadPhoto(key)
     }
   },
   { immediate: true }
@@ -71,22 +79,22 @@ async function loadRefs() {
 
 watch([refKeys, () => props.refresh], () => void loadRefs(), { immediate: true })
 
-function urlOf(id: number): string | null {
-  const s = photos.value[id]
+function urlOf(key: string): string | null {
+  const s = photos.value[key]
   return s && s.status === 'ok' ? s.url : null
 }
 
 /** 翻页只翻看得到的图：已删除的那张不占一页。 */
-const viewerIds = computed(() => photoIds.value.filter((id) => urlOf(id)))
-const viewerUrls = computed(() => viewerIds.value.map(urlOf))
+const viewerKeys = computed(() => photoKeys.value.filter((key) => urlOf(key)))
+const viewerUrls = computed(() => viewerKeys.value.map(urlOf))
 
-function onPhotoClick(id: number) {
-  const s = photos.value[id]
+function onPhotoClick(key: string) {
+  const s = photos.value[key]
   if (!s) return
   if (s.status === 'failed') {
-    void loadPhoto(id)
+    void loadPhoto(key)
   } else if (s.status === 'ok') {
-    viewer.value = { show: true, index: viewerIds.value.indexOf(id) }
+    viewer.value = { show: true, index: viewerKeys.value.indexOf(key) }
   }
 }
 
@@ -125,13 +133,13 @@ function onRefClick(key: string) {
       </view>
       <view v-else-if="b.type === 'hr'" class="md__hr" />
       <text v-else-if="b.type === 'code'" class="md__pre" selectable>{{ b.text }}</text>
-      <view v-else-if="b.type === 'image'" class="md__photo" role="button" @click="onPhotoClick(b.id)">
-        <image v-if="urlOf(b.id)" class="md__img" :src="urlOf(b.id) || ''" mode="widthFix" />
+      <view v-else-if="b.type === 'image'" class="md__photo" role="button" @click="onPhotoClick(photoKeyOf(b))">
+        <image v-if="urlOf(photoKeyOf(b))" class="md__img" :src="urlOf(photoKeyOf(b)) || ''" mode="widthFix" />
         <text v-else class="md__photo-hint">
           {{
-            photos[b.id]?.status === 'deleted'
+            photos[photoKeyOf(b)]?.status === 'deleted'
               ? '图片已删除'
-              : photos[b.id]?.status === 'failed'
+              : photos[photoKeyOf(b)]?.status === 'failed'
                 ? '图片没加载出来，点一下重试'
                 : '图片加载中…'
           }}

@@ -5,13 +5,13 @@ import { batchDeleteDiary, listDiary, type DiaryListItem } from '@/api/diary'
 import { clearAll } from '@/api/cache'
 import { formatTimeLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
-import { ask } from '@/utils/confirm'
 import { plainPreview } from '@/utils/markdown-lite'
 import { loadDraft } from '@/utils/diary-draft'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
+import FtSheet from '@/components/FtSheet.vue'
 
 // ── 日记（ADR 0044）：按月翻看的时间线；有搜索词时搜全部日记 ──
 //    形态照抄训练日志页：翻月、触底分页、长按多选删除。
@@ -165,25 +165,31 @@ function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))
 }
 
+// 图默认留在相册（ADR 0046），要连图一起删得自己勾；系统确认框放不了勾选，所以用弹层
+const deleteSheet = ref(false)
+const withPhotos = ref(false)
+const deleting = ref(false)
+
 function doDelete() {
+  if (selected.value.size === 0) return
+  withPhotos.value = false
+  deleteSheet.value = true
+}
+
+async function confirmDelete() {
   const ids = [...selected.value]
-  if (ids.length === 0) return
-  void ask({
-    title: '删除日记',
-    content: `删除选中的 ${ids.length} 篇日记？只属于它们的图片也会一起删除，删除后不可恢复。`,
-    confirmText: '删除',
-    danger: true
-  }).then(async (confirm) => {
-    if (!confirm) return
-    try {
-      await batchDeleteDiary(ids)
-      exitSelect()
-      await load(true)
-      uni.showToast({ title: `已删除 ${ids.length} 篇`, icon: 'none' })
-    } catch {
-      // request 层已统一提示
-    }
-  })
+  deleting.value = true
+  try {
+    await batchDeleteDiary(ids, withPhotos.value)
+    deleteSheet.value = false
+    exitSelect()
+    await load(true)
+    uni.showToast({ title: `已删除 ${ids.length} 篇`, icon: 'none' })
+  } catch {
+    // request 层已统一提示
+  } finally {
+    deleting.value = false
+  }
 }
 </script>
 
@@ -264,6 +270,28 @@ function doDelete() {
     <view v-else class="diary__write">
       <FtButton variant="primary" block @click="write">{{ hasDraft ? '继续写' : '写一篇' }}</FtButton>
     </view>
+
+    <Transition name="ft-sheet">
+      <FtSheet v-if="deleteSheet" title="删除日记" :sub="`选中的 ${selected.size} 篇`" @close="deleteSheet = false">
+        <view class="dl">
+          <view
+            class="dl__opt"
+            role="checkbox"
+            :aria-checked="withPhotos"
+            @click="withPhotos = !withPhotos"
+          >
+            <view class="row__check" :class="{ 'row__check--on': withPhotos }">
+              <FtIcon v-if="withPhotos" name="check" :size="13" :stroke="2.4" tone="inverse" />
+            </view>
+            <view class="dl__text">
+              <text class="dl__title">同时删除日记里的图片</text>
+              <text class="dl__sub">只删只属于这些日记的图。不勾的话，图片留在相册。</text>
+            </view>
+          </view>
+          <FtButton variant="danger" block :disabled="deleting" @click="confirmDelete">删除</FtButton>
+        </view>
+      </FtSheet>
+    </Transition>
   </view>
 </template>
 
@@ -445,5 +473,36 @@ function doDelete() {
 
 .selbar {
   @include selbar;
+}
+
+.dl {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+.dl__opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+  @include press(dim);
+}
+
+.dl__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.dl__title {
+  font-size: $text-base;
+  color: $app-ink;
+}
+
+.dl__sub {
+  font-size: $text-sm;
+  line-height: 1.5;
+  color: $app-ink-muted;
 }
 </style>

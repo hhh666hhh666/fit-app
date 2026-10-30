@@ -26,8 +26,5 @@ public class DiaryPhoto {
     /** 相对路径（不含扩展名）：{userId}/diary/{随机名}。 */
     private String path;
 
-    /** 从何时起没有任何日记引用；为空＝正被引用。 */
-    private LocalDateTime unreferencedSince;
-
     private LocalDateTime createdAt;
 }

@@ -19,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,7 +34,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 纯单元测试：配额、上传失败不留文件、引用同步、删除日记时只清只属于它的图、到期清理。 */
+/** 纯单元测试：配额、上传失败不留文件、引用同步、删除日记时图片的去留。 */
 @ExtendWith(MockitoExtension.class)
 class DiaryPhotoServiceTest {
 
@@ -81,7 +80,6 @@ class DiaryPhotoServiceTest {
         verify(dietService).checkPhotoQuota(7L, 3);
         ArgumentCaptor<DiaryPhoto> saved = ArgumentCaptor.forClass(DiaryPhoto.class);
         verify(photoMapper).insert(saved.capture());
-        assertNotNull(saved.getValue().getUnreferencedSince());
         assertEquals(true, saved.getValue().getPath().startsWith("7/diary/"));
         verify(photoStorage).write(eq(saved.getValue().getPath()), eq("image/jpeg"), any(), any());
     }
@@ -126,63 +124,42 @@ class DiaryPhotoServiceTest {
         verify(refMapper, times(1)).insert(ref.capture());
         assertEquals(9L, ref.getValue().getPhotoId());
         assertEquals(3L, ref.getValue().getEntryId());
-        verify(photoMapper, times(1)).update(any(), any());
     }
 
     @Test
-    void 正文去掉的图不立即删_只记时刻() {
+    void 正文去掉的图留在相册_只去掉引用() {
         when(refMapper.selectList(any())).thenReturn(List.of(new DiaryPhotoRef(3L, 9L)));
-        when(refMapper.selectCount(any())).thenReturn(0L);
 
         service().syncRefs(7L, 3L, "图都删了");
 
-        verify(photoMapper, times(1)).update(any(), any());
+        verify(refMapper).delete(any());
         verify(photoMapper, never()).deleteById(any(Long.class));
         verify(photoStorage, never()).delete(any());
     }
 
     @Test
-    void 其他日记还在用的图不记没人引用() {
+    void 删除日记默认不动图片() {
         when(refMapper.selectList(any())).thenReturn(List.of(new DiaryPhotoRef(3L, 9L)));
-        when(refMapper.selectCount(any())).thenReturn(1L);
 
-        service().syncRefs(7L, 3L, "");
+        service().releaseEntry(3L, false);
 
-        verify(photoMapper, never()).update(any(), any());
+        verify(refMapper).delete(any());
+        verify(photoMapper, never()).deleteById(any(Long.class));
+        verify(photoStorage, never()).delete(any());
     }
 
     @Test
-    void 删除日记只清只属于它的图() {
+    void 选了同时删图_只清只属于它的图() {
         when(refMapper.selectList(any())).thenReturn(List.of(new DiaryPhotoRef(3L, 9L), new DiaryPhotoRef(3L, 10L)));
         // 9 只属于这篇，10 还有别的日记在用
         when(refMapper.selectCount(any())).thenReturn(0L).thenReturn(1L);
         when(photoMapper.selectById(9L)).thenReturn(photo(9L));
 
-        service().releaseEntry(3L);
+        service().releaseEntry(3L, true);
 
         verify(photoMapper).deleteById(9L);
         verify(photoMapper, never()).deleteById(10L);
         verify(photoStorage).delete("7/diary/p9");
         verify(photoStorage, never()).delete("7/diary/p10");
-    }
-
-    @Test
-    void 到期清理_查出后被引用的图不删文件() {
-        when(photoMapper.selectList(any())).thenReturn(List.of(photo(9L), photo(10L)));
-        when(photoMapper.delete(any())).thenReturn(1).thenReturn(0);
-
-        int cleaned = service().cleanupUnreferenced(LocalDateTime.of(2026, 10, 1, 0, 0));
-
-        assertEquals(1, cleaned);
-        verify(photoStorage).delete("7/diary/p9");
-        verify(photoStorage, never()).delete("7/diary/p10");
-    }
-
-    @Test
-    void 单张清理失败不影响后面的() {
-        when(photoMapper.selectList(any())).thenReturn(List.of(photo(9L), photo(10L)));
-        when(photoMapper.delete(any())).thenThrow(new RuntimeException("库抖了")).thenReturn(1);
-
-        assertEquals(1, service().cleanupUnreferenced(LocalDateTime.of(2026, 10, 1, 0, 0)));
     }
 }

@@ -11,4 +11,7 @@ public class DiaryBatchDeleteDTO {
 
     @NotEmpty(message = "请选择要删除的日记")
     private List<Long> ids;
+
+    /** 同时删除只属于这些日记的图；默认不删，图留在相册（ADR 0046）。 */
+    private boolean withPhotos;
 }

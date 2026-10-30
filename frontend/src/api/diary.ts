@@ -69,8 +69,9 @@ export function updateDiary(id: number, payload: DiaryPayload) {
   return mutating(['diary', 'diet'], () => unwrap(request.put<DiaryEntry>(`/diary/${id}`, payload)))
 }
 
-export function batchDeleteDiary(ids: number[]) {
-  return mutating(['diary', 'diet'], () => unwrap(request.post<void>('/diary/batch-delete', { ids })))
+/** withPhotos：同时删除只属于这些日记的图；默认图留在相册（ADR 0046）。 */
+export function batchDeleteDiary(ids: number[], withPhotos: boolean) {
+  return mutating(['diary', 'diet'], () => unwrap(request.post<void>('/diary/batch-delete', { ids, withPhotos })))
 }
 
 /** 相册「日记」栏。**不缓存**：照片随时会被删，逐页拉才准。 */

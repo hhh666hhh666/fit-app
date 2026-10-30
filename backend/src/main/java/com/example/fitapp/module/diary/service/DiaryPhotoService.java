@@ -19,8 +19,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -30,10 +28,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 日记图片（ADR 0044）：上传、读取、相册、按正文同步引用、清理。
+ * 日记图片（ADR 0044）：上传、读取、相册、按正文同步引用。
  *
- * <p>一张图从上传起就记着「没人引用」，被某篇日记保存引用后清掉这个时刻，
- * 最后一个引用消失时再记上；满 30 天由 {@link DiaryPhotoCleaner} 清理。
+ * <p>图片常驻相册（ADR 0046）：从正文去掉或删除日记都不会动它，只有主人明确要删才删。
+ * 引用表只用来判断一张图是不是「只属于这篇」。
  * 文件一律在数据库提交之后才删：最坏留一个无害的孤儿文件（ADR 0026）。
  */
 @Slf4j
@@ -43,15 +41,13 @@ public class DiaryPhotoService {
 
     /** 正文里的图片语法；⚠️ 这是写进主人正文的长期格式，改它要迁移数据。 */
     private static final Pattern PHOTO_SYNTAX = Pattern.compile("!\\[[^\\]]*]\\(diary-photo:(\\d+)\\)");
-    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
-    private static final int CLEANUP_BATCH = 500;
 
     private final DiaryPhotoMapper photoMapper;
     private final DiaryPhotoRefMapper refMapper;
     private final DietService dietService;
     private final PhotoStorage photoStorage;
 
-    /** 上传一张图，返回它的 id；还没有日记引用，所以先记上「没人引用」的时刻。 */
+    /** 上传一张图，返回它的 id。 */
     public Long upload(Long userId, MultipartFile file) {
         byte[] bytes = DietService.readValidPhoto(file);
         dietService.checkPhotoQuota(userId, bytes.length);
@@ -69,7 +65,6 @@ public class DiaryPhotoService {
         p.setSizeBytes(bytes.length);
         p.setThumbBytes(thumb == null ? null : thumb.length);
         p.setPath(relKey);
-        p.setUnreferencedSince(now());
         try {
             photoMapper.insert(p);
         } catch (RuntimeException e) {
@@ -130,10 +125,7 @@ public class DiaryPhotoService {
         deleteFilesAfterCommit(List.of(p.getPath()));
     }
 
-    /**
-     * 保存日记后按正文同步引用。只认这个用户自己的图：正文里写别人的 id 不算引用，读取时也取不到。
-     * 从正文去掉的图不立即删——另一台设备的草稿可能还在用，满 30 天才清理。
-     */
+    /** 保存日记后按正文同步引用。只认这个用户自己的图：正文里写别人的 id 不算引用，读取时也取不到。 */
     @Transactional
     public void syncRefs(Long userId, Long entryId, String content) {
         Set<Long> wanted = ownedPhotoIds(userId, content);
@@ -144,9 +136,6 @@ public class DiaryPhotoService {
         for (Long id : wanted) {
             if (!current.contains(id)) {
                 refMapper.insert(new DiaryPhotoRef(entryId, id));
-                photoMapper.update(null, Wrappers.<DiaryPhoto>update()
-                        .eq("id", id)
-                        .set("unreferenced_since", null));
             }
         }
         for (Long id : current) {
@@ -154,20 +143,21 @@ public class DiaryPhotoService {
                 refMapper.delete(Wrappers.<DiaryPhotoRef>lambdaQuery()
                         .eq(DiaryPhotoRef::getEntryId, entryId)
                         .eq(DiaryPhotoRef::getPhotoId, id));
-                if (refCount(id) == 0) {
-                    photoMapper.update(null, Wrappers.<DiaryPhoto>update()
-                            .eq("id", id)
-                            .set("unreferenced_since", now()));
-                }
             }
         }
     }
 
-    /** 删除一篇日记时调用：只属于它的图立即清理，其他日记还在用的图保留。 */
+    /**
+     * 删除一篇日记时调用：图默认留在相册；{@code withPhotos} 时只删只属于它的图，
+     * 其他日记还在用的图保留。
+     */
     @Transactional
-    public void releaseEntry(Long entryId) {
+    public void releaseEntry(Long entryId, boolean withPhotos) {
         List<DiaryPhotoRef> refs = refsOf(entryId);
         refMapper.delete(Wrappers.<DiaryPhotoRef>lambdaQuery().eq(DiaryPhotoRef::getEntryId, entryId));
+        if (!withPhotos) {
+            return;
+        }
         List<String> paths = new ArrayList<>();
         for (DiaryPhotoRef r : refs) {
             if (refCount(r.getPhotoId()) == 0) {
@@ -179,30 +169,6 @@ public class DiaryPhotoService {
             }
         }
         deleteFilesAfterCommit(paths);
-    }
-
-    /** 清理在 {@code before} 之前就没人引用的图，返回清理张数。单张失败只记日志，下次再试。 */
-    public int cleanupUnreferenced(LocalDateTime before) {
-        List<DiaryPhoto> expired = photoMapper.selectList(Wrappers.<DiaryPhoto>lambdaQuery()
-                .isNotNull(DiaryPhoto::getUnreferencedSince)
-                .lt(DiaryPhoto::getUnreferencedSince, before)
-                .last("LIMIT " + CLEANUP_BATCH));
-        int cleaned = 0;
-        for (DiaryPhoto p : expired) {
-            try {
-                // 带上时间条件再删一次：查出来之后刚好被保存引用的图不能动
-                int rows = photoMapper.delete(Wrappers.<DiaryPhoto>lambdaQuery()
-                        .eq(DiaryPhoto::getId, p.getId())
-                        .isNotNull(DiaryPhoto::getUnreferencedSince));
-                if (rows > 0) {
-                    photoStorage.delete(p.getPath());
-                    cleaned++;
-                }
-            } catch (RuntimeException e) {
-                log.warn("清理日记图片失败：{}", p.getId(), e);
-            }
-        }
-        return cleaned;
     }
 
     /** 正文里写到的、确实属于这个用户的图。 */
@@ -251,9 +217,5 @@ public class DiaryPhotoService {
                 paths.forEach(photoStorage::delete);
             }
         });
-    }
-
-    private static LocalDateTime now() {
-        return LocalDateTime.now(ZONE);
     }
 }

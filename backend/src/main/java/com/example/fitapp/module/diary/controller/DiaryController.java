@@ -67,7 +67,7 @@ public class DiaryController {
 
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(@Valid @RequestBody DiaryBatchDeleteDTO body) {
-        diaryService.batchDelete(UserContext.requireUserId(), body.getIds());
+        diaryService.batchDelete(UserContext.requireUserId(), body.getIds(), body.isWithPhotos());
         return Result.success();
     }
 

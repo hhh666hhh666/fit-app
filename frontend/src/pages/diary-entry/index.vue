@@ -9,6 +9,7 @@ import { ask } from '@/utils/confirm'
 import { clearDraft, loadDraft, saveDraft, type DiaryDraft } from '@/utils/diary-draft'
 import { pickAndUploadDiaryPhoto } from '@/utils/photo'
 import DiaryRefSheet from '@/components/DiaryRefSheet.vue'
+import PhotoPickSheet from '@/components/PhotoPickSheet.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtMarkdown from '@/components/FtMarkdown.vue'
@@ -271,10 +272,33 @@ function insertCode() {
 const diet = useDietStore()
 const uploading = ref(false)
 
-async function insertPhoto() {
+// 插图：传一张新的，或从相册选已有的（ADR 0046）
+const photoSheet = ref(false)
+let photoPos = 0
+
+function insertPhoto() {
   if (uploading.value) return
   // 选图期间文本框会失焦，先记下位置
   const [pos] = selectionRange()
+  uni.showActionSheet({
+    itemList: ['上传新图', '从相册选'],
+    success: ({ tapIndex }) => {
+      if (tapIndex === 0) {
+        void uploadPhoto(pos)
+      } else {
+        photoPos = pos
+        photoSheet.value = true
+      }
+    }
+  })
+}
+
+function onPickPhotos(markdown: string) {
+  photoSheet.value = false
+  insertBlockAt(photoPos, markdown)
+}
+
+async function uploadPhoto(pos: number) {
   uploading.value = true
   try {
     await diet.load(false)
@@ -418,6 +442,9 @@ const TOOLS: { key: string; label: string; run: () => void }[] = [
 
     <Transition name="ft-sheet">
       <DiaryRefSheet v-if="refSheet" :date="form.date" @close="refSheet = false" @pick="onPickRef" />
+    </Transition>
+    <Transition name="ft-sheet">
+      <PhotoPickSheet v-if="photoSheet" @close="photoSheet = false" @pick="onPickPhotos" />
     </Transition>
   </view>
 </template>

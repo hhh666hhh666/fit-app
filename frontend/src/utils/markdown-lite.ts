@@ -12,6 +12,9 @@ export interface Inline {
   href?: string
 }
 
+/** 日记正文里的图来自哪：日记图片或餐照（ADR 0046）。 */
+export type PhotoSource = 'diary' | 'meal'
+
 export type Block =
   | { type: 'heading'; level: number; inlines: Inline[] }
   | { type: 'paragraph'; inlines: Inline[] }
@@ -20,7 +23,7 @@ export type Block =
   | { type: 'ordered'; start: number; items: Inline[][] }
   | { type: 'quote'; inlines: Inline[] }
   | { type: 'hr' }
-  | { type: 'image'; id: number }
+  | { type: 'image'; source: PhotoSource; id: number }
   | { type: 'ref'; key: string; label: string }
 
 export interface ParseOptions {
@@ -32,7 +35,7 @@ const PLAIN_INLINE = /`([^`]+)`|\*\*(.+?)\*\*/g
 const RICH_INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\*([^*\s](?:[^*\n]*[^*\s])?)\*|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/g
 
 // ⚠️ 下面两种语法写进了主人的正文，是长期格式，改它们要迁移数据（ADR 0044）
-const IMAGE_LINE = /^!\[[^\]]*\]\(diary-photo:(\d+)\)\s*$/
+const IMAGE_LINE = /^!\[[^\]]*\]\((diary|meal)-photo:(\d+)\)\s*$/
 const REF_LINE = /^\[([^\]]*)\]\(fit-ref:([^)\s]+)\)\s*$/
 const HR_LINE = /^(-{3,}|\*{3,})\s*$/
 const UL_LINE = /^[-*] /
@@ -95,7 +98,7 @@ export function parseMarkdown(source: string, options: ParseOptions = {}): Block
       blocks.push({ type: 'heading', level, inlines: parseInline(line.slice(level + 1), options) })
       i++
     } else if (rich && (m = IMAGE_LINE.exec(line))) {
-      blocks.push({ type: 'image', id: Number(m[1]) })
+      blocks.push({ type: 'image', source: m[1] as PhotoSource, id: Number(m[2]) })
       i++
     } else if (rich && (m = REF_LINE.exec(line))) {
       blocks.push({ type: 'ref', key: m[2], label: m[1] })

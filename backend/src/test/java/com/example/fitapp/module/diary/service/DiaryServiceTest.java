@@ -17,6 +17,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,19 +92,19 @@ class DiaryServiceTest {
         mine.setId(1L);
         when(entryMapper.selectOne(any())).thenReturn(mine).thenReturn(null);
 
-        assertThrows(BusinessException.class, () -> service().batchDelete(7L, List.of(1L, 2L)));
+        assertThrows(BusinessException.class, () -> service().batchDelete(7L, List.of(1L, 2L), false));
 
         verify(entryMapper, never()).deleteById(any(Long.class));
-        verify(photoService, never()).releaseEntry(any());
+        verify(photoService, never()).releaseEntry(any(), anyBoolean());
     }
 
     @Test
     void 批量删除要放掉图片() {
         when(entryMapper.selectOne(any())).thenReturn(new DiaryEntry());
 
-        service().batchDelete(7L, List.of(1L, 1L));
+        service().batchDelete(7L, List.of(1L, 1L), true);
 
-        verify(photoService).releaseEntry(1L);
+        verify(photoService).releaseEntry(1L, true);
         verify(entryMapper).deleteById(1L);
     }
 
