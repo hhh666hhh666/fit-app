@@ -32,3 +32,13 @@
 - 除白名单路径外的 `/api/**` 需要 `Authorization: Bearer <token>`。
 - 白名单与跨域策略见后端 `config/WebConfig.java` 的注释。
 - ⚠️ **路由层只挡「没登录」，不挡「没有数据权限」**：越权（拿别人的 id 来读写）必须由服务端判定，并在接口层测试里断言它会失败。
+
+## 外部 agent 取数接口
+
+面向外部调用方的只读接口（[ADR 0043](../adr/0043-external-agent-read-api.md)），有几处与上面的约定不同：
+
+- **文档**：外部调用方拿不到本仓库，所以这组接口有一份随后端发布的说明，真相源在 `backend/src/main/resources/agent/agent-api.md`，运行时由 `GET /api/agent/docs` 提供。**改这组接口要同改它。**
+- **鉴权**：只认 agent 令牌，不认登录态 JWT；反过来 agent 令牌也访问不了 App 的接口。令牌的生成与吊销（`/api/agent/token`）走 JWT。
+- **失败响应**：令牌校验失败返回真实的 HTTP 401（App 的接口是 HTTP 200 ＋ 业务码）；其余错误与全局约定一致。
+- **空值**：null 字段明确写出，不像全局配置那样省略。
+- **`history` 是流式写出的**：中途失败时状态码已发出，响应是残缺的 JSON，所以写出时关掉了 Jackson 的自动补全括号（见 `AgentDataService`）。
