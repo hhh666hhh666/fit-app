@@ -7,10 +7,14 @@ import com.example.fitapp.module.exercise.dto.ExerciseUpsertDTO;
 import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.exercise.vo.ExerciseVO;
+import com.example.fitapp.module.preset.PresetSql;
+import com.example.fitapp.module.preset.entity.PresetHidden;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -28,12 +32,13 @@ public class ExerciseService {
 
     private final ExerciseMapper exerciseMapper;
     private final ExerciseTrash exerciseTrash;
+    private final PresetHiddenService presetHiddenService;
 
     public List<ExerciseVO> list(Long userId, String muscle, String keyword) {
         List<Exercise> rows = exerciseMapper.selectList(
                 Wrappers.<Exercise>lambdaQuery()
-                        .eq(Exercise::getArchived, false)
-                        .and(w -> w.eq(Exercise::getUserId, userId).or().isNull(Exercise::getUserId))
+                        // 没删的自定义动作 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
+                        .apply(PresetSql.EXERCISE_VISIBLE, userId)
                         .eq(StringUtils.hasText(muscle), Exercise::getMuscle, muscle)
                         .like(StringUtils.hasText(keyword), Exercise::getName, keyword)
                         .orderByAsc(Exercise::getSortOrder)
@@ -62,9 +67,17 @@ public class ExerciseService {
         return toVO(e);
     }
 
-    /** 删除 = 下架（archived=1），历史记录照常显示；回收站里留一条恢复入口（ADR 0047）。 */
+    /**
+     * 删除 = 下架（archived=1），历史记录照常显示；回收站里留一条恢复入口（ADR 0047）。
+     * 已下架、这个用户还看得到的预置，删除只是对这个用户隐藏（ADR 0048）。
+     */
     @org.springframework.transaction.annotation.Transactional
     public void archive(Long userId, Long id) {
+        Exercise preset = archivedPresetVisibleTo(userId, id);
+        if (preset != null) {
+            hide(userId, preset);
+            return;
+        }
         Exercise e = requireOwn(userId, id);
         e.setArchived(true);
         exerciseMapper.updateById(e);
@@ -76,12 +89,37 @@ public class ExerciseService {
     public void batchArchive(Long userId, List<Long> ids) {
         if (ids == null || ids.isEmpty()) return;
         List<Long> distinct = ids.stream().distinct().toList();
-        List<Exercise> own = distinct.stream().map(id -> requireOwn(userId, id)).toList();
-        exerciseMapper.update(null, Wrappers.<Exercise>update()
-                .in("id", distinct)
-                .eq("user_id", userId)
-                .set("archived", true));
-        own.forEach(e -> exerciseTrash.put(userId, e));
+        List<Exercise> presets = new ArrayList<>();
+        List<Exercise> own = new ArrayList<>();
+        for (Long id : distinct) {
+            Exercise preset = archivedPresetVisibleTo(userId, id);
+            if (preset != null) {
+                presets.add(preset);
+            } else {
+                own.add(requireOwn(userId, id));
+            }
+        }
+        if (!own.isEmpty()) {
+            exerciseMapper.update(null, Wrappers.<Exercise>update()
+                    .in("id", own.stream().map(Exercise::getId).toList())
+                    .eq("user_id", userId)
+                    .set("archived", true));
+            own.forEach(e -> exerciseTrash.put(userId, e));
+        }
+        presets.forEach(p -> hide(userId, p));
+    }
+
+    /** 已下架、而且这个用户用过的预置；不是这种情况返回 null。 */
+    private Exercise archivedPresetVisibleTo(Long userId, Long id) {
+        Exercise e = exerciseMapper.selectById(id);
+        if (e == null || e.getUserId() != null || !Boolean.TRUE.equals(e.getArchived())) {
+            return null;
+        }
+        return exerciseMapper.usedBy(userId, id) ? e : null;
+    }
+
+    private void hide(Long userId, Exercise e) {
+        presetHiddenService.hide(userId, PresetHidden.EXERCISE, e.getId(), e.getName(), "已下架");
     }
 
     private Exercise requireOwn(Long userId, Long id) {
@@ -103,6 +141,8 @@ public class ExerciseService {
     }
 
     private ExerciseVO toVO(Exercise e) {
-        return new ExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), e.getUserId() == null);
+        boolean preset = e.getUserId() == null;
+        return new ExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), preset,
+                preset && Boolean.TRUE.equals(e.getArchived()));
     }
 }

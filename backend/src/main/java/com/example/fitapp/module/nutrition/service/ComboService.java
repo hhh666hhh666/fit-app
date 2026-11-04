@@ -12,6 +12,8 @@ import com.example.fitapp.module.nutrition.mapper.FoodComboItemMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodComboMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.vo.ComboVO;
+import com.example.fitapp.module.preset.entity.PresetHidden;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class ComboService {
     private final FoodComboMapper comboMapper;
     private final FoodComboItemMapper itemMapper;
     private final FoodMapper foodMapper;
+    private final PresetHiddenService presetHiddenService;
 
     /** 列表：按名称排序（同值按 id，保证顺序稳定）。 */
     public List<ComboVO> list(Long userId) {
@@ -178,6 +181,12 @@ public class ComboService {
         // 与记录口径一致：系统预置（user_id 为空）也可入组合
         if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
             throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+        }
+        // 已下架的预置：只有用过、没隐藏它的人还能拿来记（ADR 0048）
+        if (food.getUserId() == null && Boolean.TRUE.equals(food.getArchived())
+                && (!foodMapper.usedBy(userId, foodId)
+                    || presetHiddenService.isHidden(userId, PresetHidden.FOOD, foodId))) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "这条食物已下架");
         }
         return food;
     }

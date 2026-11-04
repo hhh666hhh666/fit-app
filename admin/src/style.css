@@ -1,0 +1,76 @@
+/*
+ * 管理端只借 Element Plus 的默认样式，不另立设计系统（.codebuddy/rules/design-tools.md）。
+ * 这里只把主色和底色对齐 App：取值来自 frontend/src/uni.scss 的 $accent / $accent-strong / $app-canvas / $app-ink，
+ * 那边改了这里跟着改。
+ */
+:root {
+  --el-color-primary: #d9521b;
+  --el-color-primary-dark-2: #b8410f;
+  --el-color-primary-light-3: #e8865d;
+  --el-color-primary-light-5: #eca88b;
+  --el-color-primary-light-7: #f4cbb9;
+  --el-color-primary-light-8: #f7dcd1;
+  --el-color-primary-light-9: #fbeee8;
+  --admin-canvas: #eff4f9;
+  --admin-ink: #1d1d1f;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--admin-canvas);
+  color: var(--admin-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.page {
+  padding: 24px 28px 40px;
+}
+
+.page__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.page__hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.toolbar__spacer {
+  flex: 1;
+}
+
+.card {
+  padding: 16px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(30, 50, 80, 0.06);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}

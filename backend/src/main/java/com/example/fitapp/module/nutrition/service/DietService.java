@@ -28,6 +28,8 @@ import com.example.fitapp.module.nutrition.vo.StorageVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
 import com.example.fitapp.module.profile.service.EnergyService;
 import com.example.fitapp.module.profile.vo.EnergyVO;
+import com.example.fitapp.module.preset.entity.PresetHidden;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -77,6 +79,7 @@ public class DietService {
     private final MealPhotoMapper mealPhotoMapper;
     private final DietDailyMapper dietDailyMapper;
     private final FoodMapper foodMapper;
+    private final PresetHiddenService presetHiddenService;
     private final SettingService settingService;
 
     /** 每日总消耗（基础代谢×生活活动系数 ＋ 手填训练消耗）的唯一实现，见 ADR 0029。 */
@@ -542,6 +545,12 @@ public class DietService {
         // 允许系统预置（user_id 为空）：预置食物可直接被记录（快照照写）
         if (food == null || (food.getUserId() != null && !userId.equals(food.getUserId()))) {
             throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+        }
+        // 已下架的预置：只有用过、没隐藏它的人还能拿来记（ADR 0048）
+        if (food.getUserId() == null && Boolean.TRUE.equals(food.getArchived())
+                && (!foodMapper.usedBy(userId, foodId)
+                    || presetHiddenService.isHidden(userId, PresetHidden.FOOD, foodId))) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "这条食物已下架");
         }
         return food;
     }

@@ -11,6 +11,7 @@ import com.example.fitapp.module.plan.mapper.PlanExerciseMapper;
 import com.example.fitapp.module.plan.mapper.PlanExerciseSetMapper;
 import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.plan.mapper.WeekScheduleMapper;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +40,9 @@ import static org.mockito.Mockito.when;
 class PlanServiceTest {
 
     @Mock
+    private PresetHiddenService presetHiddenService;
+
+    @Mock
     private PlanTrash planTrash;
 
     @Mock
@@ -58,7 +62,7 @@ class PlanServiceTest {
 
     private PlanService service() {
         return new PlanService(planMapper, planExerciseMapper, planExerciseSetMapper,
-                weekScheduleMapper, exerciseMapper, planTrash);
+                weekScheduleMapper, exerciseMapper, presetHiddenService, planTrash);
     }
 
     private static Exercise exercise(long id, Long ownerId, boolean archived) {

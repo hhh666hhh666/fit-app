@@ -1,0 +1,4 @@
+# 作为 web 镜像的命名构建上下文（admin=./admin）：本机的 node_modules 不能带进去，平台二进制不同。
+node_modules/
+dist/
+*.log

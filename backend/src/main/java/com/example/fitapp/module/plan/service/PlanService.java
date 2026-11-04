@@ -16,6 +16,8 @@ import com.example.fitapp.module.plan.mapper.PlanMapper;
 import com.example.fitapp.module.plan.mapper.WeekScheduleMapper;
 import com.example.fitapp.module.plan.vo.PlanDetailVO;
 import com.example.fitapp.module.plan.vo.PlanListItemVO;
+import com.example.fitapp.module.preset.entity.PresetHidden;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +51,7 @@ public class PlanService {
     private final PlanExerciseSetMapper planExerciseSetMapper;
     private final WeekScheduleMapper weekScheduleMapper;
     private final ExerciseMapper exerciseMapper;
+    private final PresetHiddenService presetHiddenService;
     private final PlanTrash planTrash;
 
     public List<PlanListItemVO> list(Long userId) {
@@ -87,7 +90,7 @@ public class PlanService {
         p.setName(name);
         planMapper.insert(p);
 
-        insertExercises(userId, p.getId(), dto.getExercises());
+        insertExercises(userId, p.getId(), dto.getExercises(), Set.of());
         return toDetail(p);
     }
 
@@ -100,11 +103,16 @@ public class PlanService {
         p.setName(name);
         planMapper.updateById(p);
 
-        // 整体替换编排：先清子表再清编排，最后按提交顺序重插（数据量小，简单可靠优先）
+        // 整体替换编排：先清子表再清编排，最后按提交顺序重插（数据量小，简单可靠优先）。
+        // 删之前记下原有动作：已下架的预置原本就在这个计划里，就得允许留着（ADR 0048）。
+        Set<Long> kept = planExerciseMapper.selectList(
+                        Wrappers.<PlanExercise>lambdaQuery().eq(PlanExercise::getPlanId, id)).stream()
+                .map(PlanExercise::getExerciseId)
+                .collect(Collectors.toSet());
         deleteSetsOfPlan(id);
         planExerciseMapper.delete(
                 Wrappers.<PlanExercise>lambdaQuery().eq(PlanExercise::getPlanId, id));
-        insertExercises(userId, id, dto.getExercises());
+        insertExercises(userId, id, dto.getExercises(), kept);
         return toDetail(p);
     }
 
@@ -123,7 +131,19 @@ public class PlanService {
         planMapper.deleteById(id);
     }
 
-    private void insertExercises(Long userId, Long planId, List<PlanSaveDTO.ItemDTO> items) {
+    /** 上架的预置人人能用；已下架的，原本就在这个计划里、或者这个用户用过而且没隐藏，才能用（ADR 0048）。 */
+    private boolean usablePreset(Long userId, Exercise e, Set<Long> kept) {
+        if (!Boolean.TRUE.equals(e.getArchived()) || kept.contains(e.getId())) {
+            return true;
+        }
+        return exerciseMapper.usedBy(userId, e.getId())
+                && !presetHiddenService.isHidden(userId, PresetHidden.EXERCISE, e.getId());
+    }
+
+    /**
+     * @param kept 编辑前就在这个计划里的动作：其中已下架的预置可以留着（ADR 0048）。
+     */
+    private void insertExercises(Long userId, Long planId, List<PlanSaveDTO.ItemDTO> items, Set<Long> kept) {
         Set<Long> seen = new HashSet<>();
         int order = 0;
         for (PlanSaveDTO.ItemDTO item : items) {
@@ -131,9 +151,9 @@ public class PlanService {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "同一动作不能重复添加");
             }
             Exercise e = exerciseMapper.selectById(item.getExerciseId());
-            boolean usable = e != null
-                    && !Boolean.TRUE.equals(e.getArchived())
-                    && (e.getUserId() == null || e.getUserId().equals(userId));
+            boolean usable = e != null && (e.getUserId() == null
+                    ? usablePreset(userId, e, kept)
+                    : e.getUserId().equals(userId) && !Boolean.TRUE.equals(e.getArchived()));
             if (!usable) {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "动作不存在或已下架");
             }

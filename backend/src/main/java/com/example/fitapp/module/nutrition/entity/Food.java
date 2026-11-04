@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 
 /**
  * 食物库的一条。表结构以迁移脚本 {@code V10__nutrition.sql}、{@code V11__food_gi.sql}、
- * {@code V12__food_preset.sql}、{@code V14__food_view_count.sql}、{@code V15__food_favorite.sql} 为准；
+ * {@code V12__food_preset.sql}、{@code V14__food_view_count.sql}、{@code V15__food_favorite.sql}、
+ * {@code V36__admin_and_preset_archive.sql} 为准；
  * 营养字段全集（45 项）见 docs/design/食物营养字段参考.md——4+1 必填（能量/蛋白/脂肪/碳水/钠），其余可空；
  * 另有扩展字段 {@code gi}（选填，不在该表七类之内，口径见该文档「本表之外的扩展字段」）。
  *
@@ -34,6 +35,9 @@ public class Food {
 
     /** 分类（预置数据=《中国食物成分表》大类；用户自建为 NULL）。 */
     private String category;
+
+    /** 下架标记（只用于预置，ADR 0048）：没用过的人搜不到，用过的人带「已下架」看到。 */
+    private Boolean archived;
 
     /** 浏览次数（详情页每查看一次 +1；列表按其降序，同值按名称）。预置数据为全局共享计数。 */
     private Integer viewCount;

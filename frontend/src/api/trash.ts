@@ -15,6 +15,9 @@ export type TrashType =
   | 'plan'
   | 'exercise'
   | 'food'
+  /** 用户隐藏的已下架预置（ADR 0048）：恢复＝取消隐藏。 */
+  | 'preset_food'
+  | 'preset_exercise'
 
 export interface TrashItem {
   id: number

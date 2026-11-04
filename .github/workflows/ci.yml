@@ -93,3 +93,22 @@ jobs:
       #    所以**类型错误只会被 typecheck 这一步挡住，构建永远是绿的**。
       - run: npm run typecheck
       - run: npm run build:h5
+
+  admin:
+    name: 管理端 · 类型检查与构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      # 类型检查会顺带检查它引用的 frontend/src/utils/food-fields.ts
+      - run: npm run typecheck
+      - run: npm run build

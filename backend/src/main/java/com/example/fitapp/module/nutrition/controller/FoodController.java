@@ -8,7 +8,9 @@ import com.example.fitapp.module.nutrition.service.FoodService;
 import com.example.fitapp.module.nutrition.vo.ImportResultVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
+import jakarta.validation.groups.Default;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -71,12 +73,13 @@ public class FoodController {
     }
 
     @PostMapping
-    public Result<Food> create(@Valid @RequestBody FoodSaveDTO body) {
+    public Result<Food> create(@Validated({Default.class, FoodSaveDTO.OwnFood.class}) @RequestBody FoodSaveDTO body) {
         return Result.success(foodService.create(UserContext.requireUserId(), body));
     }
 
     @PutMapping("/{id}")
-    public Result<Food> update(@PathVariable Long id, @Valid @RequestBody FoodSaveDTO body) {
+    public Result<Food> update(@PathVariable Long id,
+                               @Validated({Default.class, FoodSaveDTO.OwnFood.class}) @RequestBody FoodSaveDTO body) {
         return Result.success(foodService.update(UserContext.requireUserId(), id, body));
     }
 

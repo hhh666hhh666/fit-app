@@ -1,4 +1,4 @@
-# 前端（uni-app H5）镜像：构建产物 → nginx 静态托管 + /api 反代。
+# 前端镜像：uni-app H5 产物（站点根）＋ 管理端产物（/admin/，ADR 0048）→ nginx 静态托管 + /api 反代。
 #
 # 用 slim（Debian/glibc）而非 alpine：esbuild 没有 x64-musl 的官方二进制，
 # alpine 下 vite build 会报 "You installed esbuild for another platform"。
@@ -53,8 +53,23 @@ RUN set -eux; \
     printf '{\n  "version": "%s",\n  "url": "/web/web-%s.zip",\n  "sha256": "%s"\n}\n' \
       "$TAG" "$TAG" "$SHA" > /app/web-site/web/version.json
 
+# ── 管理端（ADR 0048）：仓库根的 admin/ 以命名构建上下文 `admin` 传进来 ──
+# 本镜像的主上下文是 frontend/，够不着 ../admin，所以构建时必须带上：
+#   docker build --build-context admin=./admin frontend      （CI 里是 build-push-action 的 build-contexts）
+# 少了这一项会报 "failed to resolve source metadata for docker-image://docker.io/library/admin"。
+# 管理端的营养字段表直接引用 frontend/src/utils/food-fields.ts，所以按原相对位置摆好。
+FROM node:22-slim AS admin-build
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+WORKDIR /build/admin
+COPY --from=admin package.json package-lock.json ./
+RUN npm ci --registry="$NPM_REGISTRY" --no-audit --no-fund
+COPY --from=admin . .
+COPY src/utils/food-fields.ts /build/frontend/src/utils/food-fields.ts
+RUN npm run build
+
 FROM nginx:alpine
 COPY --from=build /app/web-site /usr/share/nginx/html
+COPY --from=admin-build /build/admin/dist /usr/share/nginx/html/admin
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

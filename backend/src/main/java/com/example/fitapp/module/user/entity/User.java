@@ -21,6 +21,9 @@ public class User {
 
     private String passwordHash;
 
+    /** 管理员标记：能进管理端（ADR 0048）。界面上没有授予入口，只能手写 SQL。 */
+    private Boolean admin;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

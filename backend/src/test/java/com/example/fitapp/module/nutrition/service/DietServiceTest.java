@@ -21,6 +21,7 @@ import com.example.fitapp.module.nutrition.vo.SettingVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
 import com.example.fitapp.module.profile.service.EnergyService;
 import com.example.fitapp.module.profile.vo.EnergyVO;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -51,6 +52,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class DietServiceTest {
+
+    @Mock
+    private PresetHiddenService presetHiddenService;
 
     @Mock
     private TrashItemMapper trashItemMapper;
@@ -85,7 +89,7 @@ class DietServiceTest {
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
+                presetHiddenService, settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
     }
@@ -236,7 +240,7 @@ class DietServiceTest {
     @Test
     void savePhoto_overQuota_throws() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
+                presetHiddenService, settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);

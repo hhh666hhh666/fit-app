@@ -21,6 +21,9 @@ public class TrashItem {
     public static final String EXERCISE = "exercise";
     public static final String FOOD = "food";
     public static final String SESSION = "session";
+    /** 用户隐藏的已下架预置食物 / 预置动作（ADR 0048）：恢复就是取消隐藏。 */
+    public static final String PRESET_FOOD = "preset_food";
+    public static final String PRESET_EXERCISE = "preset_exercise";
 
     @TableId(type = IdType.AUTO)
     private Long id;

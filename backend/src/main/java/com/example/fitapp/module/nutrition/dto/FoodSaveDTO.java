@@ -17,6 +17,10 @@ import java.math.BigDecimal;
 @Data
 public class FoodSaveDTO {
 
+    /** 只对用户自建食物生效的校验组（钠必填）；校验自建食物时要和 Default 一起传。 */
+    public interface OwnFood {
+    }
+
     @NotBlank(message = "食物名不能为空")
     @Size(max = 64, message = "食物名过长")
     private String name;
@@ -43,7 +47,8 @@ public class FoodSaveDTO {
     @DecimalMin(value = "0", message = "碳水化合物不能为负")
     private BigDecimal carb;
 
-    @NotNull(message = "钠不能为空")
+    /** 用户自建必填；预置可以不填（国标预置本来就有没测钠的，ADR 0009 / 0048）。 */
+    @NotNull(message = "钠不能为空", groups = OwnFood.class)
     @DecimalMin(value = "0", message = "钠不能为负")
     private BigDecimal sodium;
 

@@ -11,6 +11,7 @@ import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 食物详情（只读）：预置＝「复制为自定义」；自有＝编辑/删除。食物库列表点条目进入。 ──
+//    已下架的预置（ADR 0048）：只有用过的人看得到，带「已下架」，底栏换成「删除 / 复制一份」。
 //    只展示「有值」的营养字段（空字段不占版面）；主组固定显示（未测显示 —）。
 
 const id = ref<number | null>(null)
@@ -51,6 +52,9 @@ async function load() {
 }
 
 const preset = computed(() => food.value?.preset === true)
+const archived = computed(() => preset.value && food.value?.archived === true)
+/** 底栏：自建食物＝删除 / 编辑；已下架的预置＝删除 / 复制一份；上架的预置没有底栏。 */
+const hasBar = computed(() => !!food.value && (!preset.value || archived.value))
 const starred = computed(() => (food.value?.name ?? '').endsWith('*'))
 const favorited = computed(() => food.value?.favorite === true)
 
@@ -124,7 +128,9 @@ function doDelete() {
   if (!f || deleting.value) return
   void ask({
     title: '删除食物',
-    content: `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。${TRASH_HINT}`,
+    content: archived.value
+      ? `「${f.name}」已下架，删除后不再出现在你的食物库里；过去的记录和组合都不受影响。${TRASH_HINT}`
+      : `删除「${f.name}」？历史饮食记录不受影响（营养按记录时的快照）。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {
@@ -145,7 +151,7 @@ function doDelete() {
 
 <template>
   <view class="fd">
-    <view class="fd__body" :class="{ 'fd__body--with-bar': food && !preset }">
+    <view class="fd__body" :class="{ 'fd__body--with-bar': hasBar }">
       <FtPageHeader title="食物详情" back>
         <template #right>
           <!-- 星标＝收藏（收藏后在食物库置顶）；预置与自有都可收藏 -->
@@ -167,10 +173,12 @@ function doDelete() {
           <view class="fd__name-row">
             <text class="fd__name">{{ food.name }}</text>
             <text v-if="preset" class="fd__badge">预设</text>
+            <text v-if="archived" class="fd__badge">已下架</text>
           </view>
           <text v-if="food.category" class="fd__meta">{{ food.category }}</text>
           <text class="fd__meta">以下数值均为每 100{{ food.unit === 'ml' ? 'ml' : 'g' }}</text>
           <text v-if="starred" class="fd__meta">营养数据来自公开资料补全，供参考</text>
+          <text v-if="archived" class="fd__meta">这条预设已经下架，只有记录过它的人还看得到；可以复制一份留给自己，或者删掉不再显示</text>
         </view>
 
         <!-- 主要营养（4+1，固定显示） -->
@@ -207,17 +215,18 @@ function doDelete() {
         </view>
 
         <!-- （预置）复制为自定义：沉到页面最底，纯文本、非按钮样式——需滑到底才看到 -->
-        <text v-if="preset" class="fd__copy-text" @click="doCopy">复制为自定义</text>
+        <text v-if="preset && !archived" class="fd__copy-text" @click="doCopy">复制为自定义</text>
       </template>
       <view v-else-if="!loading" class="glass">
         <FtEmpty title="食物不存在或已删除" sub="回到食物库重新找一下。" />
       </view>
     </view>
 
-    <!-- 底部操作（仅自建食物：编辑 / 删除）：和会话页汇总条同一款悬浮胶囊 -->
-    <view v-if="food && !preset" class="fd__bar">
+    <!-- 底部操作（自建食物：编辑 / 删除；已下架的预设：复制一份 / 删除）：和会话页汇总条同一款悬浮胶囊 -->
+    <view v-if="hasBar" class="fd__bar">
       <view class="fd__del" role="button" @click="doDelete">删除</view>
-      <FtButton variant="primary" class="fd__edit" @click="doEdit">编辑</FtButton>
+      <FtButton v-if="archived" variant="primary" class="fd__edit" @click="doCopy">复制一份</FtButton>
+      <FtButton v-else variant="primary" class="fd__edit" @click="doEdit">编辑</FtButton>
     </view>
   </view>
 </template>

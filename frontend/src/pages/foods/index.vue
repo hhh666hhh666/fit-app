@@ -302,6 +302,7 @@ function copyExport() {
               <view class="frow__line">
                 <text class="frow__name">{{ f.name }}</text>
                 <text v-if="f.preset" class="frow__badge">预设</text>
+                <text v-if="f.archived" class="frow__badge">已下架</text>
               </view>
               <text class="frow__sub ft-num">{{ perText(f) }}</text>
             </view>
@@ -316,7 +317,7 @@ function copyExport() {
           <view v-else-if="finished && list.length > 0" class="flist__more ft-num">共 {{ total }} 种食物</view>
         </view>
 
-        <text class="note">「预设」＝系统内置只读数据（可复制为自定义）；名称带 * 的营养数据来自公开资料补全，供参考</text>
+        <text class="note">「预设」＝系统内置只读数据（可复制为自定义）；「已下架」＝停用的预设，只有记录过它的人还看得到，可以删掉；名称带 * 的营养数据来自公开资料补全，供参考</text>
       </template>
 
       <!-- 组合页签：列表（点条目 → 编辑 / 删除） -->

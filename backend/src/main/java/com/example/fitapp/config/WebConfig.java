@@ -1,5 +1,6 @@
 package com.example.fitapp.config;
 
+import com.example.fitapp.security.AdminInterceptor;
 import com.example.fitapp.security.AgentTokenInterceptor;
 import com.example.fitapp.security.JwtInterceptor;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final JwtInterceptor jwtInterceptor;
     private final AgentTokenInterceptor agentTokenInterceptor;
+    private final AdminInterceptor adminInterceptor;
 
     /**
      * 允许跨域的前端来源（逗号分隔）。默认空 = 不注册任何 CORS。
@@ -45,6 +47,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/swagger-ui.html",
                         "/v3/api-docs/**"
                 );
+        // 管理端：先过 JWT（上面那个），再看管理员标记（ADR 0048）。注册顺序就是执行顺序。
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/admin/**");
         registry.addInterceptor(agentTokenInterceptor)
                 .addPathPatterns("/api/agent/current", "/api/agent/history", "/api/agent/photos/**");
     }

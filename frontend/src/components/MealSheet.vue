@@ -512,6 +512,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
                   <view class="frow__line">
                     <text class="frow__name">{{ f.name }}</text>
                     <text v-if="f.preset" class="frow__badge">预设</text>
+                    <text v-if="f.archived" class="frow__badge">已下架</text>
                   </view>
                   <text class="frow__sub ft-num">
                     每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g

@@ -14,6 +14,7 @@ import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 动作库（晴窗，ADR 0041）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
+// 已下架的预设（ADR 0048）：只有练过或排进过计划的人看得到，带「已下架」；能删（只对自己隐藏），也能复制一份。
 
 const pick = usePickStore()
 
@@ -37,7 +38,9 @@ const activeMuscle = ref('')
 const selectMode = ref(false)
 const selected = ref<Set<number>>(new Set())
 const selectedCount = computed(() => selected.value.size)
-const deletable = computed(() => filtered.value.filter((e) => !e.preset))
+/** 能删的：自定义动作，和已下架的预设（删了只对自己隐藏）。 */
+const canDelete = (e: ExerciseItem) => !e.preset || e.archived === true
+const deletable = computed(() => filtered.value.filter(canDelete))
 const allSelected = computed(
   () => deletable.value.length > 0 && deletable.value.every((e) => selected.value.has(e.id))
 )
@@ -97,10 +100,14 @@ function toggleSelect(id: number) {
 function onTapExercise(e: ExerciseItem) {
   if (Date.now() < clickLockUntil) return
   if (selectMode.value) {
-    if (!e.preset) toggleSelect(e.id)
+    if (canDelete(e)) toggleSelect(e.id)
     return
   }
   if (!picking.value) {
+    if (e.archived) {
+      openArchivedActions(e)
+      return
+    }
     uni.showToast({ title: '动作详情建设中', icon: 'none' })
     return
   }
@@ -109,7 +116,7 @@ function onTapExercise(e: ExerciseItem) {
 }
 
 function onLongPressExercise(e: ExerciseItem) {
-  if (e.preset || selectMode.value) return
+  if (!canDelete(e) || selectMode.value) return
   clickLockUntil = Date.now() + 400
   selectMode.value = true
   selected.value = new Set([e.id])
@@ -130,8 +137,8 @@ function doDelete() {
   const ids = [...selected.value]
   if (!ids.length) return
   void ask({
-    title: '删除自定义动作',
-    content: `删除选中的 ${ids.length} 个动作？历史训练记录仍会保留。${TRASH_HINT}`,
+    title: '删除动作',
+    content: `删除选中的 ${ids.length} 个动作？历史训练记录和计划仍会保留。${TRASH_HINT}`,
     confirmText: '删除',
     danger: true
   }).then(async (confirm) => {
@@ -141,6 +148,51 @@ function doDelete() {
       all.value = all.value.filter((e) => !ids.includes(e.id))
       exitSelect()
       uni.showToast({ title: `已删除 ${ids.length} 个`, icon: 'none' })
+    } catch {
+      // request 层已统一提示
+    }
+  })
+}
+
+// ── 已下架的预设：复制一份 / 删除 ──
+function openArchivedActions(e: ExerciseItem) {
+  uni.showActionSheet({
+    itemList: ['复制一份为自定义动作', '删除（只对自己隐藏）'],
+    success: ({ tapIndex }) => void (tapIndex === 0 ? copyArchived(e) : deleteArchived(e))
+  })
+}
+
+function copyArchived(e: ExerciseItem) {
+  void ask({
+    title: '复制为自定义动作',
+    content:
+      `复制出来的是一个新动作，PR 和上次数据提示都从零开始；「${e.name}」过去的记录不会挪过去。` +
+      (e.metric === 'floors' ? '自定义动作只能按重量×次数记录，层数口径复制不过去。' : ''),
+    confirmText: '复制'
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await createExercise({ name: e.name, muscle: e.muscle })
+      uni.showToast({ title: '已复制', icon: 'none' })
+      await load()
+    } catch {
+      // request 层已统一提示
+    }
+  })
+}
+
+function deleteArchived(e: ExerciseItem) {
+  void ask({
+    title: '删除动作',
+    content: `「${e.name}」已下架，删除后不再出现在你的动作库里；过去的训练和计划都不受影响。${TRASH_HINT}`,
+    confirmText: '删除',
+    danger: true
+  }).then(async (confirm) => {
+    if (!confirm) return
+    try {
+      await batchDeleteExercises([e.id])
+      all.value = all.value.filter((x) => x.id !== e.id)
+      uni.showToast({ title: '已删除', icon: 'none' })
     } catch {
       // request 层已统一提示
     }
@@ -235,18 +287,18 @@ async function confirmCreate() {
         <view class="elist__head">
           <text class="elist__count">{{ sectTitle }}</text>
           <text v-if="picking" class="elist__tip">点选即加入计划</text>
-          <text v-else-if="!selectMode" class="elist__tip">长按自定义动作可批量删除</text>
+          <text v-else-if="!selectMode" class="elist__tip">长按自定义或已下架的动作可批量删除</text>
         </view>
         <view
           v-for="e in filtered"
           :key="e.id"
           class="erow"
-          :class="{ 'is-dim': selectMode && e.preset }"
+          :class="{ 'is-dim': selectMode && !canDelete(e) }"
           @click="onTapExercise(e)"
           @longpress="onLongPressExercise(e)"
         >
           <view
-            v-if="selectMode && !e.preset"
+            v-if="selectMode && canDelete(e)"
             class="erow__check"
             :class="{ 'erow__check--on': selected.has(e.id) }"
           >
@@ -256,6 +308,7 @@ async function confirmCreate() {
             <view class="erow__line">
               <text class="erow__name">{{ e.name }}</text>
               <text v-if="!e.preset" class="badge">自定义</text>
+              <text v-if="e.archived" class="badge">已下架</text>
             </view>
             <text class="erow__sub">{{ muscleLabel(e.muscle) }}</text>
           </view>

@@ -13,6 +13,7 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,10 +26,12 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,13 +54,16 @@ class FoodServiceTest {
             Validation.buildDefaultValidatorFactory().getValidator();
 
     @Mock
+    private PresetHiddenService presetHiddenService;
+
+    @Mock
     private FoodTrash foodTrash;
 
     @Mock
     private FoodMapper foodMapper;
 
     private FoodService service() {
-        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR, foodTrash);
+        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR, foodTrash, presetHiddenService);
     }
 
     private static FoodSaveDTO dto(String name) {
@@ -402,5 +408,57 @@ class FoodServiceTest {
     @Test
     void import_badJson_throws() {
         assertThrows(BusinessException.class, () -> service().importText(7L, "{ not json"));
+    }
+
+    private static Food archivedPreset(long id) {
+        Food f = new Food();
+        f.setId(id);
+        f.setUserId(null);
+        f.setName("栗子［板栗］");
+        f.setArchived(true);
+        return f;
+    }
+
+    @Test
+    void delete_archivedPresetUsedByUser_hidesInsteadOfDeleting() {
+        when(foodMapper.selectById(10L)).thenReturn(archivedPreset(10L));
+        when(foodMapper.usedBy(7L, 10L)).thenReturn(true);
+
+        service().delete(7L, 10L);
+
+        // ADR 0048：用户的「删除」只对自己隐藏——那一行是全站共用的，绝不能真删，也不走自建食物的回收站快照
+        verify(presetHiddenService).hide(eq(7L), eq("food"), eq(10L), eq("栗子［板栗］"), any());
+        verify(foodMapper, never()).deleteById(any(Long.class));
+        verify(foodTrash, never()).put(any(), any());
+    }
+
+    @Test
+    void delete_archivedPresetNeverUsed_notFound() {
+        when(foodMapper.selectById(10L)).thenReturn(archivedPreset(10L));
+        when(foodMapper.usedBy(7L, 10L)).thenReturn(false);
+
+        assertThrows(BusinessException.class, () -> service().delete(7L, 10L));
+        verify(presetHiddenService, never()).hide(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void delete_listedPreset_stillForbidden() {
+        Food listed = archivedPreset(10L);
+        listed.setArchived(false);
+        when(foodMapper.selectById(10L)).thenReturn(listed);
+
+        assertThrows(BusinessException.class, () -> service().delete(7L, 10L));
+        verify(presetHiddenService, never()).hide(any(), any(), any(), any(), any());
+        verify(foodMapper, never()).deleteById(any(Long.class));
+    }
+
+    @Test
+    void overwrite_neverTouchesFavoriteViewCountOrArchived() {
+        var w = FoodService.overwrite(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<Food>lambdaUpdate(), "燕麦", dto("燕麦"));
+        String sets = w.getSqlSet();
+        // 管理端编辑预置也走这条链：收藏与浏览次数是全站共用的（待办里记着），下架标记归上下架接口管
+        assertFalse(sets.contains("favorite") || sets.contains("view_count") || sets.contains("archived"), sets);
+        assertTrue(sets.contains("sodium") && sets.contains("portion_grams"), sets);
     }
 }

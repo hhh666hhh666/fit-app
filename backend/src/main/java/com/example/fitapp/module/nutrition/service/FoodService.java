@@ -1,6 +1,7 @@
 package com.example.fitapp.module.nutrition.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
@@ -8,21 +9,20 @@ import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.vo.ImportResultVO;
-import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.example.fitapp.module.preset.PresetSql;
+import com.example.fitapp.module.preset.entity.PresetHidden;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import jakarta.validation.groups.Default;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +39,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FoodService {
 
-    private static final BigDecimal KJ_PER_KCAL = new BigDecimal("4.184");
-    private static final Set<String> UNITS = Set.of("g", "ml");
     /** 轻量列表的条数上限（防一次性拉全库）。 */
     private static final int LITE_MAX_LIMIT = 500;
 
@@ -48,6 +46,7 @@ public class FoodService {
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final FoodTrash foodTrash;
+    private final PresetHiddenService presetHiddenService;
 
     /** 列表/搜索：预置 + 自有合并，按浏览次数降序（常用上浮，同值按名称）。 */
     public List<Food> list(Long userId, String q) {
@@ -102,7 +101,7 @@ public class FoodService {
 
     /** 数量统计（预置＋自有，可按关键词过滤）：供「我的」页显示总数、食物库滚动分页判断是否到底。 */
     public Map<String, Long> count(Long userId, String q) {
-        long preset = foodMapper.selectCount(scopeQuery(null, q));
+        long preset = foodMapper.selectCount(scopeQuery(null, q).apply(PresetSql.FOOD_PRESET_VISIBLE, userId));
         long mine = foodMapper.selectCount(scopeQuery(userId, q));
         Map<String, Long> m = new LinkedHashMap<>();
         m.put("total", preset + mine);
@@ -126,7 +125,8 @@ public class FoodService {
     private LambdaQueryWrapper<Food> baseQuery(Long userId, String q) {
         String kw = q == null ? null : q.trim();
         return Wrappers.<Food>lambdaQuery()
-                .and(w -> w.eq(Food::getUserId, userId).or().isNull(Food::getUserId))
+                // 自建的 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
+                .apply(PresetSql.FOOD_VISIBLE, userId)
                 .like(StringUtils.hasText(kw), Food::getName, kw)
                 // 排序：① 收藏置顶 ② 个人常用度（浏览次数降序）③ 名称、id 升序（保证分页稳定）
                 .orderByDesc(Food::getFavorite)
@@ -160,11 +160,37 @@ public class FoodService {
         requireOwn(userId, id);
         String name = dto.getName().trim();
         requireNameFree(userId, name, id);
-        // ⚠️ 整体覆盖：可选字段要能被清空。全局 update-strategy=not_null，updateById 会静默跳过 null，
-        //    所以这里用 LambdaUpdateWrapper 显式 set（含 null）。
-        foodMapper.update(null, Wrappers.<Food>lambdaUpdate()
+        foodMapper.update(null, overwrite(Wrappers.<Food>lambdaUpdate()
                 .eq(Food::getId, id)
-                .eq(Food::getUserId, userId)
+                .eq(Food::getUserId, userId), name, dto));
+        Food updated = foodMapper.selectById(id);
+        fillPreset(updated);
+        return updated;
+    }
+
+    /**
+     * 删除。自建食物进回收站后物理删除；已下架、而且对这个用户可见的预置，只对这个用户隐藏（ADR 0048）。
+     */
+    @Transactional
+    public void delete(Long userId, Long id) {
+        Food food = foodMapper.selectById(id);
+        if (food != null && food.getUserId() == null && Boolean.TRUE.equals(food.getArchived())) {
+            if (!foodMapper.usedBy(userId, id)) {
+                throw new BusinessException(ResultCode.NOT_FOUND, "食物不存在");
+            }
+            presetHiddenService.hide(userId, PresetHidden.FOOD, id, food.getName(), "已下架");
+            return;
+        }
+        foodTrash.put(userId, requireOwn(userId, id));
+        foodMapper.deleteById(id);
+    }
+
+    /**
+     * 编辑是<b>整体覆盖</b>：可选字段要能被清空。全局 update-strategy=not_null，updateById 会静默跳过 null，
+     * 所以这里显式 set（含 null）。收藏、浏览次数、分类、下架标记不在这里（管理端另行处理分类）。
+     */
+    public static LambdaUpdateWrapper<Food> overwrite(LambdaUpdateWrapper<Food> w, String name, FoodSaveDTO dto) {
+        return w
                 .set(Food::getName, name)
                 .set(Food::getUnit, normalizeUnit(dto.getUnit()))
                 .set(Food::getKcal, dto.getKcal())
@@ -214,16 +240,7 @@ public class FoodService {
                 .set(Food::getAlcohol, dto.getAlcohol())
                 .set(Food::getOrganicAcid, dto.getOrganicAcid())
                 .set(Food::getPortionLabel, dto.getPortionLabel())
-                .set(Food::getPortionGrams, dto.getPortionGrams()));
-        Food updated = foodMapper.selectById(id);
-        fillPreset(updated);
-        return updated;
-    }
-
-    @Transactional
-    public void delete(Long userId, Long id) {
-        foodTrash.put(userId, requireOwn(userId, id));
-        foodMapper.deleteById(id);
+                .set(Food::getPortionGrams, dto.getPortionGrams());
     }
 
     /** 导出全库：只导**自有**（预置系统自带、无需备份）；与导入对称的 snake_case 结构（只含非空字段）。 */
@@ -237,37 +254,18 @@ public class FoodService {
      * 同名（库内已有或批内重复）跳过并报告。
      */
     public ImportResultVO importText(Long userId, String text) {
-        JsonNode root;
-        try {
-            root = objectMapper.readTree(text);
-        } catch (Exception e) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "JSON 格式不正确");
-        }
-        List<JsonNode> nodes = new ArrayList<>();
-        if (root.isArray()) {
-            root.forEach(nodes::add);
-        } else if (root.isObject()) {
-            nodes.add(root);
-        } else {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "JSON 顶层应为数组");
-        }
-
-        ObjectMapper snakeReader = objectMapper.copy()
-                .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        FoodJsonReader reader = new FoodJsonReader(objectMapper);
+        List<JsonNode> nodes = reader.nodes(text);
 
         // 查重只看自有：允许与预置同名（预置是系统数据，用户可基于同名建自己的版本）
         Set<String> seen = ownList(userId).stream().map(Food::getName).collect(Collectors.toSet());
         ImportResultVO result = new ImportResultVO();
 
         for (JsonNode node : nodes) {
-            String name = node.path("name").asText("").trim();
-            if (name.isEmpty()) {
-                result.getFailed().add(new ImportResultVO.Failed("（未命名）", "缺少 name"));
-                continue;
-            }
-            if (name.length() > 64) {
-                result.getFailed().add(new ImportResultVO.Failed(name, "name 过长"));
+            String name = FoodJsonReader.name(node);
+            String nameError = FoodJsonReader.nameError(name);
+            if (nameError != null) {
+                result.getFailed().add(new ImportResultVO.Failed(name.isEmpty() ? "（未命名）" : name, nameError));
                 continue;
             }
             if (seen.contains(name)) {
@@ -275,45 +273,16 @@ public class FoodService {
                 continue;
             }
 
-            FoodSaveDTO item;
-            try {
-                item = snakeReader.treeToValue(node, FoodSaveDTO.class);
-            } catch (Exception e) {
-                result.getFailed().add(new ImportResultVO.Failed(name, "字段类型不正确"));
+            FoodJsonReader.Read read = reader.read(node, name);
+            if (read.error() != null) {
+                result.getFailed().add(new ImportResultVO.Failed(name, read.error()));
                 continue;
             }
-            item.setName(name);
-
-            // 能量：kcal 或 kj（二选一；给 kJ 自动换算）
-            if (item.getKcal() == null && node.hasNonNull("kj")) {
-                JsonNode kj = node.get("kj");
-                if (!kj.isNumber()) {
-                    result.getFailed().add(new ImportResultVO.Failed(name, "kj 应为数字"));
-                    continue;
-                }
-                item.setKcal(new BigDecimal(kj.asText()).divide(KJ_PER_KCAL, 2, RoundingMode.HALF_UP));
-            }
-            // 常用份：嵌套对象 {label, grams}
-            JsonNode portion = node.path("portion");
-            if (portion.isObject()) {
-                item.setPortionLabel(portion.path("label").asText(null));
-                if (portion.hasNonNull("grams")) {
-                    JsonNode grams = portion.get("grams");
-                    if (!grams.isNumber()) {
-                        result.getFailed().add(new ImportResultVO.Failed(name, "portion.grams 应为数字"));
-                        continue;
-                    }
-                    item.setPortionGrams(new BigDecimal(grams.asText()));
-                }
-            }
-            // unit 显式写错则失败；缺省按 g
-            if (item.getUnit() != null && !UNITS.contains(item.getUnit())) {
-                result.getFailed().add(new ImportResultVO.Failed(name, "unit 只能是 g 或 ml"));
-                continue;
-            }
+            FoodSaveDTO item = read.dto();
 
             // 复用 DTO 上的 Bean Validation 注解（4+1 必填、非负、长度等）
-            Set<ConstraintViolation<FoodSaveDTO>> violations = validator.validate(item);
+            Set<ConstraintViolation<FoodSaveDTO>> violations =
+                    validator.validate(item, Default.class, FoodSaveDTO.OwnFood.class);
             if (!violations.isEmpty()) {
                 result.getFailed().add(new ImportResultVO.Failed(name,
                         violations.iterator().next().getMessage()));
@@ -397,7 +366,7 @@ public class FoodService {
         }
     }
 
-    private static String normalizeUnit(String unit) {
+    static String normalizeUnit(String unit) {
         return (unit == null || unit.isBlank()) ? "g" : unit;
     }
 
@@ -436,6 +405,7 @@ public class FoodService {
         lite.setName(f.getName());
         lite.setUnit(f.getUnit());
         lite.setCategory(f.getCategory());
+        lite.setArchived(f.getArchived());
         lite.setViewCount(f.getViewCount());
         lite.setFavorite(f.getFavorite());
         lite.setKcal(f.getKcal());

@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import jakarta.validation.groups.Default;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -240,7 +241,8 @@ public class FoodRecognitionService {
 
     /** 复用 DTO 上的 Bean Validation（与 JSON 导入同一道闸）。 */
     private void validate(FoodSaveDTO dto) {
-        Set<ConstraintViolation<FoodSaveDTO>> violations = validator.validate(dto);
+        Set<ConstraintViolation<FoodSaveDTO>> violations =
+                validator.validate(dto, Default.class, FoodSaveDTO.OwnFood.class);
         if (!violations.isEmpty()) {
             throw new BusinessException(ResultCode.BUSINESS_ERROR,
                     "识别结果不完整：" + violations.iterator().next().getMessage());

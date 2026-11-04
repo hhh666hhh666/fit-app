@@ -5,6 +5,7 @@ import com.example.fitapp.module.exercise.dto.ExerciseUpsertDTO;
 import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
 import com.example.fitapp.module.exercise.vo.ExerciseVO;
+import com.example.fitapp.module.preset.service.PresetHiddenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,13 +33,16 @@ import static org.mockito.Mockito.when;
 class ExerciseServiceTest {
 
     @Mock
+    private PresetHiddenService presetHiddenService;
+
+    @Mock
     private ExerciseTrash exerciseTrash;
 
     @Mock
     private ExerciseMapper exerciseMapper;
 
     private ExerciseService service() {
-        return new ExerciseService(exerciseMapper, exerciseTrash);
+        return new ExerciseService(exerciseMapper, exerciseTrash, presetHiddenService);
     }
 
     @Test
@@ -141,5 +146,36 @@ class ExerciseServiceTest {
         List<ExerciseVO> list = service().list(7L, null, null);
         assertTrue(list.get(0).preset());
         assertFalse(list.get(1).preset());
+    }
+
+    @Test
+    void archive_archivedPresetUsedByUser_hidesForThisUserOnly() {
+        Exercise preset = new Exercise();
+        preset.setId(1L);
+        preset.setUserId(null);
+        preset.setName("杠铃卧推");
+        preset.setArchived(true);
+        when(exerciseMapper.selectById(1L)).thenReturn(preset);
+        when(exerciseMapper.usedBy(7L, 1L)).thenReturn(true);
+
+        service().archive(7L, 1L);
+
+        // ADR 0048：只对这个用户隐藏，预置那一行不动
+        verify(presetHiddenService).hide(eq(7L), eq("exercise"), eq(1L), eq("杠铃卧推"), any());
+        verify(exerciseMapper, never()).updateById(any(Exercise.class));
+        verify(exerciseTrash, never()).put(any(), any());
+    }
+
+    @Test
+    void archive_archivedPresetNeverUsed_forbidden() {
+        Exercise preset = new Exercise();
+        preset.setId(1L);
+        preset.setUserId(null);
+        preset.setArchived(true);
+        when(exerciseMapper.selectById(1L)).thenReturn(preset);
+        when(exerciseMapper.usedBy(7L, 1L)).thenReturn(false);
+
+        assertThrows(BusinessException.class, () -> service().archive(7L, 1L));
+        verify(presetHiddenService, never()).hide(any(), any(), any(), any(), any());
     }
 }

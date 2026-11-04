@@ -71,6 +71,8 @@ export interface FoodItem {
   portionGrams?: number | null
   /** 系统预置（只读，可「复制为自定义」）；lite 列表也会带此标志。 */
   preset?: boolean | null
+  /** 预置已下架（ADR 0048）：只有用过的人看得到，带「已下架」标签，可以对自己删掉。 */
+  archived?: boolean | null
 }
 
 /** 新建 / 编辑食物的提交体。 */
