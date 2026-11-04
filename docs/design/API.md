@@ -50,6 +50,15 @@
 
 餐照接口按 id：`/api/diet/photos/{id}` 与 `/thumb`，某一餐的列表是 `/api/diet/photos/of-meal`（[ADR 0045](../adr/0045-meal-photos-multiple-per-meal.md)）。
 
+## 管理端接口
+
+`/api/admin/**`（[ADR 0048](../adr/0048-admin-console-and-preset-archive.md)）给 `admin/` 管理端用，走登录态 JWT，字段以接口文档运行时为准。有四处要注意：
+
+- **鉴权多一道**：JWT 之后由 `security/AdminInterceptor.java` 查当前用户的管理员标记，不是管理员返回业务码 403「没有权限」（HTTP 仍是 200）。每次请求都查库，改了标记立即生效。
+- **没有删除接口**：预置的删除就是下架，`POST .../archive` 和 `.../unarchive` 都收 `{ ids }`，批量里混进非预置的 id 就整批拒绝。重新上架会清掉所有用户对它的隐藏。
+- **导入分两步**：`POST /api/admin/foods/import/preview` 只预检不写库，`POST /api/admin/foods/import` 重新预检一遍再在一个事务里写入；两者返回同一种结构（新增数、更新数、无效清单）。格式与 `GET /api/admin/foods/export` 一致，和 App 自建食物的 JSON 只多了 `id`、`category` 两个键（读取逻辑共用 `FoodJsonReader`）。
+- **App 这边的变化**：食物和动作列表多了 `archived` 字段，只会出现在用过它的人看到的已下架预置上；对这类预置调 `DELETE /api/foods/{id}` 或 `DELETE /api/exercises/{id}` 是对自己隐藏，回收站类型是 `preset_food`／`preset_exercise`。
+
 ## 外部 agent 取数接口
 
 面向外部调用方的只读接口（[ADR 0043](../adr/0043-external-agent-read-api.md)），有几处与上面的约定不同：

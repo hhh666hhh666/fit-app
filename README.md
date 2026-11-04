@@ -25,6 +25,9 @@ cd backend && mvn -B -ntp spring-boot:run
 
 # 3. 起前端（默认 5175，/api 已代理到后端）
 cd frontend && npm install && npm run dev:h5
+
+# 4. （可选）起管理端（默认 5176，打开 /admin/；账号要先在库里标成管理员，见 deploy/README.md）
+cd admin && npm install && npm run dev
 ```
 
 打开 `http://127.0.0.1:5175/`，出现 fit-app 登录页即「跑通」；注册账号后可完整使用（数据存本机 MySQL 3307）。
@@ -35,6 +38,7 @@ cd frontend && npm install && npm run dev:h5
 |------|--------|
 | `backend/` | Spring Boot + MyBatis-Plus + Flyway |
 | `frontend/` | uni-app（Vue 3 + TypeScript）→ H5 |
+| `admin/` | 管理端（Vue 3 + Element Plus），维护预置食物与预置动作；打包进 web 镜像的 `/admin/`（ADR 0048） |
 | `android-shell/` | Android WebView 壳，加载线上地址（ADR 0002）；构建与产物见其 README |
 | `docs/` | 文档体系（索引见 `docs/README.md`） |
 | `scripts/` | 机械守卫脚本 |

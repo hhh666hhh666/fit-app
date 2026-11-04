@@ -71,6 +71,8 @@ Status: accepted
 - [ADR 0045](./0045-meal-photos-multiple-per-meal.md)：餐照改为一餐多张，取图删图都按 id，agent 取图地址随之改变。
 - [ADR 0046](./0046-diary-photos-stay-in-album.md)：日记图片常驻相册，取消 30 天清理，删日记时可选连图一起删，写日记可从相册选图。
 - [ADR 0047](./0047-trash-snapshot-table.md)：回收站用独立表存 JSON 快照、原表照常物理删除，保留 30 天，恢复按原 id 写回。
+- [ADR 0048](./0048-admin-console-and-preset-archive.md)：管理端——用户表加管理员标记，独立网页放进 web 镜像的 `/admin/`；删除预置就是下架，用过的人仍能看到并可以自己隐藏。
+- [ADR 0049](./0049-preset-data-source-of-truth-is-database.md)：预置数据以数据库为准，迁移脚本不再修改预置行，批量变动走管理端导入。
 
 ## 与其他文档的分工
 

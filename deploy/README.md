@@ -116,6 +116,17 @@ cp /srv/fit-app/backups/uploads/2026-10-16/1/2026-10-12/lunch.jpg /srv/fit-app/u
 更坏的情况（整机没了）：从 OSS 拉回 `oss://<桶>/fit-app/db/` 与 `.../uploads/`，再按上面两步灌回。
 ⚠️ 这条路径**没有演练过**——恢复演练脚本目前只覆盖「库能恢复成可用的库」，整机重建属已知空白。
 
+## 授予或撤销管理员
+
+管理端（`https://<站点>/admin/`，[ADR 0048](../docs/adr/0048-admin-console-and-preset-archive.md)）只认用户表上的管理员标记，界面上没有授予入口，要在服务器上手写一条 SQL：
+
+```bash
+docker exec -i -e MYSQL_PWD="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' /srv/fit-app/.env)" \
+  quizzy-mysql mysql -uroot fit_app -e "UPDATE user SET admin = 1 WHERE username = '<用户名>'"
+```
+
+撤销就把 `1` 改成 `0`。每次请求都会查这个标记，改完立即生效，不用重启，也不用重新登录。
+
 ## 回滚
 
 ```bash
