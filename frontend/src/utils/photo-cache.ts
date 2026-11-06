@@ -81,6 +81,18 @@ export function diaryPhotoKey(id: number, thumb: boolean): string {
   return `${thumb ? 'diary-thumb' : 'diary-full'}:${id}`
 }
 
+/** 头像（ADR 0051）四种图各一把键：crop＝头像本身，thumb＝历史列表，view＝裁剪框预览，original＝原图。 */
+export type AvatarImageKind = 'crop' | 'thumb' | 'view' | 'original'
+
+export function avatarKey(id: number, kind: AvatarImageKind): string {
+  return `avatar-${kind}:${id}`
+}
+
+/** 重裁或删除头像后作废它的图：裁剪结果变了，同一个 id 不能再用旧图。 */
+export function invalidateAvatar(id: number): void {
+  dropKeys((['crop', 'thumb', 'view', 'original'] as const).map((k) => avatarKey(id, k)))
+}
+
 /** 删图后精确作废这一张（原图与缩略图一起，内存与磁盘都清，含「没有照片」的负缓存）。 */
 export function invalidatePhoto(id: number): void {
   dropKeys([photoKey(id), thumbKey(id)])

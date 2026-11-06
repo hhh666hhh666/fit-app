@@ -43,6 +43,15 @@
 - **改密码**（`PUT /api/account/password`）返回新的 `LoginVO`：客户端要换上新令牌，旧令牌（包括本机的）随即失效。
 - **注销**立刻删除这个用户在所有表里的数据和 `{photo-dir}/{userId}/` 下的全部文件，不进回收站。要删哪些表由 `AccountService.USER_TABLES` 和 `AccountDeletionMapper` 决定，新建表忘了登记会让 `AccountTablesCoverageTest` 失败。
 
+## 头像接口
+
+`/api/account/avatars`（[ADR 0051](../adr/0051-photo-limit-50mb-and-avatar.md)）走登录态 JWT，字段以接口文档运行时为准。有四处要注意：
+
+- **坐标口径**：宽高与裁剪框（`x`、`y`、`size`，正方形）一律按**摆正后**的原图像素算——服务端读 JPEG 的 EXIF 方向，和浏览器显示的方向一致。出界的框会被收进图内，不报错。
+- **上传**（`POST`，multipart：`file` ＋ `x`、`y`、`size`）只收 JPEG/PNG（JDK 读不了 WebP），直接设为当前头像。服务端存原图，另生成缩略图（历史列表）、预览图（裁剪框用，长边 1280）和 512×512 的裁剪结果。
+- **重裁**（`PUT /{id}/crop`）覆盖这一项的裁剪结果并刷新使用时刻，于是它排到最前面并成为当前头像，不另起一条。
+- **取图**（`GET /{id}/image?kind=crop|thumb|view|original`）直出二进制；删除（`DELETE /{id}`）进回收站，回收站类型是 `avatar`；`DELETE /current` 是「不用头像」。
+
 ## 日记接口
 
 `/api/diary`（[ADR 0044](../adr/0044-diary-markdown-photos-and-record-refs.md)）走登录态 JWT，外部 agent 令牌访问不了。有两处要注意：

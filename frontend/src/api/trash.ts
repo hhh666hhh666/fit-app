@@ -18,6 +18,8 @@ export type TrashType =
   /** 用户隐藏的已下架预置（ADR 0048）：恢复＝取消隐藏。 */
   | 'preset_food'
   | 'preset_exercise'
+  /** 从历史里删掉的头像（ADR 0051）：恢复后回到历史，不会自动变回当前头像。 */
+  | 'avatar'
 
 export interface TrashItem {
   id: number

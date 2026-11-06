@@ -28,14 +28,15 @@ const TYPE_LABEL: Record<TrashType, string> = {
   exercise: '动作',
   food: '食物',
   preset_exercise: '预置动作',
-  preset_food: '预置食物'
+  preset_food: '预置食物',
+  avatar: '头像'
 }
 
 const FILTERS: { key: string; label: string; types: TrashType[] }[] = [
   { key: 'all', label: '全部', types: [] },
   { key: 'workout', label: '训练', types: ['workout', 'session'] },
   { key: 'diary', label: '日记', types: ['diary'] },
-  { key: 'photo', label: '照片', types: ['meal_photo', 'diary_photo'] },
+  { key: 'photo', label: '照片', types: ['meal_photo', 'diary_photo', 'avatar'] },
   { key: 'body', label: '身体', types: ['body'] },
   { key: 'plan', label: '计划', types: ['plan'] },
   { key: 'exercise', label: '动作', types: ['exercise', 'preset_exercise'] },

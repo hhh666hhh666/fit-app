@@ -4,6 +4,8 @@
 import { API_BASE } from '@/api/base'
 import { invalidate } from '@/api/cache'
 import {
+  avatarKey,
+  type AvatarImageKind,
   cachePhoto,
   diaryPhotoKey,
   invalidateDiaryPhoto,
@@ -312,4 +314,77 @@ export async function deletePhoto(id: number): Promise<boolean> {
     uni.showToast({ title: '删除失败', icon: 'none' })
     return false
   }
+}
+
+// ── 头像（ADR 0051）：原图原样上传，裁剪框随图一起传；取图走同一套 blob 缓存 ──
+
+/** 服务端裁得动的格式：JDK 读不了 WebP。 */
+const AVATAR_MIME = ['image/jpeg', 'image/png']
+
+export interface CropBox {
+  x: number
+  y: number
+  size: number
+}
+
+/** 选一张图当头像的原图：返回本机 blob（不压缩，原样保留）；取消或不合格返回 null（已 toast）。 */
+export async function pickAvatarOriginal(): Promise<Blob | null> {
+  const picked = await choosePhoto()
+  if (picked.cancelled) return null
+  if (!picked.path) {
+    console.warn('[photo] 打开相机/相册失败：', picked.error)
+    uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+    return null
+  }
+  try {
+    const blob = await (await fetch(picked.path)).blob()
+    if (!AVATAR_MIME.includes(blob.type)) {
+      uni.showToast({ title: '头像只支持 JPEG/PNG 图片', icon: 'none' })
+      return null
+    }
+    if (blob.size > MAX_BYTES) {
+      uni.showToast({ title: `图片超过 ${MAX_PHOTO_MB}MB`, icon: 'none' })
+      return null
+    }
+    return blob
+  } catch {
+    uni.showToast({ title: '这张图读不出来，换一张试试', icon: 'none' })
+    return null
+  }
+}
+
+/** 上传新头像（原图 ＋ 裁剪框），成功返回 true；失败已 toast。 */
+export async function uploadAvatar(blob: Blob, crop: CropBox): Promise<boolean> {
+  uni.showLoading({ title: '上传中…' })
+  try {
+    const fd = new FormData()
+    fd.append('file', blob, blob.type === 'image/png' ? 'avatar.png' : 'avatar.jpg')
+    fd.append('x', String(crop.x))
+    fd.append('y', String(crop.y))
+    fd.append('size', String(crop.size))
+    const res = await fetch(`${API_BASE}/account/avatars`, { method: 'POST', headers: authHeader(), body: fd })
+    let body: { code?: number; message?: string } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      /* 非 JSON（如 nginx 错误页） */
+    }
+    uni.hideLoading()
+    if (res.ok && body && body.code === 0) {
+      // 账号（当前头像）和存储占用都变了
+      invalidate('account', 'diet')
+      return true
+    }
+    uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
+    return false
+  } catch {
+    uni.hideLoading()
+    uni.showToast({ title: '上传失败，请检查网络', icon: 'none' })
+    return false
+  }
+}
+
+/** 取头像的一种图；取不到返回 null。 */
+export function fetchAvatar(id: number, kind: AvatarImageKind = 'crop'): Promise<string | null> {
+  return fetchCached(`${API_BASE}/account/avatars/${id}/image?kind=${kind}`, avatarKey(id, kind))
 }

@@ -41,6 +41,9 @@ $viewer-ink: #ffffff; // 关闭钮、操作字
 $viewer-ink-muted: rgba(255, 255, 255, 0.72); // 说明文字
 $viewer-ink-subtle: rgba(255, 255, 255, 0.5); // 页码
 $viewer-chip: rgba(255, 255, 255, 0.14); // 深底上的胶囊、圆钮
+$viewer-scrim: rgba(10, 11, 13, 0.62); // 头像裁剪框外的压暗（ADR 0051）
+$viewer-edge: rgba(255, 255, 255, 0.35); // 裁剪框的方形边线
+$viewer-on-ink: #0a0b0d; // 深底上白色主按钮里的字
 
 // ── 线 ──
 $app-line: rgba(60, 80, 110, 0.14); // 主分隔线

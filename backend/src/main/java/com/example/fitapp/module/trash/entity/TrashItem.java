@@ -24,6 +24,8 @@ public class TrashItem {
     /** 用户隐藏的已下架预置食物 / 预置动作（ADR 0048）：恢复就是取消隐藏。 */
     public static final String PRESET_FOOD = "preset_food";
     public static final String PRESET_EXERCISE = "preset_exercise";
+    /** 从历史里删掉的头像（ADR 0051）：原图和裁剪结果一起留着，恢复后回到历史里，但不会自动变回当前头像。 */
+    public static final String AVATAR = "avatar";
 
     @TableId(type = IdType.AUTO)
     private Long id;

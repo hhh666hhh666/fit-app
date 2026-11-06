@@ -207,7 +207,8 @@ public class TrashService {
         vo.setDeletedAt(i.getDeletedAt());
         // 到期那天清理任务跑之前也还在：最少显示 1 天
         vo.setRemainingDays(Math.max(1, KEEP_DAYS - ChronoUnit.DAYS.between(i.getDeletedAt(), now)));
-        vo.setHasThumb(TrashItem.MEAL_PHOTO.equals(i.getType()) || TrashItem.DIARY_PHOTO.equals(i.getType()));
+        vo.setHasThumb(TrashItem.MEAL_PHOTO.equals(i.getType()) || TrashItem.DIARY_PHOTO.equals(i.getType())
+                || TrashItem.AVATAR.equals(i.getType()));
         return vo;
     }
 }

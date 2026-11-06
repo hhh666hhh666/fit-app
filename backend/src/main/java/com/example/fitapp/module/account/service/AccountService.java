@@ -42,7 +42,8 @@ public class AccountService {
     public static final List<String> USER_TABLES = List.of(
             "food", "meal_log", "meal_photo", "diet_daily", "user_setting", "food_recognition",
             "exercise", "agent_token", "workout", "food_combo", "preset_hidden", "plan",
-            "week_schedule", "user_profile", "trash_item", "diary_entry", "diary_photo", "body_record");
+            "week_schedule", "user_profile", "trash_item", "diary_entry", "diary_photo", "body_record",
+            "avatar");
 
     private final UserMapper userMapper;
     private final AccountDeletionMapper deletionMapper;
@@ -154,6 +155,7 @@ public class AccountService {
         vo.setUserId(user.getId());
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
+        vo.setAvatarId(user.getAvatarId());
         return vo;
     }
 }

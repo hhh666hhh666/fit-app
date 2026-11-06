@@ -4,6 +4,7 @@ import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { getWorkoutTotals } from '@/api/workout'
 import { clearAll } from '@/api/cache'
 import { displayName, getAccount, type AccountInfo } from '@/api/account'
+import { fetchAvatar } from '@/utils/photo'
 import { getBodyOverview } from '@/api/body'
 import { formatWeight, getWeightUnit } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
@@ -131,7 +132,7 @@ const photoUsedText = computed(() => fmtBytes(storage.value?.photoBytes))
 const photoQuotaText = computed(() => fmtBytes(storage.value?.photoQuotaBytes))
 const storageHint = computed(() => {
   const trash = storage.value?.trashBytes ?? 0
-  const head = trash > 0 ? `含回收站 ${fmtBytes(trash)}` : '餐照和日记图片合计'
+  const head = trash > 0 ? `含回收站 ${fmtBytes(trash)}` : '餐照、日记图片和头像合计'
   return `${head}；达到上限后将无法再上传新照片`
 })
 const photoCountText = computed(() =>
@@ -169,9 +170,14 @@ const name = computed(() =>
 /** 没头像时显示首字母，取自显示名（emoji 也算一个字）。 */
 const avatarChar = computed(() => ([...name.value][0] ?? 'L').toUpperCase())
 
+/** 当前头像的图（ADR 0051）；没设头像就是 null，显示首字母。 */
+const avatarUrl = ref<string | null>(null)
+
 async function loadAccount() {
   try {
     account.value = await getAccount()
+    const id = account.value.avatarId
+    avatarUrl.value = id ? await fetchAvatar(id, 'crop') : null
   } catch {
     // 取不到就先用本机记着的用户名
   }
@@ -239,7 +245,10 @@ function goAgent() {
     <view class="prof__body">
       <!-- 页头：头像 ＋ 名字；点进账号页（ADR 0050） -->
       <view class="prof__head" role="button" @click="goAccount">
-        <view class="prof__avatar">{{ avatarChar }}</view>
+        <view class="prof__avatar">
+          <image v-if="avatarUrl" class="prof__avatar-img" :src="avatarUrl" mode="aspectFill" />
+          <text v-else>{{ avatarChar }}</text>
+        </view>
         <view class="prof__who">
           <text class="prof__eyebrow">我的</text>
           <text class="prof__name">{{ name }}</text>
@@ -375,6 +384,15 @@ function goAgent() {
   font-size: $text-2xl;
   font-weight: $weight-heavy;
   color: $app-ink;
+}
+
+.prof__avatar {
+  overflow: hidden;
+}
+
+.prof__avatar-img {
+  width: 100%;
+  height: 100%;
 }
 
 .prof__who {

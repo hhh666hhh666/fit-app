@@ -19,6 +19,7 @@ import com.example.fitapp.module.nutrition.mapper.DietDailyMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
+import com.example.fitapp.module.account.mapper.AvatarMapper;
 import com.example.fitapp.module.nutrition.storage.PhotoStorage;
 import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 import com.example.fitapp.module.trash.mapper.TrashItemMapper;
@@ -84,6 +85,7 @@ public class DietService {
 
     /** 日记图片的占用要和餐照一起算（ADR 0044）；这里只读占用，不依赖日记的业务。 */
     private final DiaryPhotoMapper diaryPhotoMapper;
+    private final AvatarMapper avatarMapper;
     private final TrashItemMapper trashItemMapper;
     private final MealPhotoTrash mealPhotoTrash;
 
@@ -276,7 +278,7 @@ public class DietService {
     public void checkPhotoQuota(Long userId, long delta) {
         // 回收站里的文件还在磁盘上，要算进去（ADR 0047）
         long used = mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId)
-                + trashItemMapper.sumPhotoBytes(userId);
+                + avatarMapper.sumBytes(userId) + trashItemMapper.sumPhotoBytes(userId);
         if (used + delta > photoQuotaBytes) {
             throw new BusinessException(ResultCode.BAD_REQUEST,
                     "照片空间已满（上限 " + quotaText() + "），请先到相册或回收站清理");
@@ -298,7 +300,9 @@ public class DietService {
     public StorageVO storage(Long userId) {
         StorageVO vo = new StorageVO();
         long trashBytes = trashItemMapper.sumPhotoBytes(userId);
-        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId) + trashBytes);
+        // 头像也占照片空间，但不进相册，所以只算字节、不算张数（ADR 0051）
+        vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId)
+                + avatarMapper.sumBytes(userId) + trashBytes);
         vo.setTrashBytes(trashBytes);
         vo.setPhotoCount((int) (mealPhotoMapper.countByUser(userId) + diaryPhotoMapper.countByUser(userId)));
         vo.setPhotoQuotaBytes(photoQuotaBytes);

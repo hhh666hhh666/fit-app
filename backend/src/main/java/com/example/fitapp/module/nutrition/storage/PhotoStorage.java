@@ -17,7 +17,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 餐照的**文件存储**（ADR 0026）：图片实体落在服务器磁盘上，库里只留一个相对路径。
+ * 图片的**文件存储**（ADR 0026）：图片实体落在服务器磁盘上，库里只留一个相对路径。
+ * 餐照、日记图片（{@code {userId}/diary/…}）和头像（{@code {userId}/avatar/…}，ADR 0051）都在这里。
  *
  * <p>布局（{@code root} 由 {@code fitapp.storage.photo-dir} 指定）：
  * <pre>
@@ -36,6 +37,9 @@ public class PhotoStorage {
     /** 候选取值：换过格式（重拍时 mime 变了）会留下旧扩展名的文件，写入前要一并清掉。 */
     private static final List<String> EXT_CANDIDATES = List.of("jpg", "png", "webp");
     private static final String THUMB_SUFFIX = ".thumb.jpg";
+    /** 头像的预览图（裁剪框里显示，长边约 1280）与裁剪结果（512×512），见 ADR 0051。 */
+    public static final String VIEW_SUFFIX = ".view.jpg";
+    public static final String CROP_SUFFIX = ".crop.jpg";
 
     private final Path root;
 
@@ -101,6 +105,17 @@ public class PhotoStorage {
         return Files.isReadable(p) ? p : null;
     }
 
+    /** 写一个附属文件（头像的预览图、裁剪结果）；覆盖写。 */
+    public void writeSide(String relKey, String suffix, byte[] data) throws IOException {
+        Files.createDirectories(root.resolve(relKey).getParent());
+        Files.write(root.resolve(relKey + suffix), data);
+    }
+
+    /** 读一个附属文件；不存在返回 null。 */
+    public byte[] readSide(String relKey, String suffix) {
+        return readOrNull(root.resolve(relKey + suffix));
+    }
+
     /** 读缩略图；不存在返回 null——读取端据此回退原图。 */
     public byte[] readThumb(String relKey) {
         return readOrNull(root.resolve(relKey + THUMB_SUFFIX));
@@ -136,6 +151,8 @@ public class PhotoStorage {
             deleteQuietly(root.resolve(relKey + "." + ext));
         }
         deleteQuietly(root.resolve(relKey + THUMB_SUFFIX));
+        deleteQuietly(root.resolve(relKey + VIEW_SUFFIX));
+        deleteQuietly(root.resolve(relKey + CROP_SUFFIX));
     }
 
     private byte[] readOrNull(Path p) {

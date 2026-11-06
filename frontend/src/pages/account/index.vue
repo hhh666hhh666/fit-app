@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
   changePassword,
+  clearAvatar,
   deleteAccount,
+  deleteAvatar,
+  displayName,
   getAccount,
+  listAvatars,
+  recropAvatar,
   updateNickname,
   updateUsername,
-  type AccountInfo
+  type AccountInfo,
+  type AvatarItem
 } from '@/api/account'
 import { resetCaches } from '@/api/cache'
+import { fetchAvatar, pickAvatarOriginal, uploadAvatar, type CropBox } from '@/utils/photo'
+import { invalidateAvatar } from '@/utils/photo-cache'
+import { TRASH_HINT } from '@/utils/confirm'
+import AvatarCropper from '@/components/AvatarCropper.vue'
 import { ensureLogin } from '@/utils/guard'
 import { ask } from '@/utils/confirm'
 import FtButton from '@/components/FtButton.vue'
@@ -17,7 +27,7 @@ import FtListRow from '@/components/FtListRow.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
 
-// ── 账号（ADR 0050）：昵称、用户名、密码、退出登录、注销 ──
+// ── 账号（ADR 0050）：头像与历史头像（ADR 0051）、昵称、用户名、密码、退出登录、注销 ──
 //    和「设置」分开：设置放的是怎么用这个 App，这里放的是这个账号是谁。
 
 const NICKNAME_MAX = 20
@@ -31,10 +41,139 @@ onShow(() => {
 
 async function load() {
   try {
-    account.value = await getAccount()
+    const [a, list] = await Promise.all([getAccount(), listAvatars()])
+    account.value = a
+    avatars.value = list
+    void loadImages()
   } catch {
     // request 层已提示
   }
+}
+
+// ── 头像（ADR 0051）──
+
+const avatars = ref<AvatarItem[]>([])
+/** 当前头像的图（裁剪结果） */
+const currentUrl = ref<string | null>(null)
+/** 历史列表里的图：完整原图的缩略，放在方格里不裁切 */
+const thumbs = ref<Record<number, string | null>>({})
+
+const avatarChar = computed(() => ([...displayName(account.value)][0] ?? 'L').toUpperCase())
+
+async function loadImages() {
+  const id = account.value?.avatarId
+  currentUrl.value = id ? await fetchAvatar(id, 'crop') : null
+  for (const a of avatars.value) {
+    if (thumbs.value[a.id] === undefined) {
+      void fetchAvatar(a.id, 'thumb').then((url) => {
+        thumbs.value = { ...thumbs.value, [a.id]: url }
+      })
+    }
+  }
+}
+
+/** 裁剪框：新图（本机 blob）或历史里的某张（服务端预览图） */
+const cropper = ref<{
+  src: string | null
+  width: number
+  height: number
+  crop: CropBox | null
+  title: string
+  blob?: Blob
+  avatarId?: number
+} | null>(null)
+
+function closeCropper() {
+  if (cropper.value?.blob && cropper.value.src) URL.revokeObjectURL(cropper.value.src)
+  cropper.value = null
+}
+
+/** 本机图的宽高：浏览器按 EXIF 方向摆正后的，和服务端的口径一致。 */
+function naturalSize(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () => reject(new Error('decode'))
+    img.src = url
+  })
+}
+
+async function pickNew() {
+  const blob = await pickAvatarOriginal()
+  if (!blob) return
+  const url = URL.createObjectURL(blob)
+  try {
+    const { width, height } = await naturalSize(url)
+    cropper.value = { src: url, width, height, crop: null, title: '新头像', blob }
+  } catch {
+    URL.revokeObjectURL(url)
+    toast('这张图读不出来，换一张试试')
+  }
+}
+
+/** 切回历史里的某张或重裁当前头像：都要在原图上重新裁一次，框默认停在上次的位置。 */
+function openExisting(a: AvatarItem) {
+  cropper.value = {
+    src: null,
+    width: a.width,
+    height: a.height,
+    crop: { x: a.cropX, y: a.cropY, size: a.cropSize },
+    title: a.current ? '重新裁剪' : '换回这张',
+    avatarId: a.id
+  }
+  void fetchAvatar(a.id, 'view').then((url) => {
+    if (cropper.value?.avatarId === a.id) cropper.value = { ...cropper.value, src: url }
+    if (!url) toast('预览图取不到，请稍后重试')
+  })
+}
+
+function recropCurrent() {
+  const a = avatars.value.find((x) => x.current)
+  if (a) openExisting(a)
+}
+
+function onCropConfirm(crop: CropBox) {
+  const c = cropper.value
+  if (!c) return
+  void run(async () => {
+    if (c.blob) {
+      if (!(await uploadAvatar(c.blob, crop))) return
+    } else if (c.avatarId) {
+      await recropAvatar(c.avatarId, crop)
+      invalidateAvatar(c.avatarId)
+      delete thumbs.value[c.avatarId]
+    }
+    closeCropper()
+    await load()
+    toast('头像已更新')
+  })
+}
+
+function removeInCropper() {
+  const id = cropper.value?.avatarId
+  if (!id) return
+  void ask({ title: '删除这张头像？', content: TRASH_HINT, confirmText: '删除', danger: true }).then((ok) => {
+    if (!ok) return
+    void run(async () => {
+      await deleteAvatar(id)
+      invalidateAvatar(id)
+      closeCropper()
+      await load()
+      toast('已移到回收站')
+    })
+  })
+}
+
+function stopUsing() {
+  void ask({ title: '不用头像？', content: '「我的」页回到显示首字母；历史里的头像都还在。', confirmText: '不用了' }).then(
+    (ok) => {
+      if (!ok) return
+      void run(async () => {
+        await clearAvatar()
+        await load()
+      })
+    }
+  )
 }
 
 type SheetKind = 'nickname' | 'username' | 'password' | 'delete' | null
@@ -146,6 +285,39 @@ function logout() {
     <view class="acct__body">
       <FtPageHeader title="账号" back />
 
+      <!-- 头像（ADR 0051）：当前头像 ＋ 三个操作 -->
+      <view class="glass me">
+        <view class="me__avatar" role="button" aria-label="换新头像" @click="pickNew">
+          <image v-if="currentUrl" class="me__img" :src="currentUrl" mode="aspectFill" />
+          <text v-else class="me__char">{{ avatarChar }}</text>
+        </view>
+        <text class="me__name">{{ displayName(account) }}</text>
+        <view class="me__actions">
+          <FtButton variant="secondary" size="sm" @click="pickNew">换新头像</FtButton>
+          <FtButton v-if="account?.avatarId" variant="ghost" size="sm" @click="recropCurrent">重新裁剪</FtButton>
+          <FtButton v-if="account?.avatarId" variant="ghost" size="sm" @click="stopUsing">不用头像</FtButton>
+        </view>
+      </view>
+
+      <!-- 历史头像：方格里完整显示原图，点一张在原图上重新裁剪后换回去 -->
+      <view v-if="avatars.length" class="glass hist">
+        <text class="card-title">历史头像</text>
+        <text class="hist__hint">点一张，在原图上重新裁剪后换回去；也可以在里面删掉它</text>
+        <view class="hist__grid">
+          <view
+            v-for="a in avatars"
+            :key="a.id"
+            class="hist__cell"
+            :class="{ 'hist__cell--on': a.current }"
+            role="button"
+            @click="openExisting(a)"
+          >
+            <image v-if="thumbs[a.id]" class="hist__img" :src="thumbs[a.id] ?? ''" mode="aspectFit" />
+            <text v-if="a.current" class="hist__tag">当前</text>
+          </view>
+        </view>
+      </view>
+
       <view class="glass entries">
         <FtListRow title="昵称" :value="account?.nickname || '未设置'" arrow @click="open('nickname')" />
         <FtListRow title="用户名" :value="account?.username ?? '—'" arrow @click="open('username')" />
@@ -162,6 +334,20 @@ function logout() {
         <FtButton variant="danger" size="sm" class="danger__btn" @click="open('delete')">注销账号</FtButton>
       </view>
     </view>
+
+    <AvatarCropper
+      v-if="cropper"
+      :src="cropper.src"
+      :width="cropper.width"
+      :height="cropper.height"
+      :crop="cropper.crop"
+      :title="cropper.title"
+      :busy="busy"
+      @confirm="onCropConfirm"
+      @cancel="closeCropper"
+    >
+      <view v-if="cropper.avatarId" class="crop-del" role="button" @click="removeInCropper">删除这张</view>
+    </AvatarCropper>
 
     <Transition name="ft-sheet">
       <FtSheet v-if="sheet === 'nickname'" title="昵称" sub="设了就在「我的」页代替用户名；留空＝不设" guard @close="close">
@@ -255,6 +441,123 @@ function logout() {
 
 .card-title {
   @include card-title;
+}
+
+/* ── 头像 ── */
+.me {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding-top: 40rpx;
+  padding-bottom: 32rpx;
+}
+
+.me__avatar {
+  @include glass($glass-bg-strong);
+  width: 176rpx;
+  height: 176rpx;
+  border-radius: 50%;
+  border: 1rpx solid $glass-edge;
+  box-shadow: $glass-shadow;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  @include press(dim);
+}
+
+.me__img {
+  width: 100%;
+  height: 100%;
+}
+
+.me__char {
+  font-family: $font-num;
+  font-size: $text-hero;
+  font-weight: $weight-heavy;
+  color: $app-ink;
+}
+
+.me__name {
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  color: $app-ink;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.hist {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding-top: 28rpx;
+  padding-bottom: 28rpx;
+}
+
+.hist__hint {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.hist__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.hist__cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: $radius-md;
+  background: $app-surface-2;
+  overflow: hidden;
+  border: 2rpx solid transparent;
+  @include press(dim);
+}
+
+.hist__cell--on {
+  border-color: $app-ink;
+}
+
+.hist__img {
+  width: 100%;
+  height: 100%;
+}
+
+.hist__tag {
+  position: absolute;
+  left: 8rpx;
+  top: 8rpx;
+  padding: 2rpx 14rpx;
+  border-radius: $radius-pill;
+  background: $app-ink;
+  color: $app-surface;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+}
+
+.crop-del {
+  height: 88rpx;
+  padding: 0 40rpx;
+  border-radius: $radius-pill;
+  background: $viewer-chip;
+  color: $viewer-ink;
+  font-size: $text-md;
+  display: flex;
+  align-items: center;
+  @include press(dim);
 }
 
 .entries {

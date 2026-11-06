@@ -22,6 +22,9 @@ public class User {
     /** 昵称：显示名，可空、可重名，不能拿来登录（ADR 0050）。 */
     private String nickname;
 
+    /** 当前头像（avatar.id）；null＝显示首字母（ADR 0051）。 */
+    private Long avatarId;
+
     private String passwordHash;
 
     /** 令牌版本：改密码时加一，签发时写进令牌，校验时对不上就拒绝（ADR 0050）。 */
