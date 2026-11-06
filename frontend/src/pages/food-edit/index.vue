@@ -26,6 +26,8 @@ const copyFromId = ref<number | null>(null)
 const fromRecognition = ref(false)
 /** 低置信度字段 key（识别不确定，保存前请核对）。 */
 const uncertainKeys = ref<string[]>([])
+/** 标签上没找到的必填字段 key（4+1 中的）：标「待补」，补齐才能保存。 */
+const missingKeys = ref<string[]>([])
 const isEdit = computed(() => editId.value != null)
 const saving = ref(false)
 const pageTitle = computed(() =>
@@ -81,6 +83,7 @@ onLoad((query) => {
     }
     fromRecognition.value = true
     uncertainKeys.value = d.uncertain ?? []
+    missingKeys.value = d.missing ?? []
     fillForm(d.draft)
     if (d.duplicateFoodId) showDuplicateChoice(d)
   }
@@ -133,14 +136,22 @@ function isUncertain(key: string): boolean {
   return uncertainKeys.value.includes(key)
 }
 
+/** 字段是否「标签上看不到、还没补」——补上了标记就消失。 */
+function isMissing(key: string): boolean {
+  return missingKeys.value.includes(key) && !form[key].trim()
+}
+
+const labelOf = new Map<string, string>([['name', '食物名称']])
+for (const f of MAIN_FIELDS) labelOf.set(f.key, f.label)
+for (const g of OPTIONAL_GROUPS) for (const f of g.fields) labelOf.set(f.key, f.label)
+
 /** 待核对字段的中文名（顶部提示行用）。 */
-const uncertainLabels = computed(() => {
-  const labelOf = new Map<string, string>()
-  labelOf.set('name', '食物名称')
-  for (const f of MAIN_FIELDS) labelOf.set(f.key, f.label)
-  for (const g of OPTIONAL_GROUPS) for (const f of g.fields) labelOf.set(f.key, f.label)
-  return uncertainKeys.value.map((k) => labelOf.get(k) ?? k)
-})
+const uncertainLabels = computed(() => uncertainKeys.value.map((k) => labelOf.get(k) ?? k))
+
+/** 还没补的缺项中文名（顶部提示行用；补一项少一项）。 */
+const missingLabels = computed(() =>
+  missingKeys.value.filter((k) => isMissing(k)).map((k) => (labelOf.get(k) ?? k).replace(/（.*）$/, ''))
+)
 
 /** 撞名二选一（ADR 0018）：打开已有的 / 仍然新建（保存会被同名校验拦下，需改名）。 */
 function showDuplicateChoice(d: FoodDraft) {
@@ -247,16 +258,19 @@ async function save() {
     <view class="fe__body">
       <FtPageHeader :title="pageTitle" back />
 
-      <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 名字缺失警告 ＋ 待核对字段点名 -->
+      <!-- 识别草稿提示（ADR 0018）：来源说明 ＋ 名字缺失警告 ＋ 必填缺项点名 ＋ 待核对字段点名 -->
       <view v-if="fromRecognition" class="glass block rec-note">
         <text class="block__title">来自拍照识别</text>
         <text v-if="!form.name.trim()" class="rec-note__text rec-note__text--warn">
           没能认出食物名称——其余数值已按标签填好，补个名字就能保存
         </text>
+        <text v-if="missingLabels.length" class="rec-note__text rec-note__text--warn">
+          标签上看不到：{{ missingLabels.join('、') }}——其余已按标签填好，补上这几项就能保存
+        </text>
         <text v-if="uncertainKeys.length" class="rec-note__text">
           这些字段识别不确定：{{ uncertainLabels.join('、') }}。保存前请对照包装核对。
         </text>
-        <text v-else-if="form.name.trim()" class="rec-note__text">已按包装营养成分表预填，核对无误即可保存。</text>
+        <text v-else-if="form.name.trim() && !missingLabels.length" class="rec-note__text">已按包装营养成分表预填，核对无误即可保存。</text>
       </view>
 
       <!-- 名称 + 单位 -->
@@ -294,23 +308,23 @@ async function save() {
       <view class="glass block">
         <text class="block__title">主要营养（必填）</text>
         <view class="fld">
-          <text class="fld__label">热量（大卡）<text v-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
+          <text class="fld__label">热量（大卡）<text v-if="isMissing('kcal')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.kcal" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">蛋白质（g）<text v-if="isUncertain('protein')" class="fld__warn"> 待核对</text></text>
+          <text class="fld__label">蛋白质（g）<text v-if="isMissing('protein')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('protein')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.protein" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">脂肪（g）<text v-if="isUncertain('fat')" class="fld__warn"> 待核对</text></text>
+          <text class="fld__label">脂肪（g）<text v-if="isMissing('fat')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('fat')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.fat" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">碳水化合物（g）<text v-if="isUncertain('carb')" class="fld__warn"> 待核对</text></text>
+          <text class="fld__label">碳水化合物（g）<text v-if="isMissing('carb')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('carb')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.carb" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
         <view class="fld">
-          <text class="fld__label">钠（mg）<text v-if="isUncertain('sodium')" class="fld__warn"> 待核对</text></text>
+          <text class="fld__label">钠（mg）<text v-if="isMissing('sodium')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('sodium')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.sodium" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
         </view>
       </view>

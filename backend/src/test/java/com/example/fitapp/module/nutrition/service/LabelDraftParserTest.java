@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -88,15 +88,21 @@ class LabelDraftParserTest {
     }
 
     @Test
-    void missingRequired_throwsWithNames() {
+    void missingSodium_returnsDraftAndFlagsMissing() {
+        // 标签没印钠：不整体报错，其余照常出草稿，缺项点名给确认页
         String json = """
                 {"name":"缺钠的面包","unit":"g","kj":1000,
-                 "nutrients":{"protein":8,"fat":3,"carb":45},"nrv":{},"uncertain":[]}
+                 "nutrients":{"protein":8,"fat":3,"carb":45,"fiber":2},"nrv":{},"uncertain":["sodium","fat"]}
                 """;
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> LabelDraftParser.parse(json));
+        LabelDraftParser.Draft d = LabelDraftParser.parse(json);
 
-        assertTrue(ex.getMessage().contains("钠"), "应点明缺的是钠：" + ex.getMessage());
+        assertEquals("缺钠的面包", d.dto().getName());
+        assertBd("8.00", d.dto().getProtein());
+        assertBd("2.00", d.dto().getFiber());
+        assertNull(d.dto().getSodium());
+        assertEquals(List.of("sodium"), d.missing());
+        assertEquals(List.of("fat"), d.uncertain(), "缺的不再同时标待核对");
     }
 
     @Test
@@ -165,17 +171,28 @@ class LabelDraftParserTest {
     }
 
     @Test
-    void partialLabel_throwsListingMissingOnly() {
-        // 有名字但缺四项：仍逐项报缺（与全 null 的「没标签」区分开）
+    void partialLabel_returnsDraftListingMissingInOrder() {
+        // 有名字但缺四项：仍出草稿（与全 null 的「没标签」区分开），缺项按 4+1 固定顺序
         String json = """
-                {"name":"只剩热量","unit":"g","kj":100,
-                 "nutrients":{"fat":1,"carb":1,"sodium":1},"nrv":{},"uncertain":[]}
+                {"name":"只剩钠","unit":"g",
+                 "nutrients":{"sodium":1},"nrv":{},"uncertain":[]}
+                """;
+
+        LabelDraftParser.Draft d = LabelDraftParser.parse(json);
+
+        assertEquals(List.of("kcal", "protein", "fat", "carb"), d.missing());
+    }
+
+    @Test
+    void namedButAllRequiredMissing_throwsNoLabelMessage() {
+        // 认出了名字但 4+1 一项都没有：多半拍的不是营养成分表——给准话，不出空草稿
+        String json = """
+                {"name":"某饮料","unit":"ml","nutrients":{"vc":30},"nrv":{},"uncertain":[]}
                 """;
 
         BusinessException ex = assertThrows(BusinessException.class, () -> LabelDraftParser.parse(json));
 
-        assertTrue(ex.getMessage().contains("蛋白质"), ex.getMessage());
-        assertFalse(ex.getMessage().contains("没能认出营养成分表"), "缺项不应误报成没标签");
+        assertTrue(ex.getMessage().contains("没能认出营养成分表"), ex.getMessage());
     }
 
     @Test

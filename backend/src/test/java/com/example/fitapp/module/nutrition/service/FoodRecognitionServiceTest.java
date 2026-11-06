@@ -160,18 +160,22 @@ class FoodRecognitionServiceTest {
     }
 
     @Test
-    void recognize_missingSodium_throwsAndLogs() {
+    void recognize_missingSodium_returnsDraftFlaggingMissing() {
+        // 标签没印钠：照常出草稿（校验不因空值拦下），缺项点名，记账 success=1
         String noSodium = """
                 {"name":"缺钠","unit":"g","kj":100,
                  "nutrients":{"protein":1,"fat":1,"carb":1},"nrv":{},"uncertain":[]}
                 """;
         FoodRecognitionService s = spyService(noSodium, 100, 20, 0);
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> s.recognize(7L, mock(MultipartFile.class)));
+        FoodDraftVO vo = s.recognize(7L, mock(MultipartFile.class));
 
-        assertTrue(ex.getMessage().contains("钠"), ex.getMessage());
-        verify(recognitionMapper).insert(any(FoodRecognition.class));
+        assertEquals("缺钠", vo.getDraft().getName());
+        assertNull(vo.getDraft().getSodium());
+        assertEquals(List.of("sodium"), vo.getMissing());
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertTrue(captor.getValue().getSuccess(), "出了草稿就算成功");
     }
 
     @Test

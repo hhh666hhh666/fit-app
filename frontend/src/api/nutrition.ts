@@ -214,6 +214,8 @@ export interface FoodDraft {
   draft: FoodPayload
   /** 低置信度字段 key（前端在这些字段旁标「待核对」）。 */
   uncertain: string[]
+  /** 标签上没找到的必填字段 key（4+1 中的；草稿里对应值为空，前端标「待补」）。 */
+  missing?: string[]
   /** 撞名：自有库里已有同名食物（null＝不撞）。 */
   duplicateFoodId?: number | null
   duplicateFoodName?: string | null

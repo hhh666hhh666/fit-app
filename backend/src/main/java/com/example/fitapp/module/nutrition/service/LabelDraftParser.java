@@ -55,8 +55,11 @@ public final class LabelDraftParser {
     private LabelDraftParser() {
     }
 
-    /** 解析结果：草稿 ＋ 低置信度字段 key 列表。 */
-    public record Draft(FoodSaveDTO dto, List<String> uncertain) {
+    /**
+     * 解析结果：草稿 ＋ 低置信度字段 key ＋ 标签上没找到的必填字段 key（4+1 中的，
+     * 顺序固定 kcal → protein → fat → carb → sodium）。
+     */
+    public record Draft(FoodSaveDTO dto, List<String> uncertain, List<String> missing) {
     }
 
     /**
@@ -75,7 +78,7 @@ public final class LabelDraftParser {
             throw new BusinessException(ResultCode.BAD_REQUEST, "食物名过长（超过 64 字），请手动录入");
         }
         // 名字没认出**不再抛错**：数值照常出草稿，用户回确认页自己补（保存时前端与
-        // POST /api/foods 的 @NotBlank 双重把关）。下面 4+1 齐全才放行。
+        // POST /api/foods 的 @NotBlank 双重把关）。4+1 缺项同理，见下。
 
         String unit = "ml".equals(root.path("unit").asText("")) ? "ml" : "g";
         BigDecimal factor = per100Factor(root.path("serving_grams"));
@@ -93,26 +96,26 @@ public final class LabelDraftParser {
 
         FoodSaveDTO dto = MAPPER.convertValue(normalized, FoodSaveDTO.class);
 
+        // 4+1 缺项**不再整体抛错**（2026-11-06）：标签没印钠这类情况很常见，整单作废等于
+        // 让用户把认出来的几十个数重抄一遍。改为照常出草稿 ＋ 点名缺项，用户在确认页补；
+        // 保存时前端与 POST /api/foods 的 @NotNull 双重把关，缺的补不上就存不进去。
         List<String> missing = new ArrayList<>();
-        if (dto.getKcal() == null) missing.add("能量");
-        if (dto.getProtein() == null) missing.add("蛋白质");
-        if (dto.getFat() == null) missing.add("脂肪");
-        if (dto.getCarb() == null) missing.add("碳水化合物");
-        if (dto.getSodium() == null) missing.add("钠");
-        if (!missing.isEmpty()) {
-            // 名字也没有 ＋ 4+1 全缺 ＝ 模型对「没有标签的图」回了全 null 骨架——
-            // 给「没找到营养成分表」的准话，而不是罗列五个缺失项。
-            if (name.isEmpty() && missing.size() == 5) {
-                throw new BusinessException(ResultCode.BUSINESS_ERROR, "照片里没能认出营养成分表，请手动录入");
-            }
-            throw new BusinessException(ResultCode.BUSINESS_ERROR,
-                    "标签上看不到：" + String.join("、", missing) + "——请手动录入");
+        if (dto.getKcal() == null) missing.add("kcal");
+        if (dto.getProtein() == null) missing.add("protein");
+        if (dto.getFat() == null) missing.add("fat");
+        if (dto.getCarb() == null) missing.add("carb");
+        if (dto.getSodium() == null) missing.add("sodium");
+        // 4+1 一项都没有 ＝ 模型对「没有标签的图」回了全 null 骨架（或根本不是营养成分表）——
+        // 这时出空草稿没意义，给「没认出营养成分表」的准话。
+        if (missing.size() == 5) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "照片里没能认出营养成分表，请手动录入");
         }
         List<String> uncertain = uncertainKeys(root.path("uncertain"));
+        uncertain.removeAll(missing); // 缺的就是缺的，不再同时标「待核对」
         if (name.isEmpty()) {
             uncertain.add("name"); // 名字缺失也标「待核对」——确认页会提示用户补
         }
-        return new Draft(dto, uncertain);
+        return new Draft(dto, uncertain, missing);
     }
 
     /** 每份 → 每100 倍率；按 100 印（或没给）时为 1。非正数视为没给。 */

@@ -117,11 +117,9 @@ public class FoodRecognitionService {
             cached = resp.cachedTokens();
 
             LabelDraftParser.Draft draft = LabelDraftParser.parse(resp.content());
-            // 名字没认出时照常出草稿（用户回确认页补）——此时跳过 DTO 校验（@NotBlank 会拦
-            // 空名）；数值口径解析器已保证，保存时前端与 POST /api/foods 还有双重非空闸。
-            if (StringUtils.hasText(draft.dto().getName())) {
-                validate(draft.dto());
-            }
+            // 名字或 4+1 某项没认出时照常出草稿（用户回确认页补）——校验只拦「有值但不合法」，
+            // 空值放过；保存时前端与 POST /api/foods 还有双重非空闸。
+            validate(draft.dto());
 
             // 撞名预检：只看自有（与导入/新建同口径——允许与预置同名）
             Food dup = findDuplicateOwn(userId, draft.dto().getName());
@@ -130,13 +128,14 @@ public class FoodRecognitionService {
             FoodDraftVO vo = new FoodDraftVO();
             vo.setDraft(draft.dto());
             vo.setUncertain(new ArrayList<>(draft.uncertain()));
+            vo.setMissing(new ArrayList<>(draft.missing()));
             if (dup != null) {
                 vo.setDuplicateFoodId(dup.getId());
                 vo.setDuplicateFoodName(dup.getName());
             }
             return vo;
         } catch (BusinessException e) {
-            throw e; // 业务性失败（没标签/缺必填/服务不可用）——原样抛给前端
+            throw e; // 业务性失败（没标签/脏数据/服务不可用）——原样抛给前端
         } catch (Exception e) {
             log.warn("识别失败：{}", e.toString());
             throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别失败，请重试或手动录入");
@@ -240,13 +239,23 @@ public class FoodRecognitionService {
     }
 
     /** 复用 DTO 上的 Bean Validation（与 JSON 导入同一道闸）。 */
+    /**
+     * 草稿校验：只拦「有值但不合法」（超长、越界之类）。空值（名字空、4+1 缺项）放过——
+     * 那是确认页让用户补的，补不上保存接口的 @NotNull / @NotBlank 会拦。
+     */
     private void validate(FoodSaveDTO dto) {
         Set<ConstraintViolation<FoodSaveDTO>> violations =
                 validator.validate(dto, Default.class, FoodSaveDTO.OwnFood.class);
-        if (!violations.isEmpty()) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR,
-                    "识别结果不完整：" + violations.iterator().next().getMessage());
-        }
+        violations.stream()
+                .filter(v -> !isEmptyValue(v.getInvalidValue()))
+                .findFirst()
+                .ifPresent(v -> {
+                    throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别结果不完整：" + v.getMessage());
+                });
+    }
+
+    private static boolean isEmptyValue(Object v) {
+        return v == null || (v instanceof CharSequence s && s.toString().isBlank());
     }
 
     private Food findDuplicateOwn(Long userId, String name) {
