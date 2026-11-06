@@ -33,6 +33,9 @@ onMounted(async () => {
       <el-table v-loading="loading" :data="rows" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="username" label="用户名" min-width="160" />
+        <el-table-column label="昵称" min-width="140">
+          <template #default="{ row }">{{ row.nickname || '—' }}</template>
+        </el-table-column>
         <el-table-column label="身份" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.admin" size="small">管理员</el-tag>

@@ -3,6 +3,9 @@ package com.example.fitapp.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.common.ResultCode;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.example.fitapp.module.user.entity.User;
+import com.example.fitapp.module.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,7 @@ public class JwtInterceptor implements HandlerInterceptor {
     private static final String BEARER = "Bearer ";
 
     private final JwtUtil jwtUtil;
+    private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -35,13 +39,29 @@ public class JwtInterceptor implements HandlerInterceptor {
             writeUnauthorized(response);
             return false;
         }
-        Long userId = jwtUtil.parseToken(header.substring(BEARER.length()));
-        if (userId == null) {
+        JwtUtil.TokenClaims claims = jwtUtil.parseToken(header.substring(BEARER.length()));
+        if (claims == null || !isCurrent(claims)) {
             writeUnauthorized(response);
             return false;
         }
-        UserContext.setUserId(userId);
+        UserContext.setUserId(claims.userId());
         return true;
+    }
+
+    /**
+     * 令牌还作数吗（ADR 0050）：账号还在，且签发时的版本等于当前版本。
+     * 改密码会把版本加一，于是其他设备的旧令牌在这里被拒；注销后读不到这一行，同样被拒。
+     * 每个请求多一次主键查询——用户只有个位数，代价可以忽略。
+     */
+    private boolean isCurrent(JwtUtil.TokenClaims claims) {
+        User user = userMapper.selectOne(Wrappers.<User>lambdaQuery()
+                .select(User::getId, User::getTokenVersion)
+                .eq(User::getId, claims.userId()));
+        if (user == null) {
+            return false;
+        }
+        int current = user.getTokenVersion() == null ? 0 : user.getTokenVersion();
+        return current == claims.tokenVersion();
     }
 
     @Override

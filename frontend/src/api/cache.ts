@@ -7,9 +7,10 @@
 
 import request, { onAuthFail, unwrap } from './request'
 import { clearPhotoCache } from '@/utils/photo-cache'
+import { currentUserId } from '@/utils/current-user'
 
 /** 域内任一处改动 → 域内全部重取（粗，但漏不掉）。 */
-export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food' | 'diary'
+export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food' | 'diary' | 'account'
 
 interface Entry {
   /** 存 Promise：同一 URL 的并发调用自动合并成一次请求。 */
@@ -160,7 +161,8 @@ const PERSIST_PATHS = new Set([
   '/exercises',
   '/foods/count',
   '/diet/storage',
-  '/food-recognition/usage'
+  '/food-recognition/usage',
+  '/account'
 ])
 
 interface SnapshotEntry {
@@ -176,10 +178,9 @@ interface Snapshot {
   entries: Record<string, SnapshotEntry>
 }
 
-/** 快照按用户分开存：换人读不到上一个人的数据。 */
+/** 快照按用户分开存：换人读不到上一个人的数据。键用用户 id——用户名能改（ADR 0050）。 */
 function storageKey(): string {
-  const user = (uni.getStorageSync('fitapp_username') as string) || 'anon'
-  return `${SNAPSHOT_PREFIX}:${user}`
+  return `${SNAPSHOT_PREFIX}:#${currentUserId() || 'anon'}`
 }
 
 function pathOf(key: string): string {

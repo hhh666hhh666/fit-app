@@ -31,7 +31,17 @@
 
 - 除白名单路径外的 `/api/**` 需要 `Authorization: Bearer <token>`。
 - 白名单与跨域策略见后端 `config/WebConfig.java` 的注释。
+- **令牌带版本号**（[ADR 0050](../adr/0050-account-page-password-rename-and-deletion.md)）：`security/JwtInterceptor.java` 每次请求都查一次当前用户的令牌版本，对不上（改过密码）或用户不在了（注销）一律按 401 处理。老令牌不带版本，按 0 算。
+- **上传大小**：单张图片上限由 `fitapp.storage.photo-max-mb` 一处配置（默认 50MB，[ADR 0051](../adr/0051-photo-limit-50mb-and-avatar.md)），超了返回 400「照片超过 50MB」；比它再大一两 MB 会在容器层被拦，返回 400「文件太大了」。原图读取接口按文件流式返回。
 - ⚠️ **路由层只挡「没登录」，不挡「没有数据权限」**：越权（拿别人的 id 来读写）必须由服务端判定，并在接口层测试里断言它会失败。
+
+## 账号接口
+
+`/api/account`（[ADR 0050](../adr/0050-account-page-password-rename-and-deletion.md)）走登录态 JWT，字段以接口文档运行时为准。有三处要注意：
+
+- **改用户名**（`PUT /api/account/username`）和**注销**（`POST /api/account/delete`）都要带当前密码；注销还要带一遍用户名，对不上就拒绝。
+- **改密码**（`PUT /api/account/password`）返回新的 `LoginVO`：客户端要换上新令牌，旧令牌（包括本机的）随即失效。
+- **注销**立刻删除这个用户在所有表里的数据和 `{photo-dir}/{userId}/` 下的全部文件，不进回收站。要删哪些表由 `AccountService.USER_TABLES` 和 `AccountDeletionMapper` 决定，新建表忘了登记会让 `AccountTablesCoverageTest` 失败。
 
 ## 日记接口
 

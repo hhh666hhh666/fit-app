@@ -51,10 +51,18 @@ public class JwtUtil {
         return random;
     }
 
-    public String generateToken(Long userId) {
+    /** 令牌里的版本号字段名（ADR 0050）。 */
+    private static final String CLAIM_TOKEN_VERSION = "tv";
+
+    /** 解析结果：用户 id ＋ 签发时的令牌版本（老令牌没有版本，按 0）。 */
+    public record TokenClaims(Long userId, int tokenVersion) {
+    }
+
+    public String generateToken(Long userId, Integer tokenVersion) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .claim(CLAIM_TOKEN_VERSION, tokenVersion == null ? 0 : tokenVersion)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expireMillis))
                 .signWith(key)
@@ -68,14 +76,15 @@ public class JwtUtil {
     /**
      * 解析 token，失败返回 null。
      */
-    public Long parseToken(String token) {
+    public TokenClaims parseToken(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return Long.valueOf(claims.getSubject());
+            Number tv = claims.get(CLAIM_TOKEN_VERSION, Number.class);
+            return new TokenClaims(Long.valueOf(claims.getSubject()), tv == null ? 0 : tv.intValue());
         } catch (JwtException | IllegalArgumentException e) {
             log.debug("invalid jwt token: {}", e.getMessage());
             return null;

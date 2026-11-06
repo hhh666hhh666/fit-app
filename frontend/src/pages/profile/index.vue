@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { getWorkoutTotals } from '@/api/workout'
-import { clearAll, resetCaches } from '@/api/cache'
+import { clearAll } from '@/api/cache'
+import { displayName, getAccount, type AccountInfo } from '@/api/account'
 import { getBodyOverview } from '@/api/body'
 import { formatWeight, getWeightUnit } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
@@ -14,16 +15,15 @@ import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import FtListRow from '@/components/FtListRow.vue'
 import FtIcon from '@/components/FtIcon.vue'
-import FtButton from '@/components/FtButton.vue'
 import { useTabPage } from '@/utils/tab-page'
-import { ask } from '@/utils/confirm'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('profile')
 
-// ── 我的：累计 → 入口两组 → 存储占用与识别用量 → 退出登录 ──
+// ── 我的：页头（点进账号页）→ 累计 → 入口两组 → 存储占用与识别用量 ──
+//    退出登录挪进了账号页（ADR 0050）。
 
-const username = ref('训练者')
+const account = ref<AccountInfo | null>(null)
 const totalCount = ref(0)
 const totalVolumeKg = ref(0)
 const exerciseCount = ref(0)
@@ -40,7 +40,7 @@ const schedule = useScheduleStore()
 onShow(() => {
   if (!ensureLogin()) return
   tab.enter()
-  username.value = (uni.getStorageSync('fitapp_username') as string) || '训练者'
+  void loadAccount()
   schedule.load()
   loadStats()
   weightUnit.value = getWeightUnit()
@@ -54,7 +54,7 @@ onShow(() => {
 onPullDownRefresh(async () => {
   clearAll()
   schedule.load()
-  await Promise.all([loadStats(), loadBody(), loadStorage(), loadRecognitionUsage(), loadAgentToken()])
+  await Promise.all([loadAccount(), loadStats(), loadBody(), loadStorage(), loadRecognitionUsage(), loadAgentToken()])
   uni.stopPullDownRefresh()
 })
 
@@ -162,7 +162,24 @@ const totalVolumeText = computed(() =>
   totalVolumeKg.value > 0 ? formatThousands(totalVolumeKg.value) : '—'
 )
 const showVolumeUnit = computed(() => totalVolumeKg.value > 0)
-const avatarChar = computed(() => username.value.charAt(0).toUpperCase() || 'L')
+/** 显示名：有昵称用昵称（ADR 0050）；账号还没取到时先用本机记着的用户名，别闪一下「训练者」。 */
+const name = computed(() =>
+  account.value ? displayName(account.value) : (uni.getStorageSync('fitapp_username') as string) || '训练者'
+)
+/** 没头像时显示首字母，取自显示名（emoji 也算一个字）。 */
+const avatarChar = computed(() => ([...name.value][0] ?? 'L').toUpperCase())
+
+async function loadAccount() {
+  try {
+    account.value = await getAccount()
+  } catch {
+    // 取不到就先用本机记着的用户名
+  }
+}
+
+function goAccount() {
+  uni.navigateTo({ url: '/pages/account/index' })
+}
 const planSummary = computed(() =>
   schedule.plans.length ? `${schedule.plans.length} 个计划` : '还没有计划'
 )
@@ -215,33 +232,19 @@ function goRecognitionLogs() {
 function goAgent() {
   uni.navigateTo({ url: '/pages/agent/index' })
 }
-
-function logout() {
-  void ask({
-    title: '退出登录',
-    content: '将清除本机登录状态；训练数据保存在服务器，不受影响。',
-    confirmText: '退出'
-  }).then((confirm) => {
-    if (!confirm) return
-    uni.removeStorageSync('fitapp_token')
-    uni.removeStorageSync('fitapp_username')
-    // 换人就用：数据缓存与照片缓存一并清掉（ADR 0035），别把上一个人的东西留在内存里
-    resetCaches()
-    uni.reLaunch({ url: '/pages/login/index' })
-  })
-}
 </script>
 
 <template>
   <FtTabPage :page="tab" class="prof">
     <view class="prof__body">
-      <!-- 页头：头像 ＋ 用户名 -->
-      <view class="prof__head">
+      <!-- 页头：头像 ＋ 名字；点进账号页（ADR 0050） -->
+      <view class="prof__head" role="button" @click="goAccount">
         <view class="prof__avatar">{{ avatarChar }}</view>
         <view class="prof__who">
           <text class="prof__eyebrow">我的</text>
-          <text class="prof__name">{{ username }}</text>
+          <text class="prof__name">{{ name }}</text>
         </view>
+        <FtIcon name="chevron-right" :size="20" tone="subtle" class="prof__go" />
       </view>
 
       <!-- 累计 -->
@@ -322,10 +325,6 @@ function logout() {
         </view>
         <text class="storage__hint">让自己的 agent 只读拉取数据做分析；点开管理令牌、看接口文档</text>
       </view>
-
-      <view class="prof__logout">
-        <FtButton variant="ghost" size="sm" @click="logout">退出登录</FtButton>
-      </view>
     </view>
   </FtTabPage>
 </template>
@@ -335,7 +334,8 @@ function logout() {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
-  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
+  /* 底部多让一截：底栏中间圆钮比胶囊高出半个圆钮，免得滚到底时压住最后一张卡 */
+  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 96rpx;
 }
 
 .glass {
@@ -352,6 +352,12 @@ function logout() {
   align-items: center;
   gap: 24rpx;
   padding: 12rpx 8rpx 4rpx;
+  @include press(dim);
+}
+
+.prof__go {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .prof__avatar {
@@ -372,6 +378,7 @@ function logout() {
 }
 
 .prof__who {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -494,12 +501,5 @@ function logout() {
   font-size: $text-sm;
   line-height: 1.6;
   color: $app-ink-muted;
-}
-
-/* 居中的这一行正对底栏中间圆钮：圆钮比胶囊高出 30px（半个圆钮），底部多让 24px，免得滚到底时被它压住 */
-.prof__logout {
-  display: flex;
-  justify-content: center;
-  padding: 8rpx 0 64rpx;
 }
 </style>

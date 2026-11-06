@@ -59,6 +59,8 @@ export interface ExerciseRow {
 export interface UserRow {
   id: number
   username: string
+  /** 昵称（ADR 0050），没设为 null */
+  nickname: string | null
   admin: boolean
   createdAt: string
   workoutCount: number

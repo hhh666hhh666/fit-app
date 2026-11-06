@@ -10,6 +10,8 @@ public class AdminUserVO {
 
     private Long id;
     private String username;
+    /** 昵称（ADR 0050），没设为 null。 */
+    private String nickname;
     private Boolean admin;
     private LocalDateTime createdAt;
     private Long workoutCount;

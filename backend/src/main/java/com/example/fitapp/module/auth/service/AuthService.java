@@ -51,6 +51,6 @@ public class AuthService {
     }
 
     private LoginVO toLoginVO(User user) {
-        return new LoginVO(jwtUtil.generateToken(user.getId()), user.getId(), user.getUsername());
+        return new LoginVO(jwtUtil.generateToken(user.getId(), user.getTokenVersion()), user.getId(), user.getUsername());
     }
 }

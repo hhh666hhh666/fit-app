@@ -11,7 +11,7 @@ import java.util.List;
 public interface AdminUserMapper extends BaseMapper<User> {
 
     @Select("""
-            SELECT u.id, u.username, u.admin, u.created_at,
+            SELECT u.id, u.username, u.nickname, u.admin, u.created_at,
                    (SELECT COUNT(*) FROM workout w WHERE w.user_id = u.id) AS workout_count,
                    (SELECT COUNT(*) FROM meal_log m WHERE m.user_id = u.id) AS meal_count,
                    NULLIF(GREATEST(

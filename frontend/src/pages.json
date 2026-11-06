@@ -98,6 +98,10 @@
     {
       "path": "pages/agent/index",
       "style": { "navigationBarTitleText": "外部 agent" }
+    },
+    {
+      "path": "pages/account/index",
+      "style": { "navigationBarTitleText": "账号" }
     }
   ],
   "tabBar": {

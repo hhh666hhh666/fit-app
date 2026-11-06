@@ -115,6 +115,22 @@ public class PhotoStorage {
         purge(relKey);
     }
 
+    /**
+     * 删掉一个用户的全部图片文件（注销账号，ADR 0050）：餐照、日记图片、头像都在 {@code {root}/{userId}/} 下。
+     * ⚠️ 只在数据库那边已经删干净之后调用；删不掉的文件只记日志，不让注销失败。
+     */
+    public void deleteUserDir(Long userId) {
+        Path dir = root.resolve(String.valueOf(userId)).normalize();
+        if (!dir.startsWith(root) || dir.equals(root) || !Files.isDirectory(dir)) {
+            return;
+        }
+        try (var walk = Files.walk(dir)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(this::deleteQuietly);
+        } catch (IOException e) {
+            log.warn("删除用户图片目录失败（留下孤儿文件，无害）：{}", dir, e);
+        }
+    }
+
     private void purge(String relKey) {
         for (String ext : EXT_CANDIDATES) {
             deleteQuietly(root.resolve(relKey + "." + ext));
