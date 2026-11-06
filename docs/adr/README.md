@@ -73,6 +73,8 @@ Status: accepted
 - [ADR 0047](./0047-trash-snapshot-table.md)：回收站用独立表存 JSON 快照、原表照常物理删除，保留 30 天，恢复按原 id 写回。
 - [ADR 0048](./0048-admin-console-and-preset-archive.md)：管理端——用户表加管理员标记，独立网页放进 web 镜像的 `/admin/`；删除预置就是下架，用过的人仍能看到并可以自己隐藏。
 - [ADR 0049](./0049-preset-data-source-of-truth-is-database.md)：预置数据以数据库为准，迁移脚本不再修改预置行，批量变动走管理端导入。
+- [ADR 0050](./0050-account-page-password-rename-and-deletion.md)：「账号」页——昵称、改用户名、改密码（其他设备下线，靠令牌版本号）、注销即彻底删除；取代 ADR 0003 的「不做改密」。
+- [ADR 0051](./0051-photo-limit-50mb-and-avatar.md)：单张图片上限提到 50MB（边收边写盘、降采样解码，不加堆）；头像保留原图与裁剪结果，历史头像切回时重新裁剪，占照片空间、不进相册。
 
 ## 与其他文档的分工
 

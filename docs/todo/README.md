@@ -52,6 +52,7 @@ YYYY-MM-DD-TODO-<主题>.md
 
 | 文件 | 主题 | 状态 | 优先级 |
 |------|------|------|--------|
+| [2026-11-06-TODO-头像与账户设置.md](./2026-11-06-TODO-头像与账户设置.md) | 头像与账户设置（需求已拍板，见 ADR 0050、0051；待实现） | 待办 | 中 |
 | [2026-11-04-TODO-管理端后续.md](./2026-11-04-TODO-管理端后续.md) | 管理端后续（收藏按用户记、自建升级为预置、识别用量汇总、禁用用户） | 待办 | 低 |
 | [2026-10-31-TODO-安卓壳多选图片.md](./2026-10-31-TODO-安卓壳多选图片.md) | 安卓壳多选图片（App 里餐照暂时只能一张张加） | 待办 | 低 |
 | [2026-10-30-TODO-日记功能.md](./2026-10-30-TODO-日记功能.md) | 日记功能（已实现，待真机验收：快捷按钮的光标定位） | 待办 | 低 |
@@ -106,7 +107,9 @@ YYYY-MM-DD-TODO-<主题>.md
 |------|------|
 | 定位：自用工具、公网部署 | [ADR 0001](../adr/0001-self-use-tool.md) |
 | 客户端形态：Android App＝uni-app＋WebView 壳 | [ADR 0002](../adr/0002-android-app-uni-app-shell.md) |
-| 认证：注册登录（不含改密／找回／风控） | [ADR 0003](../adr/0003-register-login-auth.md) |
+| 认证：注册登录（不含找回／风控）；改密已放开 | [ADR 0003](../adr/0003-register-login-auth.md)（改密部分被 [ADR 0050](../adr/0050-account-page-password-rename-and-deletion.md) 取代） |
+| 账号页：昵称、改用户名、改密（其他设备下线）、注销即彻底删除 | [ADR 0050](../adr/0050-account-page-password-rename-and-deletion.md) |
+| 图片上限 50MB（不加堆）；头像存原图＋裁剪结果，历史头像切回重裁 | [ADR 0051](../adr/0051-photo-limit-50mb-and-avatar.md) |
 | 训练开始：**先选计划**（周安排退为决定谁置顶）；计划名自定义，「休息」唯一固定词 | [ADR 0004](../adr/0004-week-schedule-driven-start.md)（数据结构与休息语义）／[ADR 0016](../adr/0016-start-training-with-plan-picker.md)（**收窄 0004**） |
 | 部署：独立子域 `fit.11-2.cn` ＋ 复用 quizzy 的 MySQL 与发布链路 | [ADR 0005](../adr/0005-deploy-with-quizzy-infra.md) |
 | 会话页组次流程：按目标预填、点勾仅完成、动作自由切换＋全组完成自动切下一个未完成动作（计划目标＝组/次/重量）；**组内按顺序推进**（越级点勾无反应） | [ADR 0007](../adr/0007-session-set-flow-and-target-weight.md)、[ADR 0010](../adr/0010-session-free-switch-and-early-finish.md)、[ADR 0021](../adr/0021-session-set-order-and-undo.md) |
