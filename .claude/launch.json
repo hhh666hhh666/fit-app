@@ -4,7 +4,7 @@
     {
       "name": "backend",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "set -a; . ./.env; set +a; unset SERVER_PORT; cd backend && mvn -q -o spring-boot:run"],
+      "runtimeArgs": ["-c", "set -a; . ./.env; set +a; unset SERVER_PORT; cd backend && export FITAPP_PHOTO_DIR=${FITAPP_PHOTO_DIR:-$PWD/target/dev-uploads} && mvn -q -o spring-boot:run"],
       "port": 8083
     },
     {
