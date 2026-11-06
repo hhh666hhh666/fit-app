@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 容器内的 Maven 镜像源。国内机器上直连官方中央仓常常很慢或超时，这是**环境约束**不是项目偏好；
-     在境外环境里用 --build-arg MAVEN_MIRROR=central 跳过它。 -->
+     在境外环境里传构建参数 MAVEN_MIRROR=central 跳过它。
+     ⚠️ XML 注释里不许出现两个连字符（2026-11-06 本机构建因此报 Non-parseable settings）。 -->
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
   <mirrors>
     <mirror>
