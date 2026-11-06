@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
@@ -19,6 +20,7 @@ import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
 import com.example.fitapp.module.nutrition.storage.PhotoStorage;
+import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 import com.example.fitapp.module.trash.mapper.TrashItemMapper;
 import com.example.fitapp.module.nutrition.vo.DailyNutritionRow;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
@@ -36,12 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.nio.file.Path;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -51,9 +48,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
-import javax.imageio.ImageIO;
 
 /**
  * 饮食记录：当日总览 / 条目增改删 / 每餐照片（上传即替换）/ 饮水加减 / 趋势。
@@ -64,13 +59,9 @@ import javax.imageio.ImageIO;
 public class DietService {
 
     private static final List<String> MEAL_ORDER = List.of("breakfast", "lunch", "dinner", "snack");
-    private static final Set<String> PHOTO_MIME = Set.of("image/jpeg", "image/png", "image/webp");
-    private static final long MAX_PHOTO_BYTES = 10L * 1024 * 1024;
     /** 餐照入库的尝试次数：正常 1 次 ＋ 瞬时故障重试 2 次（退避节奏见 {@link TransientRetry}）。 */
     private static final int PHOTO_WRITE_ATTEMPTS = 3;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
-    /** 缩略图长边上限（px）：相册与列表加载它，点开才拉原图。 */
-    private static final int THUMB_MAX_EDGE = 320;
     private static final long BYTES_PER_GB = 1024L * 1024 * 1024;
     /** 趋势单次查询的窗口上限（天）：防呆用，正常远用不到（约 10 年）。 */
     private static final int MAX_TREND_DAYS = 3660;
@@ -87,6 +78,9 @@ public class DietService {
 
     /** 餐照的文件存储（ADR 0026）：图片实体在磁盘上，库里只留路径。 */
     private final PhotoStorage photoStorage;
+
+    /** 上传图片的大小、类型与缩略图口径（ADR 0051），餐照、日记图片和头像共用。 */
+    private final PhotoUploadPolicy uploadPolicy;
 
     /** 日记图片的占用要和餐照一起算（ADR 0044）；这里只读占用，不依赖日记的业务。 */
     private final DiaryPhotoMapper diaryPhotoMapper;
@@ -230,12 +224,12 @@ public class DietService {
         if (!MEAL_ORDER.contains(meal)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
         }
-        byte[] bytes = readValidPhoto(file);
-        String mime = file.getContentType();
+        String mime = uploadPolicy.validate(file);
+        long size = file.getSize();
         LocalDate date = parseDate(dateStr);
 
         // 缩略图与数据库无关，放在重试之外：它是 CPU 密集活，重试时重算一遍没有意义。
-        byte[] thumb = makeThumb(bytes);
+        byte[] thumb = PhotoUploadPolicy.makeThumb(file);
         // 路径也放在重试之外：幂等靠它——首次写入其实成功、只是响应阶段才断连时，
         // 重试会查到同路径的那一行，不会多出一张。
         String relKey = PhotoStorage.uniqueKey(userId, date, meal);
@@ -253,13 +247,13 @@ public class DietService {
 
             // 容量闸（ADR 0013）：达上限直接拒绝。
             // 它抛的 BusinessException 不属可重试族，会直接穿过 TransientRetry 冒到全局处理器。
-            checkPhotoQuota(userId, bytes.length);
+            checkPhotoQuota(userId, size);
 
             // 落盘放在写库之前：文件写不成就别动数据库。反过来（先写库、文件失败）会留下
             // 「记录指向不存在的图」；而写库失败时重试会往同一路径再写一遍——同路径覆盖，
             // 天然幂等，也不会堆积孤儿。
             try {
-                photoStorage.write(relKey, mime, bytes, thumb);
+                photoStorage.write(relKey, mime, file, thumb);
             } catch (IOException e) {
                 throw new BusinessException(ResultCode.SYSTEM_ERROR, "照片保存失败，请稍后重试");
             }
@@ -269,32 +263,13 @@ public class DietService {
             p.setLogDate(date);
             p.setMeal(meal);
             p.setMime(mime);
-            p.setSizeBytes(bytes.length);
+            p.setSizeBytes((int) size);
             p.setPath(relKey);
             p.setThumbBytes(thumb == null ? null : thumb.length);
             mealPhotoMapper.insert(p);
             id[0] = p.getId();
         });
         return id[0];
-    }
-
-    /** 校验上传的照片（大小、类型）并读出内容；餐照和日记图片共用。 */
-    public static byte[] readValidPhoto(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片为空");
-        }
-        if (file.getSize() > MAX_PHOTO_BYTES) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片超过 10MB");
-        }
-        String mime = file.getContentType();
-        if (mime == null || !PHOTO_MIME.contains(mime)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "只支持 JPEG/PNG/WebP 图片");
-        }
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "照片读取失败");
-        }
     }
 
     /** 容量闸（ADR 0013）：餐照和日记图片共用一个上限（ADR 0044），超限直接拒绝。 */
@@ -337,38 +312,6 @@ public class DietService {
         return mealPhotoMapper.selectAlbum(userId, start, size);
     }
 
-    /**
-     * 生成长边 ≤320 的 JPEG 缩略图。解码失败（异常格式等）返回 null——
-     * 读取端遇到空会回退用原图，所以这里不抛错、不阻断上传。
-     */
-    public static byte[] makeThumb(byte[] src) {
-        try (ByteArrayInputStream in = new ByteArrayInputStream(src)) {
-            BufferedImage img = ImageIO.read(in);
-            if (img == null) {
-                return null;
-            }
-            int w = img.getWidth();
-            int h = img.getHeight();
-            double scale = Math.min(1.0, (double) THUMB_MAX_EDGE / Math.max(w, h));
-            int tw = Math.max(1, (int) Math.round(w * scale));
-            int th = Math.max(1, (int) Math.round(h * scale));
-            // JPEG 无 alpha 通道：先铺白底，免得透明区域变黑
-            BufferedImage out = new BufferedImage(tw, th, BufferedImage.TYPE_INT_RGB);
-            Graphics2D g = out.createGraphics();
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, tw, th);
-            g.drawImage(img, 0, 0, tw, th, null);
-            g.dispose();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ImageIO.write(out, "jpg", bos);
-            return bos.toByteArray();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     /** 上限的展示文案（GB，最多一位小数）。 */
     private String quotaText() {
         return BigDecimal.valueOf(photoQuotaBytes)
@@ -407,26 +350,22 @@ public class DietService {
             if (wantThumb) {
                 byte[] t = photoStorage.readThumb(p.getPath());
                 if (t != null) {
-                    return new PhotoData(t, "image/jpeg");
+                    return PhotoData.of(t, "image/jpeg");
                 }
             }
-            byte[] img = photoStorage.readImage(p.getPath(), p.getMime());
-            return img == null ? null : new PhotoData(img, p.getMime());
+            Path img = photoStorage.imageFile(p.getPath(), p.getMime());
+            return img == null ? null : PhotoData.of(img, p.getMime());
         }
         // 过渡期回退：搬迁尚未完成（例如容器还没挂好卷）时图片仍在库里——
         // 别让读取功能干等着搬迁，能读就先读出来。
         if (wantThumb && hasBytes(p.getThumb())) {
-            return new PhotoData(p.getThumb(), "image/jpeg");
+            return PhotoData.of(p.getThumb(), "image/jpeg");
         }
-        return hasBytes(p.getImage()) ? new PhotoData(p.getImage(), p.getMime()) : null;
+        return hasBytes(p.getImage()) ? PhotoData.of(p.getImage(), p.getMime()) : null;
     }
 
     private static boolean hasBytes(byte[] b) {
         return b != null && b.length > 0;
-    }
-
-    /** 餐照二进制 ＋ 它的 MIME 类型。 */
-    public record PhotoData(byte[] data, String mime) {
     }
 
     // ── 饮水 ──

@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.module.nutrition.entity.MealPhoto;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
 import com.example.fitapp.module.nutrition.storage.PhotoStorage;
@@ -9,6 +10,7 @@ import com.example.fitapp.module.trash.service.TrashStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Path;
 import java.util.Map;
 
 /** 餐照进出回收站（ADR 0047）：文件留在原处，到期或彻底删除才删。 */
@@ -49,17 +51,17 @@ public class MealPhotoTrash implements TrashHandler {
     }
 
     @Override
-    public DietService.PhotoData thumb(TrashItem item) {
+    public PhotoData thumb(TrashItem item) {
         MealPhoto p = store.read(item, MealPhoto.class);
         if (p.getPath() == null) {
             return null;
         }
         byte[] t = photoStorage.readThumb(p.getPath());
         if (t != null) {
-            return new DietService.PhotoData(t, "image/jpeg");
+            return PhotoData.of(t, "image/jpeg");
         }
-        byte[] img = photoStorage.readImage(p.getPath(), p.getMime());
-        return img == null ? null : new DietService.PhotoData(img, p.getMime());
+        Path img = photoStorage.imageFile(p.getPath(), p.getMime());
+        return img == null ? null : PhotoData.of(img, p.getMime());
     }
 
     private static long size(Integer bytes) {

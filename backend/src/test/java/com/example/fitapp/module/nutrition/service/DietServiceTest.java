@@ -30,6 +30,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.core.io.InputStreamSource;
+import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -89,7 +91,7 @@ class DietServiceTest {
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                presetHiddenService, settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
+                presetHiddenService, settingService, energyService, photoStorage, new PhotoUploadPolicy(50), diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
     }
@@ -211,7 +213,7 @@ class DietServiceTest {
         String path = captor.getValue().getPath();
         assertTrue(path.startsWith("7/2026-10-12/lunch-"));
         assertNull(captor.getValue().getImage());
-        verify(photoStorage).write(eq(path), eq("image/jpeg"), any(), any());
+        verify(photoStorage).write(eq(path), eq("image/jpeg"), any(InputStreamSource.class), any());
     }
 
     /** 删除进回收站（ADR 0047）：删行，但文件要留着，恢复时才找得回来。 */
@@ -240,7 +242,7 @@ class DietServiceTest {
     @Test
     void savePhoto_overQuota_throws() {
         DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                presetHiddenService, settingService, energyService, photoStorage, diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
+                presetHiddenService, settingService, energyService, photoStorage, new PhotoUploadPolicy(50), diaryPhotoMapper, trashItemMapper, mealPhotoTrash);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
         when(mealPhotoMapper.selectOne(any())).thenReturn(null);

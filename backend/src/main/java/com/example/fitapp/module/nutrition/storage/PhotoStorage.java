@@ -2,9 +2,13 @@ package com.example.fitapp.module.nutrition.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.InputStreamSource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -68,17 +72,33 @@ public class PhotoStorage {
      * 只写不清会留下一个永远读不到的孤儿文件。
      */
     public void write(String relKey, String mime, byte[] image, byte[] thumb) throws IOException {
+        write(relKey, mime, new ByteArrayResource(image), thumb);
+    }
+
+    /**
+     * 落盘（覆盖写），原图从流里边读边写——单张最多 50MB（ADR 0051），而堆只有 256MB，
+     * 不能整张读进内存。上传的文件先由容器落在临时目录，这里再拷进存储目录。
+     */
+    public void write(String relKey, String mime, InputStreamSource image, byte[] thumb) throws IOException {
         Files.createDirectories(root.resolve(relKey).getParent());
         purge(relKey);
-        Files.write(root.resolve(relKey + "." + extOf(mime)), image);
+        try (InputStream in = image.getInputStream()) {
+            Files.copy(in, root.resolve(relKey + "." + extOf(mime)), StandardCopyOption.REPLACE_EXISTING);
+        }
         if (thumb != null && thumb.length > 0) {
             Files.write(root.resolve(relKey + THUMB_SUFFIX), thumb);
         }
     }
 
-    /** 读原图；文件缺失（或历史遗留）返回 null，由调用方转 404。 */
+    /** 读原图；文件缺失（或历史遗留）返回 null，由调用方转 404。⚠️ 整张进内存，只给小图用。 */
     public byte[] readImage(String relKey, String mime) {
         return readOrNull(root.resolve(relKey + "." + extOf(mime)));
+    }
+
+    /** 原图文件；不存在返回 null。取原图走它流式返回，不经内存（ADR 0051）。 */
+    public Path imageFile(String relKey, String mime) {
+        Path p = root.resolve(relKey + "." + extOf(mime));
+        return Files.isReadable(p) ? p : null;
     }
 
     /** 读缩略图；不存在返回 null——读取端据此回退原图。 */

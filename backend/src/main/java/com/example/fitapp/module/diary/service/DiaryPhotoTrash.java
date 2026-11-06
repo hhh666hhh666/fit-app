@@ -1,5 +1,6 @@
 package com.example.fitapp.module.diary.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.module.diary.entity.DiaryEntry;
 import com.example.fitapp.module.diary.entity.DiaryPhoto;
@@ -14,6 +15,8 @@ import com.example.fitapp.module.trash.service.TrashHandler;
 import com.example.fitapp.module.trash.service.TrashStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.nio.file.Path;
 
 /**
  * 相册单删的日记图片进出回收站（ADR 0047）：文件留在原处；正文没动过，
@@ -53,14 +56,14 @@ public class DiaryPhotoTrash implements TrashHandler {
     }
 
     @Override
-    public DietService.PhotoData thumb(TrashItem item) {
+    public PhotoData thumb(TrashItem item) {
         DiaryPhoto p = store.read(item, DiaryPhoto.class);
         byte[] t = photoStorage.readThumb(p.getPath());
         if (t != null) {
-            return new DietService.PhotoData(t, "image/jpeg");
+            return PhotoData.of(t, "image/jpeg");
         }
-        byte[] img = photoStorage.readImage(p.getPath(), p.getMime());
-        return img == null ? null : new DietService.PhotoData(img, p.getMime());
+        Path img = photoStorage.imageFile(p.getPath(), p.getMime());
+        return img == null ? null : PhotoData.of(img, p.getMime());
     }
 
     /** 图回来之后，把正文里写着它的日记都接上引用。 */

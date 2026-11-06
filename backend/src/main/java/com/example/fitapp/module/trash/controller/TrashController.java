@@ -1,5 +1,6 @@
 package com.example.fitapp.module.trash.controller;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.module.trash.dto.AbandonedSessionDTO;
@@ -10,8 +11,7 @@ import com.example.fitapp.module.trash.vo.TrashRestoreVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -64,15 +64,7 @@ public class TrashController {
 
     /** 列表里的缩略图；直出二进制，没有返回真实的 404。 */
     @GetMapping("/{id}/thumb")
-    public ResponseEntity<byte[]> thumb(@PathVariable Long id) {
-        DietService.PhotoData d = trashService.thumb(UserContext.requireUserId(), id);
-        if (d == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(d.mime()))
-                .contentLength(d.data().length)
-                .cacheControl(CacheControl.noStore())
-                .body(d.data());
+    public ResponseEntity<Resource> thumb(@PathVariable Long id) {
+        return PhotoData.response(trashService.thumb(UserContext.requireUserId(), id));
     }
 }

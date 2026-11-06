@@ -1,5 +1,6 @@
 package com.example.fitapp.module.trash.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
@@ -117,7 +118,7 @@ public class TrashService {
     }
 
     /** 列表里的缩略图；没有或不归属返回 null（由 Controller 转 404）。 */
-    public DietService.PhotoData thumb(Long userId, Long id) {
+    public PhotoData thumb(Long userId, Long id) {
         TrashItem item = mapper.selectOne(Wrappers.<TrashItem>query().eq("id", id).eq("user_id", userId));
         return item == null ? null : handler(item).thumb(item);
     }

@@ -1,5 +1,6 @@
 package com.example.fitapp.module.trash.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.module.trash.entity.TrashItem;
 
@@ -17,7 +18,7 @@ public interface TrashHandler {
     }
 
     /** 列表里的缩略图；没有就返回 null。 */
-    default DietService.PhotoData thumb(TrashItem item) {
+    default PhotoData thumb(TrashItem item) {
         return null;
     }
 }

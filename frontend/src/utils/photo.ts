@@ -30,7 +30,9 @@ const QUALITY_MAP: Record<Exclude<PhotoQuality, 'lossless'>, number> = {
 }
 
 const TOKEN_KEY = 'fitapp_token'
-const MAX_BYTES = 10 * 1024 * 1024
+/** 单张上限，与后端 fitapp.storage.photo-max-mb 一致（ADR 0051）。 */
+export const MAX_PHOTO_MB = 50
+const MAX_BYTES = MAX_PHOTO_MB * 1024 * 1024
 /** 一次最多选几张。 */
 const MAX_PICK = 9
 
@@ -140,7 +142,7 @@ export async function pickAndUploadPhotos(date: string, meal: string, quality: P
       const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
       if (blob.size > MAX_BYTES) {
         uni.hideLoading()
-        uni.showToast({ title: '照片超过 10MB，请换更低的压缩档', icon: 'none' })
+        uni.showToast({ title: `照片超过 ${MAX_PHOTO_MB}MB，请换更低的压缩档`, icon: 'none' })
         return uploaded
       }
       const fd = new FormData()
@@ -231,7 +233,7 @@ export async function pickAndUploadDiaryPhoto(quality: PhotoQuality): Promise<nu
     const original = await (await fetch(picked.path)).blob()
     const blob = quality === 'lossless' ? original : await compress(original, QUALITY_MAP[quality])
     if (blob.size > MAX_BYTES) {
-      uni.showToast({ title: '照片超过 10MB，请换更低的压缩档', icon: 'none' })
+      uni.showToast({ title: `照片超过 ${MAX_PHOTO_MB}MB，请换更低的压缩档`, icon: 'none' })
       return null
     }
     const fd = new FormData()

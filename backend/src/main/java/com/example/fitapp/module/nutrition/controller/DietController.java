@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.controller;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
@@ -14,8 +15,7 @@ import com.example.fitapp.module.nutrition.vo.TrendVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -90,13 +90,13 @@ public class DietController {
 
     /** 直出图片二进制（不走 Result 信封）；前端带 token fetch → blob 展示。 */
     @GetMapping("/photos/{id}")
-    public ResponseEntity<byte[]> photo(@PathVariable Long id) {
+    public ResponseEntity<Resource> photo(@PathVariable Long id) {
         return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, false));
     }
 
     /** 缩略图（相册与列表用；无缩略图的老数据回退原图）。 */
     @GetMapping("/photos/{id}/thumb")
-    public ResponseEntity<byte[]> photoThumb(@PathVariable Long id) {
+    public ResponseEntity<Resource> photoThumb(@PathVariable Long id) {
         return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, true));
     }
 
@@ -107,16 +107,8 @@ public class DietController {
         return Result.success();
     }
 
-    private static ResponseEntity<byte[]> photoResponse(DietService.PhotoData d) {
-        if (d == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(d.mime()))
-                .contentLength(d.data().length)
-                // 客户端自己有 blob 缓存（ADR 0035），这里不再叠一层
-                .cacheControl(CacheControl.noStore())
-                .body(d.data());
+    private static ResponseEntity<Resource> photoResponse(PhotoData d) {
+        return PhotoData.response(d);
     }
 
     /** 存储占用（ADR 0013）：目前只统计图片一类（已用 / 张数 / 上限）。 */

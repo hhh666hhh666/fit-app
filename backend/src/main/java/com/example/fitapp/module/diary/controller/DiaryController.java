@@ -1,5 +1,6 @@
 package com.example.fitapp.module.diary.controller;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.diary.dto.DiaryBatchDeleteDTO;
 import com.example.fitapp.module.diary.dto.DiarySaveDTO;
@@ -14,7 +15,7 @@ import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -87,12 +88,12 @@ public class DiaryController {
 
     /** 直出图片二进制（不走 Result 信封）；图已删返回真实的 404，前端据此显示「图片已删除」。 */
     @GetMapping("/photos/{id}")
-    public ResponseEntity<byte[]> photo(@PathVariable Long id) {
+    public ResponseEntity<Resource> photo(@PathVariable Long id) {
         return photoResponse(photoService.read(UserContext.requireUserId(), id, false));
     }
 
     @GetMapping("/photos/{id}/thumb")
-    public ResponseEntity<byte[]> photoThumb(@PathVariable Long id) {
+    public ResponseEntity<Resource> photoThumb(@PathVariable Long id) {
         return photoResponse(photoService.read(UserContext.requireUserId(), id, true));
     }
 
@@ -116,13 +117,7 @@ public class DiaryController {
         return Result.success(refService.candidates(UserContext.requireUserId(), date));
     }
 
-    private static ResponseEntity<byte[]> photoResponse(DietService.PhotoData d) {
-        if (d == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(d.mime()))
-                .contentLength(d.data().length)
-                .body(d.data());
+    private static ResponseEntity<Resource> photoResponse(PhotoData d) {
+        return PhotoData.response(d);
     }
 }

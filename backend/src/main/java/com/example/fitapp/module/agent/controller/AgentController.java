@@ -1,13 +1,14 @@
 package com.example.fitapp.module.agent.controller;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.module.agent.service.AgentDataService;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.security.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,12 +52,12 @@ public class AgentController {
     }
 
     @GetMapping("/photos/{id}")
-    public ResponseEntity<byte[]> photo(@PathVariable Long id) {
+    public ResponseEntity<Resource> photo(@PathVariable Long id) {
         return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, false));
     }
 
     @GetMapping("/photos/{id}/thumb")
-    public ResponseEntity<byte[]> photoThumb(@PathVariable Long id) {
+    public ResponseEntity<Resource> photoThumb(@PathVariable Long id) {
         return photoResponse(dietService.readPhoto(UserContext.requireUserId(), id, true));
     }
 
@@ -67,14 +68,7 @@ public class AgentController {
         return ResponseEntity.ok().contentType(MARKDOWN).body(text);
     }
 
-    private static ResponseEntity<byte[]> photoResponse(DietService.PhotoData d) {
-        if (d == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(d.mime()))
-                .contentLength(d.data().length)
-                .cacheControl(CacheControl.noStore())
-                .body(d.data());
+    private static ResponseEntity<Resource> photoResponse(PhotoData d) {
+        return PhotoData.response(d);
     }
 }

@@ -12,6 +12,9 @@ server {
     # ssl_certificate     /path/to/fullchain.pem;
     # ssl_certificate_key /path/to/privkey.pem;
 
+    # 单张图片最多 50MB（ADR 0051），这里要比它宽一点；宝塔的全局默认是 50m，刚好会把 50MB 的图拦成 413。
+    client_max_body_size 55m;
+
     location / {
         proxy_pass http://127.0.0.1:8082;
         proxy_set_header Host $host;

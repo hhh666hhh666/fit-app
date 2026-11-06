@@ -17,6 +17,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.core.io.InputStreamSource;
+import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 
 import java.io.IOException;
 import java.util.List;
@@ -60,7 +62,7 @@ class DiaryPhotoServiceTest {
     private PhotoStorage photoStorage;
 
     private DiaryPhotoService service() {
-        return new DiaryPhotoService(photoMapper, refMapper, dietService, photoStorage, photoTrash);
+        return new DiaryPhotoService(photoMapper, refMapper, dietService, photoStorage, photoTrash, new PhotoUploadPolicy(50));
     }
 
     private static MockMultipartFile jpeg() {
@@ -84,7 +86,7 @@ class DiaryPhotoServiceTest {
         ArgumentCaptor<DiaryPhoto> saved = ArgumentCaptor.forClass(DiaryPhoto.class);
         verify(photoMapper).insert(saved.capture());
         assertEquals(true, saved.getValue().getPath().startsWith("7/diary/"));
-        verify(photoStorage).write(eq(saved.getValue().getPath()), eq("image/jpeg"), any(), any());
+        verify(photoStorage).write(eq(saved.getValue().getPath()), eq("image/jpeg"), any(InputStreamSource.class), any());
     }
 
     @Test
@@ -94,7 +96,7 @@ class DiaryPhotoServiceTest {
 
         assertThrows(BusinessException.class, () -> service().upload(7L, jpeg()));
 
-        verify(photoStorage, never()).write(anyString(), anyString(), any(), any());
+        verify(photoStorage, never()).write(anyString(), anyString(), any(InputStreamSource.class), any());
     }
 
     @Test
@@ -112,7 +114,7 @@ class DiaryPhotoServiceTest {
 
         assertNull(service().read(7L, 9L, false));
 
-        verify(photoStorage, never()).readImage(any(), any());
+        verify(photoStorage, never()).imageFile(any(), any());
     }
 
     @Test

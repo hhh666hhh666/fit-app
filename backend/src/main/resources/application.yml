@@ -41,10 +41,7 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     # ⚠️ date-format 管不到 LocalDateTime：那种字段前端要自己 `replace('T',' ').slice(0,16)`。
 
-  servlet:
-    multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+  # multipart 的大小限制不在这里配：由 fitapp.storage.photo-max-mb 推出，见 config/MultipartConfig。
 
 mybatis-plus:
   configuration:
@@ -81,6 +78,9 @@ fitapp:
     secret: ${FITAPP_JWT_SECRET:fitapp-default-jwt-secret-please-replace-in-production-0123456789abcdef}
     expire-days: ${FITAPP_JWT_EXPIRE_DAYS:7}
   storage:
+    # 单张图片上限（MB，餐照、日记图片、头像共用，ADR 0051）。唯一的配置点：multipart 限制由它推出。
+    # ⚠️ 前端 utils/photo.ts 的 MAX_BYTES、frontend/nginx.conf 与宿主反代的 client_max_body_size 要跟着改。
+    photo-max-mb: ${FITAPP_PHOTO_MAX_MB:50}
     # 餐照总占用上限（字节，原图＋缩略图）。达到即拒绝上传（ADR 0013），改这里就能调。
     # 默认 20 GB：按默认压缩档一天满拍 4 张约够 45 年；若长期用「无损」档约三年半触顶。
     photo-quota-bytes: ${FITAPP_PHOTO_QUOTA_BYTES:21474836480}

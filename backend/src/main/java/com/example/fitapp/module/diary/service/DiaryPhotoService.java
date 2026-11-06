@@ -1,5 +1,6 @@
 package com.example.fitapp.module.diary.service;
 
+import com.example.fitapp.common.PhotoData;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
@@ -10,12 +11,14 @@ import com.example.fitapp.module.diary.mapper.DiaryPhotoRefMapper;
 import com.example.fitapp.module.diary.vo.DiaryPhotoVO;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.module.nutrition.storage.PhotoStorage;
+import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -44,23 +47,24 @@ public class DiaryPhotoService {
     private final DietService dietService;
     private final PhotoStorage photoStorage;
     private final DiaryPhotoTrash photoTrash;
+    private final PhotoUploadPolicy uploadPolicy;
 
     /** 上传一张图，返回它的 id。 */
     public Long upload(Long userId, MultipartFile file) {
-        byte[] bytes = DietService.readValidPhoto(file);
-        dietService.checkPhotoQuota(userId, bytes.length);
-        byte[] thumb = DietService.makeThumb(bytes);
-        String mime = file.getContentType();
+        String mime = uploadPolicy.validate(file);
+        long size = file.getSize();
+        dietService.checkPhotoQuota(userId, size);
+        byte[] thumb = PhotoUploadPolicy.makeThumb(file);
         String relKey = userId + "/diary/" + UUID.randomUUID().toString().replace("-", "");
         try {
-            photoStorage.write(relKey, mime, bytes, thumb);
+            photoStorage.write(relKey, mime, file, thumb);
         } catch (IOException e) {
             throw new BusinessException(ResultCode.SYSTEM_ERROR, "照片保存失败，请稍后重试");
         }
         DiaryPhoto p = new DiaryPhoto();
         p.setUserId(userId);
         p.setMime(mime);
-        p.setSizeBytes(bytes.length);
+        p.setSizeBytes((int) size);
         p.setThumbBytes(thumb == null ? null : thumb.length);
         p.setPath(relKey);
         try {
@@ -73,7 +77,7 @@ public class DiaryPhotoService {
     }
 
     /** 读图；图已删或文件丢失返回 null，由 Controller 转 404。没有缩略图时回退原图。 */
-    public DietService.PhotoData read(Long userId, Long id, boolean wantThumb) {
+    public PhotoData read(Long userId, Long id, boolean wantThumb) {
         DiaryPhoto p = photoMapper.selectOne(Wrappers.<DiaryPhoto>lambdaQuery()
                 .eq(DiaryPhoto::getId, id)
                 .eq(DiaryPhoto::getUserId, userId));
@@ -83,11 +87,11 @@ public class DiaryPhotoService {
         if (wantThumb) {
             byte[] t = photoStorage.readThumb(p.getPath());
             if (t != null) {
-                return new DietService.PhotoData(t, "image/jpeg");
+                return PhotoData.of(t, "image/jpeg");
             }
         }
-        byte[] img = photoStorage.readImage(p.getPath(), p.getMime());
-        return img == null ? null : new DietService.PhotoData(img, p.getMime());
+        Path img = photoStorage.imageFile(p.getPath(), p.getMime());
+        return img == null ? null : PhotoData.of(img, p.getMime());
     }
 
     /** 相册「日记」栏：按上传时间倒序。 */

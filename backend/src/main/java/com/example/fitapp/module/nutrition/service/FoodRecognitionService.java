@@ -55,7 +55,7 @@ public class FoodRecognitionService {
     private static final Logger log = LoggerFactory.getLogger(FoodRecognitionService.class);
 
     /**
-     * 单张图片上限（字节）：multipart 全局已限 10MB，这里再收一档——
+     * 单张图片上限（字节）：上传通用上限是 50MB（ADR 0051），识别这里单独收到 5MB——
      * base64 编码体积涨约 33%，别顶着上游限制传。
      */
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;

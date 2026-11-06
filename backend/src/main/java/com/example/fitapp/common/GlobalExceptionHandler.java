@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -69,6 +70,13 @@ public class GlobalExceptionHandler {
     public Result<Void> handleTransientDatabaseFailure(DataAccessException e) {
         log.warn("transient database failure: {}", e.getMessage());
         return Result.fail(ResultCode.SERVICE_UNAVAILABLE);
+    }
+
+    /** 超过 multipart 限制（比图片上限宽一点，见 MultipartConfig）：给句人话，别落成「系统错误」。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUpload(MaxUploadSizeExceededException e) {
+        log.warn("upload too large: {}", e.getMessage());
+        return Result.fail(ResultCode.BAD_REQUEST, "文件太大了");
     }
 
     @ExceptionHandler(Exception.class)
