@@ -1,6 +1,8 @@
 <!--
   列表行（晴窗）：左侧可选图标位、标题 ＋ 副标题、右侧值或箭头。行与行之间是细线，
-  放在玻璃卡（页面的 `.glass`）或 FtSheet 里用。highlight＝浅底胶囊（如「今天的计划」）。
+  放在玻璃卡（页面的 `.glass`）或 FtSheet 里用。
+  highlight＝「推荐 / 今天」这一行：**只靠 badge 槽里的角标说话，不铺底**——
+  灰底胶囊像「已选中 / 正被按住」（2026-11-07 真机走查），这里只给读屏器一个 aria-current。
 -->
 <script setup lang="ts">
 import FtIcon from '@/components/FtIcon.vue'
@@ -13,7 +15,7 @@ defineEmits<{ click: [] }>()
 </script>
 
 <template>
-  <view class="ft-row" :class="{ 'is-highlight': highlight }" @click="$emit('click')">
+  <view class="ft-row" :aria-current="highlight ? 'true' : undefined" @click="$emit('click')">
     <slot name="lead" />
     <view class="ft-row__main">
       <view class="ft-row__title-line">
@@ -41,19 +43,6 @@ defineEmits<{ click: [] }>()
 
 .ft-row:first-child {
   border-top: none;
-}
-
-.is-highlight {
-  margin: 0 -20rpx;
-  padding-left: 20rpx;
-  padding-right: 20rpx;
-  border-radius: $radius-md;
-  border-top-color: transparent;
-  background: $app-surface-2;
-}
-
-.is-highlight + .ft-row {
-  border-top-color: transparent;
 }
 
 .ft-row__main {

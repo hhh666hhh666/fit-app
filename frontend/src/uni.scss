@@ -342,4 +342,10 @@ $tabbar-h: 62px; // 用 px 不用 rpx：凹口路径按 px 算，rpx 会随屏�
 $tabbar-gap: 14px; // 距屏幕底（再加安全区）
 $tabbar-side: 16px; // 左右留白
 $tabbar-btn: 60px; // 中间圆钮直径
-$tabbar-space: calc(100px + env(safe-area-inset-bottom)); // 主 tab 页底部要为底栏让出的高度
+// 主 tab 页底部要为底栏让出的高度：圆钮顶在 gap ＋ 栏高 ＋ 半个圆钮 ≈ 106px 处，再留一截落在底栏渐隐带里，
+// 滚到底时最后一行不被圆钮压住（2026-11-07 真机走查：原 100px 让末行压在圆钮底下）
+$tabbar-space: calc(124px + env(safe-area-inset-bottom));
+// 底栏渐隐带：从圆钮顶再往上 14px 开始由透明渐到底色，把滚到底栏后面、两侧与下方缝隙里的内容盖掉——
+// 悬浮胶囊四周是空的，不垫这一层，正文会从胶囊和屏幕边之间的缝里透出来（同一次走查）
+$tabbar-scrim-h: calc(#{$tabbar-gap} + #{$tabbar-h} + #{$tabbar-btn} / 2 + 14px + env(safe-area-inset-bottom));
+$tabbar-scrim: linear-gradient(180deg, rgba($app-canvas-bottom, 0) 0%, rgba($app-canvas-bottom, 0.94) 42%, $app-canvas-bottom 70%);

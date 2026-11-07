@@ -5,7 +5,7 @@ import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workou
 import { clearAll } from '@/api/cache'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
 import { formatDateLabel, formatThousands, formatTimeLabel } from '@/utils/format'
-import { metricKindOf, metricText } from '@/utils/metric'
+import { metricKindOf, metricLabel, metricText } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
@@ -147,7 +147,8 @@ function minutes(item: WorkoutListItem): number {
 function lineOf(item: WorkoutListItem): string {
   const floors = item.totalFloors ?? 0
   const kind = metricKindOf(item.hasStrength !== false, floors)
-  const val = metricText(kind, Number(item.totalVolume), floors)
+  // 带上指标名：只写「哑铃卧推 · 4,980 kg」会被读成「卧推这一个动作 4,980 kg」，其实是整场的容量
+  const val = kind === 'none' ? '—' : `${metricLabel(kind)} ${metricText(kind, Number(item.totalVolume), floors)}`
   return item.firstExercise ? `${item.firstExercise} · ${val}` : val
 }
 
@@ -264,7 +265,7 @@ function doDelete() {
       <view class="glass overview">
         <view class="overview__cell">
           <text class="overview__label">本月训练</text>
-          <text class="overview__num ft-num">{{ overviewCount }}<text class="overview__unit">练</text></text>
+          <text class="overview__num ft-num">{{ overviewCount }}<text class="overview__unit">次</text></text>
         </view>
         <view class="overview__cell">
           <text class="overview__label">总容量</text>

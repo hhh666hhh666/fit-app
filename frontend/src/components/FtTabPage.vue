@@ -3,6 +3,7 @@
   页面自己只管正文（`.xx__body`，切页时克隆、滑动的就是它）和弹层。
 
   - 底部留白由这里给（padding-bottom），正文末尾不用再放占位块；
+  - 底栏后面垫一层渐隐带（`$tabbar-scrim`）：滚到底栏位置的正文渐隐成底色，不从胶囊四周的缝里透出来；
   - 底栏外层 z-index 20，压住切页克隆层（10）和底栏副本（15），见 App.vue；
   - 横向裁掉切页位移期间的溢出，见下面的注释。
 -->
@@ -41,6 +42,18 @@ defineProps<{ page: TabPage }>()
   /* 高于切页克隆层（10）与底栏副本（15）：转场期间底栏钉住、不被遮 */
   z-index: 20;
   /* 底栏是悬浮胶囊，四周留白处要让点击穿透到下面的内容（胶囊和圆钮自己接点击） */
+  pointer-events: none;
+}
+
+/* 渐隐带：垫在底栏下面（DOM 顺序在前），只挡视线不挡点击 */
+.ft-tab-page__bottom::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: $tabbar-scrim-h;
+  background: $tabbar-scrim;
   pointer-events: none;
 }
 </style>

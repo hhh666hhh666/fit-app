@@ -113,7 +113,7 @@ function barHeight(count: number): string {
           <text class="duo__label">{{ periodLabel }}训练</text>
           <view class="duo__num-row">
             <text class="duo__num ft-num">{{ data?.count ?? 0 }}</text>
-            <text class="duo__unit">练</text>
+            <text class="duo__unit">次</text>
           </view>
         </view>
         <view class="duo__cell">

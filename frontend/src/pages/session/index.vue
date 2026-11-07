@@ -6,7 +6,7 @@ import { useTrainingStore } from '@/stores/training'
 import { createWorkout, getLastRecord } from '@/api/workout'
 import { getStats } from '@/api/stats'
 import { getPlan } from '@/api/plan'
-import { formatClock, muscleLabel } from '@/utils/format'
+import { formatClock, formatLoad, muscleLabel } from '@/utils/format'
 import { metricKindOf, metricUnit, metricValue } from '@/utils/metric'
 import { formatSetTargets, targetModeOf } from '@/utils/plan-target'
 import { ensureLogin } from '@/utils/guard'
@@ -118,7 +118,7 @@ async function loadLastForBlock(i: number) {
       b.last = '暂无记录'
     } else {
       // 层数口径（爬楼）的「上次」是层数，不是重量×次数
-      b.last = rec.floors != null ? `${rec.floors} 层` : `${rec.weight} kg × ${rec.reps}`
+      b.last = rec.floors != null ? `${rec.floors} 层` : formatLoad(rec.weight, rec.reps)
     }
   } catch {
     // 拉取失败保留本地兜底文案
@@ -649,10 +649,10 @@ const volumeValue = computed(() =>
 )
 const volumeUnit = computed(() => metricUnit(metricKind.value))
 
-/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」；还没填的组显示「—」。 */
+/** 组次只读文案：层数口径显示层数，其余显示「重量 × 次数」（0 kg 念「自重」）；还没填的组显示「—」。 */
 function setValueText(x: SessionSet): string {
   if (isFloors.value) return x.f ? `${x.f} 层` : '—'
-  return x.w || x.r ? `${x.w || '–'} kg × ${x.r || '–'}` : '—'
+  return x.w || x.r ? formatLoad(x.w, x.r) : '—'
 }
 
 /** 离开会话页：会话已在变更时落本机，这里再存一次兜底（本页不做离页确认，见 ADR 0020）。
@@ -787,12 +787,15 @@ function comingSoon(tip: string) {
           <view class="switcher__inner">
             <view
               v-for="(b, i) in blocks"
-              :id="'chip-' + i"
               :key="i"
               class="chip"
               :class="{ 'chip--active': i === curIdx }"
               @click="switchTo(i)"
             >
+              <!-- 定位锚：scroll-into-view 会把带 id 的元素左缘贴到滚动区边上，
+                   挂在卡片本身就把左侧那 40rpx 留白吃掉了（首张卡贴屏幕边）；
+                   锚往左伸出一个页边距，滚过去后卡片仍与正文左缘对齐 -->
+              <view :id="'chip-' + i" class="chip__anchor" />
               <text class="chip__name">{{ b.name }}</text>
               <view
                 class="chip__prog ft-num"
@@ -1040,6 +1043,7 @@ function comingSoon(tip: string) {
 
 .chip {
   @include glass;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4rpx;
@@ -1057,8 +1061,19 @@ function comingSoon(tip: string) {
   box-shadow: 0 0 0 1rpx $accent, 0 16rpx 32rpx -20rpx $accent-glow;
 }
 
+.chip__anchor {
+  position: absolute;
+  left: -40rpx;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* 名字只占一行、超长省略：scroll-view 内部容器不继承 nowrap，不写会折出「推」这种孤字 */
 .chip__name {
-  max-width: 240rpx;
+  max-width: 280rpx;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: $text-md;

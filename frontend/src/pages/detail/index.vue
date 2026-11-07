@@ -7,7 +7,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getWorkout, updateWorkout, updateWorkoutNote } from '@/api/workout'
 import type { WorkoutDetail } from '@/api/workout'
-import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
+import { formatClock, formatDateTimeLabel, formatLoad, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { ensureLogin } from '@/utils/guard'
 import FtButton from '@/components/FtButton.vue'
@@ -101,7 +101,7 @@ function setReadText(
   floorsMetric: boolean
 ): string {
   if (floorsMetric) return `${x.floors ?? '—'} 层`
-  return `${x.weight ?? 0} kg × ${x.reps ?? 0}`
+  return formatLoad(x.weight ?? 0, x.reps ?? 0)
 }
 
 async function load(id: number) {

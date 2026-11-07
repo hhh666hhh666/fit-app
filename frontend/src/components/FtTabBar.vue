@@ -310,8 +310,7 @@ watch(
     <view class="ft-tabbar__sheet">
       <Transition name="ft-sheet">
         <FtSheet v-if="picker" title="选择训练计划" :sub="pickerHint" @close="picker = false">
-          <!-- 计划列表放进白卡：今天那行的浅底往两边伸 20rpx，伸进卡片的内边距里；
-               别让它贴着 scroll-view 的边——scroll-view 会把伸出去的部分连同圆角一起裁掉 -->
+          <!-- 计划列表放进白卡；今天那行只靠「今天 · 建议」角标标出来，不铺底（见 FtListRow） -->
           <view v-if="plansOrdered.length" class="ft-tabbar__plans">
             <scroll-view scroll-y class="ft-tabbar__plans-scroll">
               <view class="ft-tabbar__plans-list">

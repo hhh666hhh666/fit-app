@@ -6,12 +6,12 @@ import { clearAll } from '@/api/cache'
 import { displayName, getAccount, type AccountInfo } from '@/api/account'
 import { fetchAvatar } from '@/utils/photo'
 import { getBodyOverview } from '@/api/body'
-import { formatWeight, getWeightUnit } from '@/utils/weight'
+import { formatWeight, getWeightUnit, weightUnitShort } from '@/utils/weight'
 import { listExercises } from '@/api/exercise'
 import { getAgentTokenStatus, type AgentTokenStatus } from '@/api/agent'
 import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
-import { formatDateTimeLabel, formatThousands } from '@/utils/format'
+import { formatBytes, formatDateTimeLabel, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import FtListRow from '@/components/FtListRow.vue'
@@ -119,14 +119,8 @@ const agentTokenText = computed(() => {
   return t.lastUsedAt ? `${formatDateTimeLabel(t.lastUsedAt)} 用过` : '尚未使用'
 })
 
-/** 字节数转人话（B / KB / MB / GB）。 */
-function fmtBytes(n: number | undefined): string {
-  if (n == null) return '—'
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
-}
+/** 字节数转人话：口径统一在 utils/format 的 formatBytes（最多一位小数）。 */
+const fmtBytes = formatBytes
 
 const photoUsedText = computed(() => fmtBytes(storage.value?.photoBytes))
 const photoQuotaText = computed(() => fmtBytes(storage.value?.photoQuotaBytes))
@@ -136,7 +130,7 @@ const storageHint = computed(() => {
   return `${head}；达到上限后将无法再上传新照片`
 })
 const photoCountText = computed(() =>
-  storage.value ? `共 ${storage.value.photoCount} 张` : '—'
+  storage.value ? `共 ${formatThousands(storage.value.photoCount)} 张` : '—'
 )
 /** 已用占比（0~1）；接近上限时进度条转警示色。 */
 const photoRatio = computed(() => {
@@ -154,7 +148,7 @@ const recRequestsText = computed(() =>
   recUsage.value ? `共 ${formatThousands(recUsage.value.totalRequests)} 次` : '—'
 )
 
-const countText = computed(() => String(totalCount.value))
+const countText = computed(() => formatThousands(totalCount.value))
 /**
  * 累计容量文案：**有容量才显示数字**（有氧不计入容量，ADR 0023）——
  * 一次力量都没记过时显示「—」，显示 `0 kg` 看着像故障。
@@ -196,7 +190,7 @@ const weekSummary = computed(() => {
 })
 
 const foodSummary = computed(() =>
-  foodCount.value < 0 ? '—' : `${foodCount.value} 种食物`
+  foodCount.value < 0 ? '—' : `${formatThousands(foodCount.value)} 种食物`
 )
 
 function goBody() {
@@ -278,14 +272,14 @@ function goAgent() {
       <view class="glass entries">
         <FtListRow title="训练计划" :value="planSummary" arrow @click="goPlans" />
         <FtListRow title="训练安排" :value="weekSummary" arrow @click="goWeek" />
-        <FtListRow title="动作库" :value="`${exerciseCount} 项已记录`" arrow @click="goLibrary" />
+        <FtListRow title="动作库" :value="`${formatThousands(exerciseCount)} 项已记录`" arrow @click="goLibrary" />
       </view>
 
       <!-- 身体、饮食与设置 -->
       <view class="glass entries">
         <FtListRow
           title="身体档案"
-          :value="latestWeight == null ? '—' : formatWeight(latestWeight, weightUnit)"
+          :value="latestWeight == null ? '—' : `${formatWeight(latestWeight, weightUnit)} ${weightUnitShort(weightUnit)}`"
           arrow
           @click="goBody"
         />

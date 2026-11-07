@@ -60,7 +60,6 @@ function editDay(idx: number) {
           v-for="row in rows"
           :key="row.idx"
           class="dayrow"
-          :class="{ 'is-today': row.isToday }"
           role="button"
           @click="editDay(row.idx)"
         >
@@ -114,19 +113,7 @@ function editDay(idx: number) {
   border-top: 1rpx solid $app-line-soft;
 }
 
-/* 今天：浅底胶囊（与首页「今天的计划」同一个高亮），上下细线让开 */
-.dayrow.is-today {
-  margin: 0 -16rpx;
-  padding-left: 16rpx;
-  padding-right: 16rpx;
-  border-radius: $radius-md;
-  border-top-color: transparent;
-  background: $app-surface-2;
-}
-
-.dayrow.is-today + .dayrow {
-  border-top-color: transparent;
-}
+/* 今天：只靠「今天」角标标出来，不铺灰底——灰底胶囊像「已选中 / 正被按住」（与选计划弹层同一口径，见 FtListRow） */
 
 .dayrow__dot {
   width: 14rpx;

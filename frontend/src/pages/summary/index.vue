@@ -5,7 +5,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import { computed } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { updateWorkoutNote } from '@/api/workout'
-import { formatClock, formatDateTimeLabel, formatThousands } from '@/utils/format'
+import { formatClock, formatDateTimeLabel, formatLoad, formatThousands } from '@/utils/format'
 import { metricKindOf, metricLabel, metricUnit, metricValue } from '@/utils/metric'
 import { onShow } from '@dcloudio/uni-app'
 import { ensureLogin } from '@/utils/guard'
@@ -56,7 +56,7 @@ function blockMetricText(block: {
 
 /** 单组文案：层数口径（爬楼）念层数，其余念「重量 × 次数」。 */
 function setText(block: { metric?: string | null }, s: { weight: number; reps: number; floors?: number | null }): string {
-  return block.metric === 'floors' ? `${s.floors ?? 0} 层` : `${s.weight} × ${s.reps}`
+  return block.metric === 'floors' ? `${s.floors ?? 0} 层` : formatLoad(s.weight, s.reps, false)
 }
 
 async function close() {

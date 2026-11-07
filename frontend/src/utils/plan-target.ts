@@ -61,7 +61,8 @@ export function formatSetTargets(
     parts.push(`${reps.map((v) => (v == null ? '–' : String(v))).join('/')} 次`)
   }
   if (sameWeight) {
-    if (weights[0] != null) parts.push(`${weights[0]} kg`)
+    // 0 kg ＝ 自重动作（双杠臂屈伸等），念「自重」不念「0 kg」
+    if (weights[0] != null) parts.push(Number(weights[0]) === 0 ? '自重' : `${weights[0]} kg`)
   } else if (weights.some((v) => v != null)) {
     parts.push(`${weights.map((v) => (v == null ? '–' : String(v))).join('/')} kg`)
   }

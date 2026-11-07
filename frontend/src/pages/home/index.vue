@@ -10,7 +10,7 @@ import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
 import {getMonthSummary, getWorkout, listWorkouts} from '@/api/workout'
 import {clearAll} from '@/api/cache'
 import {buildNutrientBars} from '@/utils/diet'
-import {formatDateLabel, formatThousands} from '@/utils/format'
+import {formatDateLabel, formatLoad, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
@@ -143,7 +143,7 @@ async function refreshLastWorkout() {
                       ? `${formatThousands(floors)} 层`
                       : '—'
                   : lastSet
-                      ? `${lastSet.weight} kg × ${lastSet.reps}`
+                      ? formatLoad(lastSet.weight, lastSet.reps)
                       : '—',
           pr: b.sets.some((s) => s.pr)
         }
@@ -285,12 +285,12 @@ function goDiary() {
         <view class="glass strip__item">
           <text class="strip__label">本周</text>
           <text class="strip__num ft-num">{{ weekCount }}</text>
-          <text class="strip__label">练</text>
+          <text class="strip__label">次</text>
         </view>
         <view class="glass strip__item">
           <text class="strip__label">本月</text>
           <text class="strip__num ft-num">{{ monthCount }}</text>
-          <text class="strip__label">练</text>
+          <text class="strip__label">次</text>
         </view>
       </view>
     </view>

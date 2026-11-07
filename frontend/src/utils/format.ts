@@ -3,6 +3,38 @@ export function formatThousands(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+/**
+ * 「重量 × 次数」：重量为 0 视为**自重**（双杠臂屈伸、引体向上……），念「自重 × 12」，
+ * 不念「0 kg × 12」——后者看着像漏填。`withUnit=false` 给汇总页那种不带 kg 的紧凑写法。
+ * 重量缺省（null / 空串）仍按「–」占位：那是真没填，不是自重。
+ */
+export function formatLoad(
+  weight: number | string | null | undefined,
+  reps: number | string | null | undefined,
+  withUnit = true
+): string {
+  const r = reps == null || reps === '' ? '–' : String(reps)
+  if (weight == null || weight === '') return `${withUnit ? '– kg' : '–'} × ${r}`
+  if (Number(weight) === 0) return `自重 × ${r}`
+  return `${weight}${withUnit ? ' kg' : ''} × ${r}`
+}
+
+/**
+ * 字节数转人话（B / KB / MB / GB）：统一最多一位小数、去掉末尾的 .0，
+ * 所以同一行里不会出现「33.3 MB / 20.00 GB」这种位数不齐。
+ */
+export function formatBytes(n: number | null | undefined): string {
+  if (n == null) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = n
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${i === 0 ? v : Number(v.toFixed(1))} ${units[i]}`
+}
+
 /** 秒 → "mm:ss" */
 export function formatClock(totalSec: number): string {
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0')

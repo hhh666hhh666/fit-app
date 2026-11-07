@@ -23,6 +23,7 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
 import { ask } from '@/utils/confirm'
+import { formatThousands } from '@/utils/format'
 
 // ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
@@ -314,7 +315,7 @@ function copyExport() {
             :sub="keyword.trim() ? '换个关键词，或点右上角新增一种。' : '点右上角「新增」，或拍一张包装营养成分表识别。'"
           />
           <view v-else-if="loadingMore" class="flist__more">加载中…</view>
-          <view v-else-if="finished && list.length > 0" class="flist__more ft-num">共 {{ total }} 种食物</view>
+          <view v-else-if="finished && list.length > 0" class="flist__more ft-num">共 {{ formatThousands(total) }} 种食物</view>
         </view>
 
         <text class="note">「预设」＝系统内置只读数据（可复制为自定义）；「已下架」＝停用的预设，只有记录过它的人还看得到，可以删掉；名称带 * 的营养数据来自公开资料补全，供参考</text>
