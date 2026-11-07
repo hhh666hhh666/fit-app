@@ -22,6 +22,9 @@
 
 和流水线同序：`check-version.sh` → 临时 mysql:8 上按 `sort -V` 重放全部迁移 → 本机 `docker buildx build --load` 两个镜像（后端传 `MAVEN_MIRROR=central`；前端加 `--network=host`，否则 `npm ci` 约 85 秒后报「Exit handler never called」）→ `gh auth token | docker login ghcr.io` 后推送（`gh` 需要 `write:packages` 权限）→ scp compose 与 `scripts/` 下那 9 个脚本到 `/srv/fit-app/compose/` 并 `chmod +x` → 服务器上 `server-deploy.sh <版本>` → `restore-verify.sh`。
 
+⚠️ 前端镜像的 `npm ci` 是按 lockfile 里的 `resolved` 地址下包的，`--registry` 改不动它们：`frontend/package-lock.json` 的地址写的是 npmmirror，本机连不上 npmmirror 时，npm 会在约 85 秒后报「Exit handler never called」（`--network=host` 也救不了）。绕法是从 tag 用 `git archive` 导出 `frontend/` 与 `admin/` 到临时目录，把那份 lockfile 里的 `https://registry.npmmirror.com/` 换成 `https://registry.npmjs.org/`，再拿它当构建上下文。包和 integrity 都一样，仓库本身不用改。
+
 ## 更新记录
 
 - 2026-11-06：创建；0.33.0 手工发布成功。
+- 2026-11-07：0.33.1 照手工路径发布成功（Actions 仍秒失败，锁没解）；补上 npmmirror 连不上时的构建绕法。
