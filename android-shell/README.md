@@ -47,6 +47,7 @@ export JAVA_HOME=E:/jdk21
 依赖拉取：`settings.gradle` 里阿里云镜像优先、google/central 兜底；
 仓库的 `gradle.properties` **不写代理**：哪台机器要走本机代理，在那台的
 `~/.gradle/gradle.properties` 里配 `systemProp.http(s).proxyHost/proxyPort`。流量本来就被透明代理接管的机器什么都不用配。
+⚠️ 阿里云镜像**连不上**（握手被重置、不是 404）时 Gradle 不会回落到兜底源，而是直接判依赖解析失败。这种机器在 `~/.gradle/init.d/` 放一个 init 脚本，在 `settingsEvaluated` 里把 url 含 `aliyun` 的源从 `pluginManagement` 与 `dependencyResolutionManagement` 两处摘掉；仓库里的 `settings.gradle` 不用动。
 
 ## 两个版本号，别混
 
