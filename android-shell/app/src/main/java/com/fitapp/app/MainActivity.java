@@ -9,6 +9,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Display;
+import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -90,6 +92,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         preferHighestRefreshRate();
+        tintSystemBars();
         updater = new WebUpdater(this);
         // 必须在任何页面加载之前：切换靠 rename，此时还没人读 filesDir/web
         updater.applyPending();
@@ -164,6 +167,29 @@ public class MainActivity extends Activity {
      * 弹层、切页看着「不够丝滑」就是这个。代价是 App 在前台时屏幕一直跑高刷，多耗一点电。
      * 个别厂商还有自己的白名单，这里要了也不一定给，那就只能在系统设置里手动给本应用开高刷。
      */
+    /**
+     * 状态栏 / 导航栏染成页面底色、图标改深色（0.1.8 起）。
+     *
+     * 主题 {@code Theme.Material.Light.NoActionBar} 默认给深灰状态栏、纯黑导航栏，
+     * 夹在晴窗的浅蓝灰底上下像两块补丁（2026-11-07 真机走查）。
+     * 颜色取 {@code frontend/src/uni.scss} 的 {@code $app-canvas-top} / {@code $app-canvas-bottom}——
+     * 页面渐变的上下两端，改那两个值要回来同步这里。
+     * 浅色导航栏图标（{@code SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR}）要 API 26，正好是 minSdk。
+     */
+    @SuppressWarnings("deprecation")
+    private void tintSystemBars() {
+        Window w = getWindow();
+        w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+        w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        w.setStatusBarColor(0xFFE4ECF5);
+        w.setNavigationBarColor(0xFFF6F9FC);
+        View decor = w.getDecorView();
+        decor.setSystemUiVisibility(decor.getSystemUiVisibility()
+                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+    }
+
     private void preferHighestRefreshRate() {
         try {
             Display display = getWindowManager().getDefaultDisplay();

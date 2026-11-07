@@ -52,7 +52,7 @@ export JAVA_HOME=E:/jdk21
 
 | 版本 | 在哪 | 怎么推 |
 |------|------|--------|
-| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前 8 / `0.1.7` |
+| **apk 版本** | `app/build.gradle` 的 `versionCode` / `versionName` | `versionName` 跟 git tag；`versionCode` 单调 +1（同一 keystore 下覆盖安装才认它）。当前值看该文件 |
 | **H5 产物版本** | 构建脚本自动生成：`package.json` 的 version ＋ 短 commit | 不用手工维护；带 commit 是为了「每次提交都能触发壳的自动更新」 |
 
 改前端**不必**动 apk 版本号——壳会自动下载新产物。只有改了壳本身（Java、清单、资源如图标、依赖）才需要重打 apk 并 +1。
@@ -95,6 +95,11 @@ export JAVA_HOME=E:/jdk21
 `MainActivity.preferHighestRefreshRate()`（0.1.7 起）在启动时，从同分辨率的显示模式里挑刷新率最高的一个，设成窗口的 `preferredDisplayModeId`。
 不设的话，不少机型（MIUI、ColorOS 这类「智能刷新率」）会把没表态的应用锁在 60Hz，WebView 里动效只动合成层也只有 60 帧。
 代价是 App 在前台时屏幕一直跑高刷，多耗一点电。个别厂商另有白名单，要了也不一定给，那就在系统设置里手动给本应用开高刷。
+
+## 系统栏：染成页面底色
+
+`MainActivity.tintSystemBars()`（0.1.8 起）把状态栏、导航栏分别染成页面渐变的上下两端（`frontend/src/uni.scss` 的 `$app-canvas-top` / `$app-canvas-bottom`），图标改深色。
+不染的话主题默认是深灰状态栏 ＋ 纯黑导航栏，夹在浅色页面上下很突兀。**改了那两个颜色 token，要回来同步这里并重打 apk。**
 
 ## 图标
 

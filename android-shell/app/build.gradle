@@ -25,8 +25,9 @@ android {
         // v0.1.5 的内容：返回键先问 H5 关弹层（window.__ftBack），关掉了就不后退。
         // v0.1.6 的内容：window.FitShell.vibrate——会话页完成一组时轻震（加 VIBRATE 权限）。
         // v0.1.7 的内容：向系统要屏幕最高刷新率（120Hz 屏上动效不再被锁 60 帧）。
-        versionCode 8
-        versionName "0.1.7"
+        // v0.1.8 的内容：状态栏 / 导航栏染成页面底色、图标深色（原为深灰 / 纯黑）。
+        versionCode 9
+        versionName "0.1.8"
     }
 
     signingConfigs {
