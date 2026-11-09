@@ -116,6 +116,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | 图片上限 50MB（不加堆）；头像存原图＋裁剪结果，历史头像切回重裁 | [ADR 0051](../adr/0051-photo-limit-50mb-and-avatar.md) |
 | 记一餐 AI 识别：饭菜估算／营养成分表换算 → 不进库的临时条目；条目加钠快照 | [ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md) |
 | 识别明细可点开：多记服务商、思考参数、失败原因与模型原文；照片仍不留 | [ADR 0053](../adr/0053-recognition-log-detail.md) |
+| 识别详情显示价格：只算 DeepSeek，按峰谷估算；小卡与列表仍不显示费用 | [ADR 0054](../adr/0054-recognition-price-deepseek.md) |
 | 训练开始：**先选计划**（周安排退为决定谁置顶）；计划名自定义，「休息」唯一固定词 | [ADR 0004](../adr/0004-week-schedule-driven-start.md)（数据结构与休息语义）／[ADR 0016](../adr/0016-start-training-with-plan-picker.md)（**收窄 0004**） |
 | 部署：独立子域 `fit.11-2.cn` ＋ 复用 quizzy 的 MySQL 与发布链路 | [ADR 0005](../adr/0005-deploy-with-quizzy-infra.md) |
 | 会话页组次流程：按目标预填、点勾仅完成、动作自由切换＋全组完成自动切下一个未完成动作（计划目标＝组/次/重量）；**组内按顺序推进**（越级点勾无反应） | [ADR 0007](../adr/0007-session-set-flow-and-target-weight.md)、[ADR 0010](../adr/0010-session-free-switch-and-early-finish.md)、[ADR 0021](../adr/0021-session-set-order-and-undo.md) |

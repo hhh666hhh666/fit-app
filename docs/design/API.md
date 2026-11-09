@@ -71,7 +71,7 @@
 
 记一餐的 AI 识别（[ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md)）：`POST /api/food-recognition/meal` 照片进、临时食物草稿出，不落库，营养是每 100、`grams` 是这一份的量；`POST /api/diet/meals/custom` 记一条临时条目（营养按每 100 传，钠可空），条目的 `foodId` 为空。条目返回都多带 `sodium`，老条目为 `null`。
 
-识别明细（[ADR 0053](../adr/0053-recognition-log-detail.md)）：`GET /api/food-recognition/logs` 分页列表不带 `rawOutput`、`requestJson`、`responseJson`；`GET /api/food-recognition/logs/{id}` 给一条的全部字段，不是自己的返回 404。
+识别明细（[ADR 0053](../adr/0053-recognition-log-detail.md)）：`GET /api/food-recognition/logs` 分页列表不带 `rawOutput`、`requestJson`、`responseJson`；`GET /api/food-recognition/logs/{id}` 给一条的全部字段，外加 `price`（价格估算，只算 DeepSeek，按北京时间峰谷，[ADR 0054](../adr/0054-recognition-price-deepseek.md)），不是自己的返回 404。
 
 ## 管理端接口
 
