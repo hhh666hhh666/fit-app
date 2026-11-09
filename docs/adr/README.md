@@ -75,6 +75,8 @@ Status: accepted
 - [ADR 0049](./0049-preset-data-source-of-truth-is-database.md)：预置数据以数据库为准，迁移脚本不再修改预置行，批量变动走管理端导入。
 - [ADR 0050](./0050-account-page-password-rename-and-deletion.md)：「账号」页——昵称、改用户名、改密码（其他设备下线，靠令牌版本号）、注销即彻底删除；取代 ADR 0003 的「不做改密」。
 - [ADR 0051](./0051-photo-limit-50mb-and-avatar.md)：单张图片上限提到 50MB（边收边写盘、降采样解码，不加堆）；头像保留原图与裁剪结果，历史头像切回时重新裁剪，占照片空间、不进相册。
+- [ADR 0052](./0052-meal-ai-recognition-temporary-entry.md)：记一餐时 AI 识别——饭菜照片估算或营养成分表换算，记成不进食物库的临时条目；条目加钠快照；放开 ADR 0008 剩下的「AI 从饭菜照片估算营养」。
+- [ADR 0053](./0053-recognition-log-detail.md)：识别明细可点开看详情——每次识别多记入口、服务商、思考参数、图片大小、结束原因、请求 ID、失败原因和模型原文；照片仍不留。
 
 ## 与其他文档的分工
 
