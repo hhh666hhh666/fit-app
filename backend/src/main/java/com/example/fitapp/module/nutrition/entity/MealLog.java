@@ -43,5 +43,8 @@ public class MealLog {
 
     private BigDecimal fatPer100;
 
+    /** 钠快照（每100，mg）；老条目为空（ADR 0052）。 */
+    private BigDecimal sodiumPer100;
+
     private LocalDateTime createdAt;
 }

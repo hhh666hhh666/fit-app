@@ -3,6 +3,7 @@ package com.example.fitapp.module.nutrition.controller;
 import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
+import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
@@ -48,6 +49,12 @@ public class DietController {
     @PostMapping("/meals")
     public Result<MealItemVO> addMeal(@Valid @RequestBody MealLogDTO body) {
         return Result.success(dietService.addMeal(UserContext.requireUserId(), body));
+    }
+
+    /** 记一条临时条目（ADR 0052）：AI 识别后核对过的「临时食物」，不进食物库，只落这一条。 */
+    @PostMapping("/meals/custom")
+    public Result<MealItemVO> addCustomMeal(@Valid @RequestBody MealCustomDTO body) {
+        return Result.success(dietService.addCustomMeal(UserContext.requireUserId(), body));
     }
 
     /** 批量加条目（食物组合「整份加入」用）：一次事务落多条，返回新增的条目。 */

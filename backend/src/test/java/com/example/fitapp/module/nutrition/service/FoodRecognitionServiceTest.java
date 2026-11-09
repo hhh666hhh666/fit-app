@@ -10,6 +10,7 @@ import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodRecognitionMapper;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
+import com.example.fitapp.module.nutrition.vo.MealDraftVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validation;
@@ -35,7 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -93,6 +96,88 @@ class FoodRecognitionServiceTest {
         doReturn(new FoodRecognitionService.DashScopeResponse(content, in, out, cached))
                 .when(s).callVision(any());
         return s;
+    }
+
+    /** 餐次识别用的 spy：stub 两参的 callVision（餐次识别带自己的 prompt）。 */
+    private FoodRecognitionService spyMealService(String content) {
+        FoodRecognitionService s = spy(service(props()));
+        doReturn(new FoodRecognitionService.DashScopeResponse(content, 2000, 200, 0))
+                .when(s).callVision(any(), eq(FoodRecognitionService.MEAL_PROMPT));
+        return s;
+    }
+
+    @Test
+    void recognizeMeal_photo_convertsPortionTotalsToPer100() {
+        // 一整份 400g、600 大卡、钠拿不准 → 每 100：150 大卡、蛋白 5、钠 300
+        FoodRecognitionService s = spyMealService("""
+                {"kind":"photo","name":"番茄炒蛋盖饭","unit":"g","kj":null,"kcal":600,"serving_grams":400,
+                 "nutrients":{"protein":20,"fat":24,"carb":80,"sodium":1200},"uncertain":["sodium","serving_grams"]}
+                """);
+
+        MealDraftVO vo = s.recognizeMeal(7L, mock(MultipartFile.class));
+
+        assertEquals("photo", vo.getKind());
+        assertEquals("番茄炒蛋盖饭", vo.getName());
+        assertEquals(0, new BigDecimal("400").compareTo(vo.getGrams()));
+        assertEquals(0, new BigDecimal("150").compareTo(vo.getKcal()));
+        assertEquals(0, new BigDecimal("5").compareTo(vo.getProtein()));
+        assertEquals(0, new BigDecimal("300").compareTo(vo.getSodium()));
+        assertEquals(List.of("sodium", "grams"), vo.getUncertain());
+        assertTrue(vo.getMissing().isEmpty());
+        verify(recognitionMapper).insert(any(FoodRecognition.class));
+    }
+
+    @Test
+    void recognizeMeal_photoWithoutWeight_fallsBackTo100AndFlagsGrams() {
+        FoodRecognitionService s = spyMealService("""
+                {"kind":"photo","name":"一碗汤","unit":"ml","kcal":80,"serving_grams":null,
+                 "nutrients":{"protein":2,"fat":3,"carb":null,"sodium":null},"uncertain":[]}
+                """);
+
+        MealDraftVO vo = s.recognizeMeal(7L, mock(MultipartFile.class));
+
+        assertEquals("ml", vo.getUnit());
+        assertEquals(0, new BigDecimal("100").compareTo(vo.getGrams()));
+        assertEquals(0, new BigDecimal("80").compareTo(vo.getKcal()));
+        assertTrue(vo.getUncertain().contains("grams"));
+        // 估不出来的留空，交给用户补
+        assertNull(vo.getCarb());
+        assertEquals(List.of("carb", "sodium"), vo.getMissing());
+    }
+
+    @Test
+    void recognizeMeal_labelPer100_hasNoPortion() {
+        FoodRecognitionService s = spyMealService("""
+                {"kind":"label","name":"全麦面包","unit":"g","kj":1050,"serving_grams":null,
+                 "nutrients":{"protein":8.2,"fat":3.1,"carb":45.6,"sodium":210},"uncertain":["kj"]}
+                """);
+
+        MealDraftVO vo = s.recognizeMeal(7L, mock(MultipartFile.class));
+
+        assertEquals("label", vo.getKind());
+        assertNull(vo.getGrams());
+        assertEquals(0, new BigDecimal("250.96").compareTo(vo.getKcal()));
+        assertEquals(List.of("kcal"), vo.getUncertain());
+    }
+
+    @Test
+    void recognizeMeal_notFood_throwsMealWordingAndStillLogs() {
+        FoodRecognitionService s = spyMealService("{\"error\":\"not_food\"}");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> s.recognizeMeal(7L, mock(MultipartFile.class)));
+
+        assertTrue(ex.getMessage().contains("没认出食物"), ex.getMessage());
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertEquals(2000, captor.getValue().getTokensIn());
+        assertFalse(captor.getValue().getSuccess());
+    }
+
+    @Test
+    void mealRequestBody_carriesMealPrompt() {
+        Map<String, Object> body = service(props()).buildRequestBody("data:x", FoodRecognitionService.MEAL_PROMPT);
+        assertTrue(body.toString().contains("饮食记录助手"));
     }
 
     @Test
@@ -211,6 +296,92 @@ class FoodRecognitionServiceTest {
     }
 
     @Test
+    void recognize_success_recordsFullTrace() {
+        FoodRecognitionService s = spy(service(props()));
+        doReturn(new FoodRecognitionService.DashScopeResponse(LABEL_JSON, 2400, 300, 100, 120, "stop", "req-1",
+                "{\"req\":1}", "{\"resp\":1}"))
+                .when(s).callVision(any());
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.getSize()).thenReturn(123_456L);
+        when(file.getContentType()).thenReturn("image/jpeg");
+
+        s.recognize(7L, file);
+
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        FoodRecognition row = captor.getValue();
+        assertEquals("label", row.getKind());
+        assertEquals("https://dashscope.aliyuncs.com/compatible-mode/v1", row.getEndpoint());
+        assertEquals("disabled", row.getThinkingMode());
+        assertNull(row.getReasoningEffort());
+        assertEquals(120, row.getReasoningTokens());
+        assertEquals(123_456, row.getImageBytes());
+        assertEquals("image/jpeg", row.getImageMime());
+        assertEquals("stop", row.getFinishReason());
+        assertEquals("req-1", row.getUpstreamId());
+        assertEquals("全麦面包", row.getResultName());
+        assertNull(row.getErrorMessage());
+        assertEquals(LABEL_JSON, row.getRawOutput());
+        assertEquals("{\"req\":1}", row.getRequestJson());
+        assertEquals("{\"resp\":1}", row.getResponseJson());
+    }
+
+    @Test
+    void recognize_upstreamError_keepsBodyForDetail() {
+        FoodRecognitionService s = spy(service(props()));
+        doThrow(new FoodRecognitionService.UpstreamFailure("识别服务暂时不可用，请稍后重试或手动录入",
+                "{\"model\":\"m\"}", "HTTP 401\n{\"error\":\"invalid api key\"}"))
+                .when(s).callVision(any());
+
+        assertThrows(BusinessException.class, () -> s.recognize(7L, mock(MultipartFile.class)));
+
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        FoodRecognition row = captor.getValue();
+        assertFalse(row.getSuccess());
+        assertEquals("识别服务暂时不可用，请稍后重试或手动录入", row.getErrorMessage());
+        assertTrue(row.getResponseJson().contains("invalid api key"));
+        assertEquals("{\"model\":\"m\"}", row.getRequestJson());
+        assertNull(row.getRawOutput(), "服务商报错时没有模型回答");
+        assertNull(row.getResultName());
+    }
+
+    @Test
+    void recognizeMeal_parseFailure_keepsModelOutputAndReason() {
+        FoodRecognitionService s = spyMealService("{\"error\":\"not_food\"}");
+
+        assertThrows(BusinessException.class, () -> s.recognizeMeal(7L, mock(MultipartFile.class)));
+
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        FoodRecognition row = captor.getValue();
+        assertEquals("meal", row.getKind());
+        assertTrue(row.getErrorMessage().contains("没认出食物"));
+        assertEquals("{\"error\":\"not_food\"}", row.getRawOutput());
+    }
+
+    @Test
+    void logDetail_othersRecord_notFound() {
+        FoodRecognition other = new FoodRecognition();
+        other.setId(5L);
+        other.setUserId(8L);
+        when(recognitionMapper.selectById(5L)).thenReturn(other);
+
+        assertThrows(BusinessException.class, () -> service(props()).logDetail(7L, 5L));
+    }
+
+    @Test
+    void logDetail_own_returnsRow() {
+        FoodRecognition mine = new FoodRecognition();
+        mine.setId(5L);
+        mine.setUserId(7L);
+        mine.setRawOutput("{}");
+        when(recognitionMapper.selectById(5L)).thenReturn(mine);
+
+        assertEquals("{}", service(props()).logDetail(7L, 5L).getRawOutput());
+    }
+
+    @Test
     void logs_pagedNewestFirst() {
         List<FoodRecognition> rows = service(props()).logs(7L, null, null);
 
@@ -226,6 +397,18 @@ class FoodRecognitionServiceTest {
     // ── 思维链开关（请求长相）：转录场景默认显式关，禁深思 ──
 
     private static final String DATA_URI = "data:image/jpeg;base64,eHg=";
+
+    @Test
+    void requestBody_reasoningEffort_onlySentWhenConfigured() {
+        assertFalse(service(props()).buildRequestBody(DATA_URI).containsKey("reasoning_effort"),
+                "没配等级就不传——智谱、通义不认这个参数");
+        RecognitionProperties p = props();
+        p.setThinkingMode("enabled");
+        p.setReasoningEffort(" high ");
+        Map<String, Object> body = service(p).buildRequestBody(DATA_URI);
+        assertEquals("high", body.get("reasoning_effort"));
+        assertEquals(Map.of("type", "enabled"), body.get("thinking"));
+    }
 
     @Test
     void requestBody_thinkingDisabledByDefault() {

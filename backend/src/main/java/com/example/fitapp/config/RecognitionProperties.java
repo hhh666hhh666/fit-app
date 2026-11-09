@@ -31,4 +31,11 @@ public class RecognitionProperties {
      * 还可能诱发 GLM-4.6V 已知的 overthinking（复杂 prompt 下过度推理、重复输出）。
      */
     private String thinkingMode = "disabled";
+
+    /**
+     * 思考等级，原样作为 {@code reasoning_effort} 传给服务商（DeepSeek 认 none / low / high / max）；
+     * 空＝不传（默认——智谱、通义不认这个参数）。只在开着思考时才有意义：DeepSeek 的 thinking 与它同时给时以 thinking 为准，
+     * 所以要用等级就把 thinking-mode 配成 enabled 或 auto。
+     */
+    private String reasoningEffort = "";
 }

@@ -11,9 +11,11 @@ import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodRecognitionMapper;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
+import com.example.fitapp.module.nutrition.vo.MealDraftVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import jakarta.validation.groups.Default;
@@ -29,6 +31,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,6 +91,41 @@ public class FoodRecognitionService {
             {"name":"","unit":"g","kj":null,"kcal":null,"serving_grams":null,"nutrients":{"protein":null,"fat":null,"carb":null,"sodium":null,"saturatedFat":null,"sugar":null,"transFat":null,"monoFat":null,"polyFat":null,"cholesterol":null,"fiber":null,"solubleFiber":null,"insolubleFiber":null,"starch":null,"lactose":null,"va":null,"vd":null,"ve":null,"vb1":null,"vb2":null,"vb6":null,"vb12":null,"vc":null,"niacin":null,"folate":null,"pantothenic":null,"biotin":null,"calcium":null,"phosphorus":null,"potassium":null,"magnesium":null,"iron":null,"zinc":null,"iodine":null,"selenium":null,"copper":null,"manganese":null,"fluoride":null,"chromium":null,"molybdenum":null,"water":null,"ash":null,"alcohol":null,"organicAcid":null},"nrv":{},"uncertain":[]}
             """;
 
+    /**
+     * 餐次 AI 识别的 prompt（ADR 0052）：一张照片，可能是饭菜也可能是营养成分表。
+     * 饭菜＝估算整份重量与整份营养（本服务再按重量换算成每 100）；营养成分表＝沿用「只照抄」口径。
+     * 只要 4+1，不要其余几十项——临时条目只记这几项。
+     */
+    static final String MEAL_PROMPT = """
+            你是饮食记录助手。用户发来一张照片，它可能是：
+            A. 一份饭菜／食物／饮品的照片；
+            B. 食品包装上的「营养成分表」。
+            先判断是哪一种，填 kind："photo"（A）或 "label"（B）。
+
+            A（photo）的规则：
+            1. name 写简短的中文名称（如「番茄炒蛋盖饭」），不带品牌和形容词。
+            2. 估算照片里这一整份的量填 serving_grams（克；饮品按毫升估，unit 填 "ml"，其余 unit 填 "g"）。必须给出估算值。
+            3. 按这一整份估算 kcal（大卡）以及 nutrients 里的 protein、fat、carb（克）和 sodium（毫克）。按中国常见做法和用料给最合理的数。
+            4. 实在判断不了的项给 null，不要瞎编；拿不准的字段名加进 uncertain（如 ["serving_grams","sodium"]）。
+            5. kj 给 null。
+
+            B（label）的规则：
+            1. 只转录照片里实际印出的内容，不做计算、不做估算。没印的字段一律 null。
+            2. 「营养素参考值%」（NRV%）是比例不是数值，一律不填。
+            3. 表格按「每份」印时：serving_grams 填一份的克数，nutrients 填每份的数值；按「每100g/100ml」印时：serving_grams 给 null，nutrients 填每100的数值。都不要换算。
+            4. 能量：印 kJ 填 kj，印大卡/kcal 填 kcal，都印就都填。不要自己换算。
+            5. name 取包装上的食品名称；unit：饮品或按毫升计量的填 "ml"，其余填 "g"。
+            6. 看不清的字段名加进 uncertain，数值仍给最佳辨认结果。
+
+            照片里既不是食物也没有营养成分表时，只输出 {"error":"not_food"}。
+
+            只输出 JSON，不要任何解释文字。格式：
+            {"kind":"photo","name":"","unit":"g","kj":null,"kcal":null,"serving_grams":null,"nutrients":{"protein":null,"fat":null,"carb":null,"sodium":null},"uncertain":[]}
+            """;
+
+    /** 餐次识别：照片判断不了整份重量时的兜底（按 100 当这一份，标「待核对」让用户改）。 */
+    private static final BigDecimal FALLBACK_PORTION = new BigDecimal("100");
+
     private final FoodRecognitionMapper recognitionMapper;
     private final FoodMapper foodMapper;
     private final ObjectMapper objectMapper;
@@ -95,35 +133,62 @@ public class FoodRecognitionService {
     private final RecognitionProperties props;
     private final RestClient restClient;
 
-    /** DashScope 调用的结果：文本内容 ＋ usage（失败时 tokens 为 0，success=0 记账）。 */
-    record DashScopeResponse(String content, int promptTokens, int completionTokens, int cachedTokens) {
+    /**
+     * 调用的结果：文本内容 ＋ usage ＋ 详情页要看的几项（思考 token、结束原因、上游请求 ID、
+     * 发出去的请求体与收到的完整响应）。短构造给单测用——那几项服务商不一定给，缺了就是 null。
+     */
+    record DashScopeResponse(String content, int promptTokens, int completionTokens, int cachedTokens,
+                             Integer reasoningTokens, String finishReason, String upstreamId,
+                             String requestJson, String responseJson) {
+        DashScopeResponse(String content, int promptTokens, int completionTokens, int cachedTokens) {
+            this(content, promptTokens, completionTokens, cachedTokens, null, null, null);
+        }
+
+        DashScopeResponse(String content, int promptTokens, int completionTokens, int cachedTokens,
+                          Integer reasoningTokens, String finishReason, String upstreamId) {
+            this(content, promptTokens, completionTokens, cachedTokens, reasoningTokens, finishReason, upstreamId,
+                    null, null);
+        }
+    }
+
+    /** 服务商返回了错误：给用户的那句话照旧，请求体与报错正文留给识别明细（ADR 0053）。 */
+    static final class UpstreamFailure extends BusinessException {
+        private final String requestJson;
+        private final String body;
+
+        UpstreamFailure(String message, String requestJson, String body) {
+            super(ResultCode.BUSINESS_ERROR, message);
+            this.requestJson = requestJson;
+            this.body = body;
+        }
+    }
+
+    /** 一次识别调用里要落进流水的东西，边走边填（ADR 0053）。 */
+    private static final class Trace {
+        String kind;
+        DashScopeResponse resp;
+        String rawOutput;
+        String requestJson;
+        String responseJson;
+        String resultName;
+        String errorMessage;
+        Integer imageBytes;
+        String imageMime;
+        boolean success;
     }
 
     /**
      * 识别一张照片 → 草稿（不落库）。无论成败都记一条用量流水。
      */
     public FoodDraftVO recognize(Long userId, MultipartFile file) {
-        if (!StringUtils.hasText(props.getApiKey())) {
-            // 没配 Key：明确降级（不记账——根本没花 token）
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别服务未配置（缺少 API Key），请手动录入");
-        }
-        long t0 = System.currentTimeMillis();
-        int in = 0, out = 0, cached = 0;
-        boolean ok = false;
-        try {
-            DashScopeResponse resp = callVision(file);
-            in = resp.promptTokens();
-            out = resp.completionTokens();
-            cached = resp.cachedTokens();
-
-            LabelDraftParser.Draft draft = LabelDraftParser.parse(resp.content());
+        return run(userId, file, "label", PROMPT, "识别失败，请重试或手动录入", (content, trace) -> {
+            LabelDraftParser.Draft draft = LabelDraftParser.parse(content);
             // 名字或 4+1 某项没认出时照常出草稿（用户回确认页补）——校验只拦「有值但不合法」，
             // 空值放过；保存时前端与 POST /api/foods 还有双重非空闸。
             validate(draft.dto());
 
             // 撞名预检：只看自有（与导入/新建同口径——允许与预置同名）
             Food dup = findDuplicateOwn(userId, draft.dto().getName());
-            ok = true;
 
             FoodDraftVO vo = new FoodDraftVO();
             vo.setDraft(draft.dto());
@@ -133,16 +198,138 @@ public class FoodRecognitionService {
                 vo.setDuplicateFoodId(dup.getId());
                 vo.setDuplicateFoodName(dup.getName());
             }
+            trace.resultName = draft.dto().getName();
             return vo;
+        });
+    }
+
+    /**
+     * 餐次 AI 识别（ADR 0052）：饭菜照片估算 / 营养成分表换算 → 临时食物草稿（不落库）。
+     * 与入库识别共用模型、配置与用量流水；无论成败都记一条。
+     */
+    public MealDraftVO recognizeMeal(Long userId, MultipartFile file) {
+        return run(userId, file, "meal", MEAL_PROMPT, "识别失败，请重试或手动记录", (content, trace) -> {
+            MealDraftVO vo = toMealDraft(content);
+            trace.resultName = vo.getName();
+            return vo;
+        });
+    }
+
+    /** 把模型输出变成草稿；可以顺手往 trace 里填识别出的名称。 */
+    @FunctionalInterface
+    private interface DraftMaker<T> {
+        T make(String content, Trace trace);
+    }
+
+    /**
+     * 两个识别入口共用的骨架：没 Key 先降级（不记账）→ 调模型 → 解析 → 无论成败都记一条流水。
+     * 业务性失败（没标签、脏数据、服务不可用）原样抛给前端，其余异常换成一句通用提示。
+     */
+    private <T> T run(Long userId, MultipartFile file, String kind, String prompt, String genericError,
+                      DraftMaker<T> maker) {
+        if (!StringUtils.hasText(props.getApiKey())) {
+            // 没配 Key：明确降级（不记账——根本没花 token）
+            throw new BusinessException(ResultCode.BUSINESS_ERROR,
+                    "识别服务未配置（缺少 API Key），请" + ("meal".equals(kind) ? "手动记录" : "手动录入"));
+        }
+        long t0 = System.currentTimeMillis();
+        Trace trace = new Trace();
+        trace.kind = kind;
+        trace.imageBytes = file.getSize() > 0 ? (int) Math.min(file.getSize(), Integer.MAX_VALUE) : null;
+        trace.imageMime = file.getContentType();
+        try {
+            DashScopeResponse resp = "label".equals(kind) ? callVision(file) : callVision(file, prompt);
+            trace.resp = resp;
+            trace.rawOutput = resp.content();
+            trace.requestJson = resp.requestJson();
+            trace.responseJson = resp.responseJson();
+            T vo = maker.make(resp.content(), trace);
+            trace.success = true;
+            return vo;
+        } catch (UpstreamFailure e) {
+            trace.errorMessage = e.getMessage();
+            trace.requestJson = e.requestJson;
+            trace.responseJson = e.body;
+            throw e;
         } catch (BusinessException e) {
-            throw e; // 业务性失败（没标签/脏数据/服务不可用）——原样抛给前端
+            trace.errorMessage = e.getMessage();
+            throw e;
         } catch (Exception e) {
-            log.warn("识别失败：{}", e.toString());
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别失败，请重试或手动录入");
+            log.warn("识别失败（{}）：{}", kind, e.toString());
+            trace.errorMessage = genericError + "（" + e.getClass().getSimpleName() + "）";
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, genericError);
         } finally {
-            logUsage(userId, in, out, cached, (int) (System.currentTimeMillis() - t0), ok);
+            logUsage(userId, trace, (int) (System.currentTimeMillis() - t0));
         }
     }
+
+    /**
+     * 模型输出 → 临时食物草稿。换算复用 {@link LabelDraftParser}（kJ→kcal、每份→每100 同一口径）：
+     * 饭菜照片的「整份数值 ＋ 整份重量」正好就是「每份数值 ＋ serving_grams」。
+     */
+    MealDraftVO toMealDraft(String content) {
+        JsonNode root = LabelDraftParser.readTree(content);
+        boolean photo = !"label".equals(root.path("kind").asText(""));
+        JsonNode serving = root.path("serving_grams");
+        boolean hasServing = serving.isNumber() && serving.decimalValue().signum() > 0;
+
+        List<String> extraUncertain = new ArrayList<>();
+        String normalized = content;
+        if (photo && !hasServing && root.isObject() && !root.path("error").isTextual()) {
+            // 照片的数是「整份」的，没有整份重量就没法换算：按 100 当这一份，标「待核对」让用户改
+            ((ObjectNode) root).put("serving_grams", FALLBACK_PORTION);
+            normalized = root.toString();
+            extraUncertain.add("grams");
+        }
+
+        LabelDraftParser.Draft draft = LabelDraftParser.parse(normalized,
+                "照片里没认出食物或营养成分表，请手动记录",
+                "照片里没能估算出营养，请手动记录");
+        validate(draft.dto());
+
+        FoodSaveDTO d = draft.dto();
+        MealDraftVO vo = new MealDraftVO();
+        vo.setKind(photo ? "photo" : "label");
+        vo.setName(d.getName() == null ? "" : d.getName());
+        vo.setUnit(d.getUnit());
+        if (photo) {
+            vo.setGrams(hasServing ? serving.decimalValue() : FALLBACK_PORTION);
+        } else if (hasServing) {
+            vo.setGrams(serving.decimalValue());
+        }
+        vo.setKcal(d.getKcal());
+        vo.setProtein(d.getProtein());
+        vo.setFat(d.getFat());
+        vo.setCarb(d.getCarb());
+        vo.setSodium(d.getSodium());
+
+        List<String> uncertain = new ArrayList<>();
+        for (String k : draft.uncertain()) {
+            if (MEAL_FIELDS.contains(k)) uncertain.add(k);
+        }
+        // 解析器只认营养行的 key：整份重量（serving_grams）与能量（kcal / kj）在这里补认，对外叫 grams / kcal
+        JsonNode rawUncertain = root.path("uncertain");
+        if (rawUncertain.isArray()) {
+            rawUncertain.forEach(n -> {
+                String k = switch (n.asText("")) {
+                    case "serving_grams" -> "grams";
+                    case "kcal", "kj" -> "kcal";
+                    default -> null;
+                };
+                if (k != null && !uncertain.contains(k)) uncertain.add(k);
+            });
+        }
+        for (String k : extraUncertain) {
+            if (!uncertain.contains(k)) uncertain.add(k);
+        }
+        vo.setUncertain(uncertain);
+        vo.setMissing(new ArrayList<>(draft.missing()));
+        return vo;
+    }
+
+    /** 临时条目只认这几项（名字、份量、4+1）。 */
+    private static final Set<String> MEAL_FIELDS =
+            Set.of("name", "grams", "kcal", "protein", "fat", "carb", "sodium");
 
     /** 用量汇总：「我的」页外卡两值——累计 token（入＋出）＋ 请求次数（含失败）。 */
     public RecognitionUsageVO usage(Long userId) {
@@ -161,9 +348,23 @@ public class FoodRecognitionService {
         int size = Math.min(Math.max(limit == null ? LOG_DEFAULT_SIZE : limit, 1), LOG_MAX_SIZE);
         int start = Math.max(offset == null ? 0 : offset, 0);
         return recognitionMapper.selectList(Wrappers.<FoodRecognition>lambdaQuery()
+                // 原始输出可能有十几 KB，列表用不上，不查
+                .select(FoodRecognition.class, f -> !HEAVY_COLUMNS.contains(f.getColumn()))
                 .eq(FoodRecognition::getUserId, userId)
                 .orderByDesc(FoodRecognition::getId)
                 .last("LIMIT " + start + ", " + size));
+    }
+
+    /** 列表用不上、又可能很大的列（详情才查）。 */
+    private static final Set<String> HEAVY_COLUMNS = Set.of("raw_output", "request_json", "response_json");
+
+    /** 一条流水的全部信息（识别明细的详情页，ADR 0053）；不是自己的当不存在。 */
+    public FoodRecognition logDetail(Long userId, Long id) {
+        FoodRecognition row = recognitionMapper.selectById(id);
+        if (row == null || !userId.equals(row.getUserId())) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "这条识别记录不存在");
+        }
+        return row;
     }
 
     // ── 内部 ──
@@ -173,6 +374,11 @@ public class FoodRecognitionService {
      * 真实 HTTP 不在单元测试里跑（Key 也没有，见 ADR 0018 阻塞项）。
      */
     DashScopeResponse callVision(MultipartFile file) {
+        return callVision(file, PROMPT);
+    }
+
+    /** 同上，prompt 由调用方给（餐次识别用 {@link #MEAL_PROMPT}）。 */
+    DashScopeResponse callVision(MultipartFile file, String prompt) {
         byte[] bytes;
         try {
             bytes = file.getBytes();
@@ -187,6 +393,9 @@ public class FoodRecognitionService {
         }
         String mime = file.getContentType() == null ? "image/jpeg" : file.getContentType();
         String dataUri = "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(bytes);
+        // 留给识别明细的请求体：与实发完全一样，只把图片的 base64 换成占位（几 MB 的图不进库）
+        String requestJson = toJson(buildRequestBody(
+                "data:" + mime + ";base64,<图片已省略：" + bytes.length + " 字节>", prompt));
 
         JsonNode resp;
         try {
@@ -194,25 +403,41 @@ public class FoodRecognitionService {
                     .uri("/chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + props.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(buildRequestBody(dataUri))
+                    .body(buildRequestBody(dataUri, prompt))
                     .retrieve()
                     .body(JsonNode.class);
         } catch (RestClientResponseException e) {
             log.warn("DashScope 调用失败：{} {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别服务暂时不可用，请稍后重试或手动录入");
+            throw new UpstreamFailure("识别服务暂时不可用，请稍后重试或手动录入", requestJson,
+                    "HTTP " + e.getStatusCode().value() + "\n" + e.getResponseBodyAsString());
         }
         if (resp == null) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别服务返回为空");
+            throw new UpstreamFailure("识别服务返回为空", requestJson, null);
         }
         JsonNode usage = resp.path("usage");
         String content = resp.path("choices").path(0).path("message").path("content").asText(null);
         if (content == null || content.isBlank()) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "识别服务没有返回内容，请重试或手动录入");
+            // 没有正文：把整个响应留给识别明细，方便看服务商到底回了什么
+            throw new UpstreamFailure("识别服务没有返回内容，请重试或手动录入", requestJson, resp.toString());
         }
+        JsonNode reasoning = usage.path("completion_tokens_details").path("reasoning_tokens");
         return new DashScopeResponse(content,
                 usage.path("prompt_tokens").asInt(0),
                 usage.path("completion_tokens").asInt(0),
-                usage.path("prompt_tokens_details").path("cached_tokens").asInt(0));
+                usage.path("prompt_tokens_details").path("cached_tokens").asInt(0),
+                reasoning.isNumber() ? reasoning.asInt() : null,
+                textOrNull(resp.path("choices").path(0).path("finish_reason")),
+                textOrNull(resp.path("id")),
+                requestJson,
+                resp.toString());
+    }
+
+    private String toJson(Object o) {
+        try {
+            return objectMapper.writeValueAsString(o);
+        } catch (Exception e) {
+            return null; // 只是留档用，序列化不了就不留，不影响识别本身
+        }
     }
 
     /**
@@ -224,16 +449,24 @@ public class FoodRecognitionService {
      * auto 或空值按 disabled 保守处理——本项目场景要的就是「别深思」。</p>
      */
     Map<String, Object> buildRequestBody(String dataUri) {
+        return buildRequestBody(dataUri, PROMPT);
+    }
+
+    Map<String, Object> buildRequestBody(String dataUri, String prompt) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", props.getModel());
         body.put("messages", List.of(Map.<String, Object>of("role", "user",
                 "content", List.of(
                         Map.<String, Object>of("type", "image_url", "image_url", Map.of("url", dataUri)),
-                        Map.<String, Object>of("type", "text", "text", PROMPT)))));
+                        Map.<String, Object>of("type", "text", "text", prompt)))));
         String mode = StringUtils.hasText(props.getThinkingMode())
                 ? props.getThinkingMode().trim() : "disabled";
         if ("enabled".equals(mode) || "disabled".equals(mode)) {
             body.put("thinking", Map.of("type", mode));
+        }
+        // 思考等级：配了才传（DeepSeek 认 none/low/high/max；智谱、通义不认，所以默认不传）
+        if (StringUtils.hasText(props.getReasoningEffort())) {
+            body.put("reasoning_effort", props.getReasoningEffort().trim());
         }
         return body;
     }
@@ -266,16 +499,49 @@ public class FoodRecognitionService {
         return hits.isEmpty() ? null : hits.get(0);
     }
 
-    private void logUsage(Long userId, int in, int out, int cached, int durationMs, boolean success) {
+    /** 原始输出最多留这么多字（TEXT 列放得下；一次识别的正文通常几百字）。 */
+    private static final int RAW_OUTPUT_MAX = 16000;
+
+    /** 请求体上限：TEXT 是 64KB 字节，prompt 带中文按 3 字节算，留足余量。 */
+    private static final int REQUEST_JSON_MAX = 20000;
+
+    /** 响应上限（MEDIUMTEXT）：开着思考时响应里会带整段思考过程，给到 20 万字。 */
+    private static final int RESPONSE_JSON_MAX = 200000;
+
+    private void logUsage(Long userId, Trace t, int durationMs) {
+        DashScopeResponse r = t.resp;
         FoodRecognition row = new FoodRecognition();
         row.setUserId(userId);
+        row.setKind(t.kind);
         row.setModel(props.getModel());
-        row.setTokensIn(in);
-        row.setTokensOut(out);
-        row.setCachedTokens(cached);
+        row.setEndpoint(props.getEndpoint());
+        row.setThinkingMode(StringUtils.hasText(props.getThinkingMode()) ? props.getThinkingMode().trim() : "disabled");
+        row.setReasoningEffort(StringUtils.hasText(props.getReasoningEffort()) ? props.getReasoningEffort().trim() : null);
+        row.setTokensIn(r == null ? 0 : r.promptTokens());
+        row.setTokensOut(r == null ? 0 : r.completionTokens());
+        row.setCachedTokens(r == null ? 0 : r.cachedTokens());
+        row.setReasoningTokens(r == null ? null : r.reasoningTokens());
         row.setDurationMs(durationMs);
-        row.setSuccess(success);
+        row.setImageBytes(t.imageBytes);
+        row.setImageMime(clip(t.imageMime, 32));
+        row.setFinishReason(r == null ? null : clip(r.finishReason(), 32));
+        row.setUpstreamId(r == null ? null : clip(r.upstreamId(), 128));
+        row.setSuccess(t.success);
+        row.setResultName(t.success ? clip(t.resultName, 64) : null);
+        row.setErrorMessage(clip(t.errorMessage, 500));
+        row.setRawOutput(clip(t.rawOutput, RAW_OUTPUT_MAX));
+        row.setRequestJson(clip(t.requestJson, REQUEST_JSON_MAX));
+        row.setResponseJson(clip(t.responseJson, RESPONSE_JSON_MAX));
         recognitionMapper.insert(row);
+    }
+
+    private static String clip(String s, int max) {
+        if (s == null || s.isEmpty()) return null;
+        return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    private static String textOrNull(JsonNode n) {
+        return n.isTextual() && !n.asText().isBlank() ? n.asText() : null;
     }
 
     private static long longOf(Object v) {

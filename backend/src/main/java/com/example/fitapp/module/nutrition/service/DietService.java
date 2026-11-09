@@ -8,6 +8,7 @@ import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
 import com.example.fitapp.common.TransientRetry;
 import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
+import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
@@ -203,6 +204,28 @@ public class DietService {
         log.setProteinPer100(food.getProtein());
         log.setCarbPer100(food.getCarb());
         log.setFatPer100(food.getFat());
+        log.setSodiumPer100(food.getSodium());
+        mealLogMapper.insert(log);
+        return toItem(log);
+    }
+
+    /**
+     * 记一条临时条目（ADR 0052）：AI 识别出来、用户核对过的「临时食物」，不进食物库，
+     * 只落这一条——food_id 为空，营养全在快照里（与「来源食物已删」的条目同一形态）。
+     */
+    public MealItemVO addCustomMeal(Long userId, MealCustomDTO dto) {
+        MealLog log = new MealLog();
+        log.setUserId(userId);
+        log.setLogDate(parseDate(dto.getDate()));
+        log.setMeal(dto.getMeal());
+        log.setFoodId(null);
+        log.setFoodName(dto.getName().trim());
+        log.setGrams(dto.getGrams());
+        log.setKcalPer100(dto.getKcal());
+        log.setProteinPer100(dto.getProtein());
+        log.setCarbPer100(dto.getCarb());
+        log.setFatPer100(dto.getFat());
+        log.setSodiumPer100(dto.getSodium());
         mealLogMapper.insert(log);
         return toItem(log);
     }
@@ -472,6 +495,7 @@ public class DietService {
         i.setProtein(actual(l.getProteinPer100(), l.getGrams()));
         i.setCarb(actual(l.getCarbPer100(), l.getGrams()));
         i.setFat(actual(l.getFatPer100(), l.getGrams()));
+        i.setSodium(l.getSodiumPer100() == null ? null : actual(l.getSodiumPer100(), l.getGrams()));
         return i;
     }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import {
+  addCustomMeal,
   addMeal,
   addMealsBatch,
   deleteMeal,
@@ -9,14 +10,17 @@ import {
   listFoods,
   updateMeal,
   listMealPhotos,
+  recognizeMeal,
   type AlbumPhoto,
   type ComboItem,
   type FoodComboVO,
   type FoodItem,
+  type MealDraft,
+  type MealDraftKey,
   type MealItem,
   type MealKey
 } from '@/api/nutrition'
-import { deletePhoto, fetchMealPhoto, pickAndUploadPhotos } from '@/utils/photo'
+import { choosePhoto, compress, deletePhoto, fetchMealPhoto, pickAndUploadPhotos } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
@@ -331,6 +335,170 @@ async function confirmAdd() {
   }
 }
 
+// ── AI 识别 → 临时食物（ADR 0052）──
+// 拍一份饭菜（估算）或一张营养成分表（照表换算）→ 草稿在弹层里核对、补齐 → 记成一条临时条目，不进食物库。
+// 草稿给的是每 100 ＋ 这一份的量；表单默认按「这一份」显示（知道份量时），也可切到每 100 填。
+
+type NutriKey = 'kcal' | 'protein' | 'fat' | 'carb' | 'sodium'
+const NUTRI: { key: NutriKey; label: string; unit: string; required: boolean }[] = [
+  { key: 'kcal', label: '热量', unit: '大卡', required: true },
+  { key: 'protein', label: '蛋白质', unit: 'g', required: true },
+  { key: 'fat', label: '脂肪', unit: 'g', required: true },
+  { key: 'carb', label: '碳水', unit: 'g', required: true },
+  { key: 'sodium', label: '钠', unit: 'mg', required: false }
+]
+
+interface TmpFood {
+  kind: MealDraft['kind']
+  name: string
+  unit: 'g' | 'ml'
+  grams: string
+  /** portion＝下面的数是「这一份」的；per100＝每 100（g / ml）。 */
+  basis: 'portion' | 'per100'
+  vals: Record<NutriKey, string>
+  uncertain: MealDraftKey[]
+  missing: MealDraftKey[]
+}
+
+const recognizing = ref(false)
+const tmp = ref<TmpFood | null>(null)
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** 当前填的份量（正数才算）。 */
+function tmpGrams(): number | null {
+  const t = tmp.value?.grams.trim() ?? ''
+  const n = Number(t)
+  return t && Number.isFinite(n) && n > 0 ? n : null
+}
+
+async function startRecognize() {
+  if (recognizing.value) return
+  const picked = await choosePhoto()
+  if (picked.cancelled || !picked.path) {
+    if (picked.error) uni.showToast({ title: '没能打开相机或相册，请检查权限设置', icon: 'none' })
+    return
+  }
+  recognizing.value = true
+  uni.showLoading({ title: '识别中…', mask: true })
+  try {
+    const original = await (await fetch(picked.path)).blob()
+    // 长边 1600、0.85：与标签识别同口径（营养成分表字小，别压糊）
+    const draft = await recognizeMeal(await compress(original, 0.85))
+    openTmp(draft)
+  } catch (e) {
+    uni.showToast({ title: (e as Error)?.message || '识别失败', icon: 'none' })
+  } finally {
+    recognizing.value = false
+    uni.hideLoading()
+  }
+}
+
+function openTmp(d: MealDraft) {
+  const g = d.grams != null && d.grams > 0 ? d.grams : null
+  const vals = {} as Record<NutriKey, string>
+  for (const n of NUTRI) {
+    const v = d[n.key]
+    vals[n.key] = v == null ? '' : String(g != null ? round2((v * g) / 100) : v)
+  }
+  cancelSelect()
+  tmp.value = {
+    kind: d.kind,
+    name: d.name ?? '',
+    unit: d.unit === 'ml' ? 'ml' : 'g',
+    grams: g != null ? String(g) : '',
+    basis: g != null ? 'portion' : 'per100',
+    vals,
+    uncertain: d.uncertain ?? [],
+    missing: d.missing ?? []
+  }
+}
+
+/** 切换「这一份 / 每 100」：份量有效时已填的数跟着换算。 */
+function setTmpBasis(next: TmpFood['basis']) {
+  const t = tmp.value
+  if (!t || t.basis === next) return
+  const g = tmpGrams()
+  if (g != null) {
+    const factor = next === 'portion' ? g / 100 : 100 / g
+    for (const n of NUTRI) {
+      const raw = t.vals[n.key].trim()
+      const v = Number(raw)
+      if (raw && Number.isFinite(v)) t.vals[n.key] = String(round2(v * factor))
+    }
+  }
+  t.basis = next
+}
+
+/** 字段角标：没给出且还空着＝待补；拿不准＝待核对。 */
+function tmpTag(key: MealDraftKey): string {
+  const t = tmp.value
+  if (!t) return ''
+  const empty = key === 'name' ? !t.name.trim() : key === 'grams' ? !t.grams.trim() : !t.vals[key as NutriKey].trim()
+  if (empty && (t.missing.includes(key) || key === 'name' || key === 'grams')) return '待补'
+  if (!empty && t.uncertain.includes(key)) return '待核对'
+  return ''
+}
+
+function cancelTmp() {
+  tmp.value = null
+}
+
+async function confirmTmp() {
+  const t = tmp.value
+  if (!t || saving.value) return
+  const name = t.name.trim()
+  if (!name) {
+    uni.showToast({ title: '给它起个名字', icon: 'none' })
+    return
+  }
+  const g = tmpGrams()
+  if (g == null) {
+    uni.showToast({ title: '填上这一份有多少', icon: 'none' })
+    return
+  }
+  const per100 = {} as Record<NutriKey, number | null>
+  for (const n of NUTRI) {
+    const raw = t.vals[n.key].trim()
+    if (!raw) {
+      if (n.required) {
+        uni.showToast({ title: `${n.label}还没填`, icon: 'none' })
+        return
+      }
+      per100[n.key] = null
+      continue
+    }
+    const v = Number(raw)
+    if (!Number.isFinite(v) || v < 0) {
+      uni.showToast({ title: `${n.label}数字不正确`, icon: 'none' })
+      return
+    }
+    per100[n.key] = t.basis === 'portion' ? round2((v * 100) / g) : v
+  }
+  saving.value = true
+  try {
+    const item = await addCustomMeal({
+      date: props.date,
+      meal: props.meal,
+      name,
+      grams: g,
+      kcal: per100.kcal as number,
+      protein: per100.protein as number,
+      fat: per100.fat as number,
+      carb: per100.carb as number,
+      sodium: per100.sodium
+    })
+    items.value.push(item)
+    tmp.value = null
+    uni.showToast({ title: '已记录', icon: 'none' })
+    emit('changed')
+  } catch {
+    // request 层已统一提示；表单留着可重试
+  } finally {
+    saving.value = false
+  }
+}
+
 // ── 条目操作：点行 → 修改份量 / 删除 ──
 
 function onItemTap(it: MealItem) {
@@ -459,7 +627,48 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
           <!-- 添加区 -->
           <view class="add">
-            <view v-if="!selected" class="asearch">
+            <!-- AI 识别出的临时食物（ADR 0052）：核对、补齐后记成一条临时条目，不进食物库 -->
+            <view v-if="tmp" class="pick tmp">
+              <view class="pick__head">
+                <text class="pick__name">{{ tmp.kind === 'photo' ? '按照片估算' : '按营养成分表' }}</text>
+                <text class="pick__cancel" @click="cancelTmp">取消</text>
+              </view>
+              <text class="tmp__hint">
+                {{ tmp.kind === 'photo' ? 'AI 估算仅供参考，核对一下；估不出的留空了，补上再记。' : '按表上的数换算；表上没印的留空了，补上再记。' }}只记进这一餐，不进食物库。
+              </text>
+              <view class="tmp__fld">
+                <text class="tmp__label">名称<text v-if="tmpTag('name')" class="tmp__tag"> {{ tmpTag('name') }}</text></text>
+                <input v-model="tmp.name" class="tmp__input" placeholder="如：番茄炒蛋盖饭" placeholder-class="asearch__ph" maxlength="64" />
+              </view>
+              <view class="tmp__fld">
+                <text class="tmp__label">这一份<text v-if="tmpTag('grams')" class="tmp__tag"> {{ tmpTag('grams') }}</text></text>
+                <input v-model="tmp.grams" type="digit" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
+                <view class="tmp__seg">
+                  <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.unit === 'g' }" @click="tmp.unit = 'g'">g</text>
+                  <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.unit === 'ml' }" @click="tmp.unit = 'ml'">ml</text>
+                </view>
+              </view>
+              <view class="tmp__basis">
+                <text class="tmp__label">下面的数是</text>
+                <view class="tmp__seg">
+                  <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.basis === 'portion' }" @click="setTmpBasis('portion')">这一份</text>
+                  <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.basis === 'per100' }" @click="setTmpBasis('per100')">每 100{{ tmp.unit }}</text>
+                </view>
+              </view>
+              <view v-for="n in NUTRI" :key="n.key" class="tmp__fld">
+                <text class="tmp__label">
+                  {{ n.label }}（{{ n.unit }}）<text v-if="!n.required" class="tmp__opt">选填</text><text v-if="tmpTag(n.key)" class="tmp__tag"> {{ tmpTag(n.key) }}</text>
+                </text>
+                <input v-model="tmp.vals[n.key]" type="digit" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
+              </view>
+              <view class="tmp__foot">
+                <view class="pick__btn" :class="{ 'pick__btn--disabled': saving }" role="button" @click="confirmTmp">记进这一餐</view>
+              </view>
+            </view>
+
+            <template v-else>
+            <view v-if="!selected" class="arow">
+            <view class="asearch">
               <FtIcon name="search" :size="16" tone="subtle" />
               <input
                 v-model="keyword"
@@ -471,6 +680,11 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               <view v-if="keyword" class="asearch__clear" role="button" aria-label="清空" @click="keyword = ''">
                 <FtIcon name="close" :size="14" :stroke="2" />
               </view>
+            </view>
+            <!-- AI 识别：拍饭菜估算，或拍营养成分表换算（ADR 0052） -->
+            <view class="aibtn" :class="{ 'aibtn--busy': recognizing }" role="button" aria-label="拍照让 AI 识别" @click="startRecognize">
+              AI 识别
+            </view>
             </view>
 
             <!-- 选中食物 → 份量行；「添加」是这一屏唯一的橙色动作 -->
@@ -521,9 +735,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
                 <text class="frow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
               </view>
               <view v-if="foods.length === 0" class="foods__empty">
-                没有找到匹配的食物——可去「食物库」新增
+                没有找到匹配的食物——可去「食物库」新增，或点「AI 识别」拍一张
               </view>
             </view>
+            </template>
           </view>
 
           <!-- 本餐条目 -->
@@ -826,6 +1041,118 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-surface;
   border-radius: $radius-pill;
   box-shadow: $shadow-sm;
+}
+
+.arow {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.arow .asearch {
+  flex: 1;
+  min-width: 0;
+}
+
+/* AI 识别：次要动作（橙色留给「添加」），白底描边胶囊，和搜索框同高 */
+.aibtn {
+  flex-shrink: 0;
+  height: 84rpx;
+  padding: 0 28rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+  box-shadow: $shadow-sm;
+  display: flex;
+  align-items: center;
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+  @include press(shrink);
+}
+
+.aibtn--busy {
+  opacity: 0.5;
+}
+
+.tmp__hint {
+  display: block;
+  padding-top: 8rpx;
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-muted;
+}
+
+.tmp__fld,
+.tmp__basis {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx 0;
+}
+
+.tmp__fld + .tmp__fld,
+.tmp__basis + .tmp__fld,
+.tmp__fld + .tmp__basis {
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.tmp__basis {
+  justify-content: space-between;
+}
+
+.tmp__label {
+  flex-shrink: 0;
+  font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.tmp__opt {
+  margin-left: 8rpx;
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+/* 待补 / 待核对：与「确认识别结果」页同一枚角标 */
+.tmp__tag {
+  margin-left: 8rpx;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-pill;
+  background: $accent-soft;
+  font-size: $text-xs;
+  color: $app-danger;
+}
+
+.tmp__input {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.tmp__seg {
+  flex-shrink: 0;
+  display: flex;
+  @include seg-track-solid;
+}
+
+.tmp__seg-opt {
+  padding: 6rpx 18rpx;
+  border-radius: $radius-pill;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.tmp__seg-opt--on {
+  background: $app-surface-2;
+  color: $app-ink;
+  font-weight: $weight-bold;
+}
+
+.tmp__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16rpx;
 }
 
 .asearch__input {

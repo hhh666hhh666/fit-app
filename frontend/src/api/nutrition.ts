@@ -89,6 +89,8 @@ export interface MealItem {
   protein: number
   carb: number
   fat: number
+  /** 钠实际摄入（mg）；老条目、临时条目没填钠时为 null。 */
+  sodium?: number | null
 }
 
 export interface Targets {
@@ -244,6 +246,48 @@ export async function recognizeFood(blob: Blob): Promise<FoodDraft> {
   throw new Error((body && body.message) || '识别失败，请重试')
 }
 
+// ── 餐次 AI 识别（ADR 0052）：饭菜照片估算 / 营养成分表换算 → 临时食物草稿（不落库）──
+
+export type MealDraftKey = 'name' | 'grams' | 'kcal' | 'protein' | 'fat' | 'carb' | 'sodium'
+
+/** 临时食物草稿：营养为每 100（g / ml），grams 是这一份的量；认不出的为 null。 */
+export interface MealDraft {
+  /** photo＝饭菜照片（估算）；label＝营养成分表（照表换算）。 */
+  kind: 'photo' | 'label'
+  name: string
+  unit: 'g' | 'ml'
+  grams: number | null
+  kcal: number | null
+  protein: number | null
+  fat: number | null
+  carb: number | null
+  sodium: number | null
+  /** 拿不准的字段（标「待核对」）。 */
+  uncertain: MealDraftKey[]
+  /** 没给出的营养字段（标「待补」）。 */
+  missing: MealDraftKey[]
+}
+
+/** 识别一张照片为临时食物草稿（multipart，裸 fetch，同 recognizeFood）。失败抛 Error。 */
+export async function recognizeMeal(blob: Blob): Promise<MealDraft> {
+  const token = (uni.getStorageSync('fitapp_token') as string) || ''
+  const fd = new FormData()
+  fd.append('file', blob, blob.type === 'image/png' ? 'meal.png' : 'meal.jpg')
+  const res = await fetch(`${API_BASE}/food-recognition/meal`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd
+  })
+  let body: { code?: number; message?: string; data?: MealDraft } | null = null
+  try {
+    body = await res.json()
+  } catch {
+    /* 非 JSON（如 nginx 错误页） */
+  }
+  if (res.ok && body && body.code === 0 && body.data) return body.data
+  throw new Error((body && body.message) || '识别失败，请重试')
+}
+
 /** 识别用量汇总（「我的」页外卡两值；不显示费用）。 */
 export interface RecognitionUsage {
   /** 累计 token（输入＋输出，含失败调用）。 */
@@ -266,6 +310,29 @@ export interface RecognitionLogItem {
   durationMs: number
   success: boolean
   createdAt: string
+  /** 以下为 V40 起多记的（ADR 0053），老记录为 null；列表不带 rawOutput。 */
+  /** label＝食物库营养成分表入库；meal＝记一餐 AI 识别。 */
+  kind?: 'label' | 'meal' | null
+  endpoint?: string | null
+  thinkingMode?: string | null
+  reasoningEffort?: string | null
+  reasoningTokens?: number | null
+  imageBytes?: number | null
+  imageMime?: string | null
+  finishReason?: string | null
+  upstreamId?: string | null
+  resultName?: string | null
+  errorMessage?: string | null
+  rawOutput?: string | null
+  /** 发给服务商的请求体（图片 base64 已换成占位）。V41 起；列表不带。 */
+  requestJson?: string | null
+  /** 服务商返回的完整响应；失败时是「HTTP 状态 ＋ 报错正文」。V41 起；列表不带。 */
+  responseJson?: string | null
+}
+
+/** 一条识别流水的全部信息（详情页；含模型原始输出）。不缓存。 */
+export function getRecognitionLog(id: number) {
+  return read<RecognitionLogItem>(`/food-recognition/logs/${id}`, undefined, 'food', false)
 }
 
 /** 用量明细分页（新的在前）。**不缓存**：这是逐条流水，每次进页都该是当下的。 */
@@ -286,6 +353,24 @@ export function getDay(date: string) {
 
 export function addMeal(payload: { date: string; meal: MealKey; foodId: number; grams: number }) {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals', payload)))
+}
+
+/**
+ * 记一条临时条目（ADR 0052）：AI 识别后核对过的「临时食物」，不进食物库。
+ * 营养按每 100（g / ml）传；钠选填。
+ */
+export function addCustomMeal(payload: {
+  date: string
+  meal: MealKey
+  name: string
+  grams: number
+  kcal: number
+  protein: number
+  fat: number
+  carb: number
+  sodium: number | null
+}) {
+  return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals/custom', payload)))
 }
 
 export function updateMeal(id: number, grams: number) {

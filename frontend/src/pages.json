@@ -88,6 +88,10 @@
       "style": { "navigationBarTitleText": "识别明细" }
     },
     {
+      "path": "pages/recognition-log/detail",
+      "style": { "navigationBarTitleText": "识别详情" }
+    },
+    {
       "path": "pages/diary/index",
       "style": { "navigationBarTitleText": "日记", "enablePullDownRefresh": true }
     },

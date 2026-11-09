@@ -66,11 +66,23 @@ public final class LabelDraftParser {
      * @param content 模型返回的文本（可能是裸 JSON，也可能包了 ```json 围栏）
      */
     public static Draft parse(String content) {
+        return parse(content, "照片里没找到营养成分表，请重试或手动录入",
+                "照片里没能认出营养成分表，请手动录入");
+    }
+
+    /**
+     * 同 {@link #parse(String)}，「什么都没认出」时的两句报错由调用方给——
+     * 餐次 AI 识别（ADR 0052）认的不只是营养成分表，报错要换说法。
+     *
+     * @param errorMessage 模型明确报告认不出（输出 {"error":...}）时的提示
+     * @param emptyMessage 模型回了骨架但 4+1 全空时的提示
+     */
+    public static Draft parse(String content, String errorMessage, String emptyMessage) {
         JsonNode root = readTree(content);
 
-        // 模型明确报告「没有营养成分表」
+        // 模型明确报告「没有营养成分表」（餐次识别：既不是食物也不是营养成分表）
         if (root.path("error").isTextual()) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "照片里没找到营养成分表，请重试或手动录入");
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, errorMessage);
         }
 
         String name = root.path("name").asText("").trim();
@@ -108,7 +120,7 @@ public final class LabelDraftParser {
         // 4+1 一项都没有 ＝ 模型对「没有标签的图」回了全 null 骨架（或根本不是营养成分表）——
         // 这时出空草稿没意义，给「没认出营养成分表」的准话。
         if (missing.size() == 5) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "照片里没能认出营养成分表，请手动录入");
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, emptyMessage);
         }
         List<String> uncertain = uncertainKeys(root.path("uncertain"));
         uncertain.removeAll(missing); // 缺的就是缺的，不再同时标「待核对」
@@ -181,7 +193,7 @@ public final class LabelDraftParser {
     }
 
     /** 容错读取：剥掉 ```json 围栏；不是 JSON 就明确报错（不猜）。 */
-    private static JsonNode readTree(String content) {
+    static JsonNode readTree(String content) {
         String s = content == null ? "" : content.trim();
         if (s.startsWith("```")) {
             s = s.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceAll("```\\s*$", "").trim();

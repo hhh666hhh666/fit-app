@@ -3,6 +3,7 @@ package com.example.fitapp.module.nutrition.service;
 import com.example.fitapp.module.trash.mapper.TrashItemMapper;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
+import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.entity.DietDaily;
@@ -144,6 +145,54 @@ class DietServiceTest {
         // 实际值：118 × 200 ÷ 100 = 236.00
         assertEquals(new BigDecimal("236.00"), item.getKcal());
         assertEquals(new BigDecimal("49.20"), item.getProtein());
+    }
+
+    @Test
+    void addMeal_snapshotsSodiumToo() {
+        Food f = chicken();
+        f.setSodium(new BigDecimal("60"));
+        when(foodMapper.selectById(5L)).thenReturn(f);
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("lunch");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("200"));
+
+        MealItemVO item = service().addMeal(7L, dto);
+
+        ArgumentCaptor<MealLog> captor = ArgumentCaptor.forClass(MealLog.class);
+        verify(mealLogMapper).insert(captor.capture());
+        assertEquals(new BigDecimal("60"), captor.getValue().getSodiumPer100());
+        assertEquals(new BigDecimal("120.00"), item.getSodium());
+    }
+
+    @Test
+    void addCustomMeal_noFoodIdAndSnapshotsWhatWasTyped() {
+        MealCustomDTO dto = new MealCustomDTO();
+        dto.setDate("2026-11-09");
+        dto.setMeal("dinner");
+        dto.setName("  番茄炒蛋盖饭 ");
+        dto.setGrams(new BigDecimal("400"));
+        dto.setKcal(new BigDecimal("150"));
+        dto.setProtein(new BigDecimal("5"));
+        dto.setFat(new BigDecimal("6"));
+        dto.setCarb(new BigDecimal("20"));
+
+        MealItemVO item = service().addCustomMeal(7L, dto);
+
+        ArgumentCaptor<MealLog> captor = ArgumentCaptor.forClass(MealLog.class);
+        verify(mealLogMapper).insert(captor.capture());
+        MealLog row = captor.getValue();
+        // 临时条目不挂食物库：food_id 为空，营养全在快照里
+        assertNull(row.getFoodId());
+        assertEquals("番茄炒蛋盖饭", row.getFoodName());
+        assertEquals(LocalDate.of(2026, 11, 9), row.getLogDate());
+        assertEquals(new BigDecimal("150"), row.getKcalPer100());
+        assertNull(row.getSodiumPer100());
+        // 150 × 400 ÷ 100 = 600；钠没填 → null，不当 0
+        assertEquals(new BigDecimal("600.00"), item.getKcal());
+        assertNull(item.getFoodId());
+        assertNull(item.getSodium());
     }
 
     @Test

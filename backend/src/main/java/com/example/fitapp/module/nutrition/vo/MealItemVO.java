@@ -28,4 +28,7 @@ public class MealItemVO {
     private BigDecimal carb;
 
     private BigDecimal fat;
+
+    /** 钠实际摄入（mg）；条目没有钠快照（老条目、临时条目没填）时为 null。 */
+    private BigDecimal sodium;
 }

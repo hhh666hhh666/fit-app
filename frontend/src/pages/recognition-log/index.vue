@@ -63,6 +63,10 @@ function tokensText(r: RecognitionLogItem): string {
   return parts.join(' · ')
 }
 
+function openDetail(id: number) {
+  uni.navigateTo({ url: `/pages/recognition-log/detail?id=${id}` })
+}
+
 function durationText(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
@@ -73,10 +77,10 @@ function durationText(ms: number): string {
     <view class="rlog__body">
       <FtPageHeader title="识别明细" back />
 
-      <text class="note">每次拍照识别一条：用了多少 token、哪个模型、花了多久</text>
+      <text class="note">每次拍照识别一条：用了多少 token、哪个模型、花了多久；点一条看全部信息</text>
 
       <view class="glass rlist">
-        <view v-for="r in list" :key="r.id" class="rrow">
+        <view v-for="r in list" :key="r.id" class="rrow" role="button" @click="openDetail(r.id)">
           <view class="rrow__line">
             <text class="rrow__time ft-num">{{ formatDateTimeLabel(r.createdAt) }}</text>
             <text v-if="!r.success" class="badge badge--fail">失败</text>
@@ -127,6 +131,10 @@ function durationText(ms: number): string {
   flex-direction: column;
   gap: 6rpx;
   padding: 24rpx 0;
+}
+
+.rrow {
+  @include press(dim);
 }
 
 .rrow + .rrow {
