@@ -5,6 +5,7 @@ import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.service.FoodRecognitionService;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
 import com.example.fitapp.module.nutrition.vo.MealDraftVO;
+import com.example.fitapp.module.nutrition.vo.RecognitionLogDetailVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.example.fitapp.security.UserContext;
 import lombok.RequiredArgsConstructor;
@@ -51,9 +52,9 @@ public class FoodRecognitionController {
     }
 
     /** 用量明细分页（新的在前；含输入/输出/缓存命中 token、模型、耗时、成败）。 */
-    /** 一条流水的全部信息（详情页用，ADR 0053）：含模型原始输出、失败原因、服务商与思考参数。 */
+    /** 一条流水的全部信息（详情页用，ADR 0053）：含模型原始输出、失败原因、服务商与思考参数，以及价格估算（ADR 0054）。 */
     @GetMapping("/logs/{id}")
-    public Result<FoodRecognition> logDetail(@PathVariable Long id) {
+    public Result<RecognitionLogDetailVO> logDetail(@PathVariable Long id) {
         return Result.success(service.logDetail(UserContext.requireUserId(), id));
     }
 

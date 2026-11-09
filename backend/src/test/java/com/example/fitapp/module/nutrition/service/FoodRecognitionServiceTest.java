@@ -378,7 +378,7 @@ class FoodRecognitionServiceTest {
         mine.setRawOutput("{}");
         when(recognitionMapper.selectById(5L)).thenReturn(mine);
 
-        assertEquals("{}", service(props()).logDetail(7L, 5L).getRawOutput());
+        assertEquals("{}", service(props()).logDetail(7L, 5L).getLog().getRawOutput());
     }
 
     @Test

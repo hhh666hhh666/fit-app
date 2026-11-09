@@ -330,9 +330,31 @@ export interface RecognitionLogItem {
   responseJson?: string | null
 }
 
-/** 一条识别流水的全部信息（详情页；含模型原始输出）。不缓存。 */
+/** 一次识别调用的价格估算（ADR 0054）：目前只算 DeepSeek，按调用时刻分高峰 / 空闲。 */
+export interface RecognitionPrice {
+  supported: boolean
+  /** 不能算时的原因。 */
+  note?: string | null
+  currency?: string
+  modelLabel?: string
+  source?: string
+  /** 判断峰谷用的时刻（北京时间，请求发出时）。 */
+  callTime?: string
+  peak?: boolean
+  periodReason?: string
+  /** 这一年的放假安排在不在表里。 */
+  holidayCovered?: boolean
+  items?: { label: string; tokens: number; unitPrice: number; cost: number }[]
+  total?: number
+}
+
+export interface RecognitionLogDetail extends RecognitionLogItem {
+  price?: RecognitionPrice | null
+}
+
+/** 一条识别流水的全部信息（详情页；含模型原始输出与价格估算）。不缓存。 */
 export function getRecognitionLog(id: number) {
-  return read<RecognitionLogItem>(`/food-recognition/logs/${id}`, undefined, 'food', false)
+  return read<RecognitionLogDetail>(`/food-recognition/logs/${id}`, undefined, 'food', false)
 }
 
 /** 用量明细分页（新的在前）。**不缓存**：这是逐条流水，每次进页都该是当下的。 */

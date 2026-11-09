@@ -12,6 +12,7 @@ import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodRecognitionMapper;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
 import com.example.fitapp.module.nutrition.vo.MealDraftVO;
+import com.example.fitapp.module.nutrition.vo.RecognitionLogDetailVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -359,12 +361,25 @@ public class FoodRecognitionService {
     private static final Set<String> HEAVY_COLUMNS = Set.of("raw_output", "request_json", "response_json");
 
     /** 一条流水的全部信息（识别明细的详情页，ADR 0053）；不是自己的当不存在。 */
-    public FoodRecognition logDetail(Long userId, Long id) {
+    public RecognitionLogDetailVO logDetail(Long userId, Long id) {
         FoodRecognition row = recognitionMapper.selectById(id);
         if (row == null || !userId.equals(row.getUserId())) {
             throw new BusinessException(ResultCode.NOT_FOUND, "这条识别记录不存在");
         }
-        return row;
+        RecognitionLogDetailVO vo = new RecognitionLogDetailVO();
+        vo.setLog(row);
+        // 计费时刻取请求发出的时刻：记录是调用结束后写的，往回减掉耗时
+        LocalDateTime callTime = row.getCreatedAt() == null ? null
+                : row.getCreatedAt().minusNanos(1_000_000L * (row.getDurationMs() == null ? 0 : row.getDurationMs()));
+        if (callTime != null) {
+            vo.setPrice(DeepSeekPricing.estimate(row.getModel(), callTime,
+                    nz(row.getTokensIn()), nz(row.getCachedTokens()), nz(row.getTokensOut())));
+        }
+        return vo;
+    }
+
+    private static int nz(Integer v) {
+        return v == null ? 0 : v;
     }
 
     // ── 内部 ──

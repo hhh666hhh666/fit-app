@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { getRecognitionLog, type RecognitionLogItem } from '@/api/nutrition'
+import { getRecognitionLog, type RecognitionLogDetail } from '@/api/nutrition'
 import { formatBytes, formatThousands } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtPageHeader from '@/components/FtPageHeader.vue'
@@ -10,7 +10,7 @@ import FtPageHeader from '@/components/FtPageHeader.vue'
 //    服务商回执、模型原始输出。照片不留（ADR 0018），所以这里没有图。
 //    V40 之前的老记录只有 token / 模型 / 耗时 / 成败，其余显示「未记录」。
 
-const rec = ref<RecognitionLogItem | null>(null)
+const rec = ref<RecognitionLogDetail | null>(null)
 const loading = ref(true)
 
 onLoad((query) => {
@@ -93,6 +93,23 @@ const tokens = computed(() => {
     { label: '合计', value: formatThousands(r.tokensIn + r.tokensOut) }
   ]
   return rows
+})
+
+/** 元：一分钱以下给 6 位小数，否则 4 位；去掉末尾的 0。 */
+function yuan(v: number | null | undefined): string {
+  const n = Number(v ?? 0)
+  if (n === 0) return '0 元'
+  const s = n < 0.01 ? n.toFixed(6) : n.toFixed(4)
+  return `${s.replace(/\.?0+$/, '')} 元`
+}
+
+const price = computed(() => rec.value?.price ?? null)
+
+/** 合计的「约多少分」：几厘钱的数直接读元不直观。 */
+const centText = computed(() => {
+  const t = Number(price.value?.total ?? 0)
+  if (t <= 0 || t >= 1) return ''
+  return `约 ${Number((t * 100).toFixed(3))} 分`
 })
 
 const durationText = computed(() => {
@@ -210,6 +227,38 @@ function copy(text: string | null | undefined, what: string) {
             <text class="kv__k">{{ t.label }}</text>
             <text class="kv__v ft-num">{{ t.value }}</text>
           </view>
+        </view>
+
+        <!-- 价格（ADR 0054）：只算 DeepSeek，按调用时刻分高峰 / 空闲 -->
+        <view class="glass card">
+          <text class="card__title">价格</text>
+          <template v-if="price && price.supported">
+            <view class="price">
+              <text class="price__total ft-num">{{ yuan(price.total) }}</text>
+              <text v-if="centText" class="price__cent ft-num">{{ centText }}</text>
+              <text class="badge" :class="price.peak ? 'badge--fail' : 'badge--ok'">{{ price.peak ? '高峰价' : '空闲价（半价）' }}</text>
+            </view>
+            <view v-for="it in price.items" :key="it.label" class="kv kv--stack">
+              <view class="kv__row">
+                <text class="kv__k">{{ it.label }}</text>
+                <text class="kv__v ft-num">{{ yuan(it.cost) }}</text>
+              </view>
+              <text class="kv__calc ft-num">{{ formatThousands(it.tokens) }} token × {{ it.unitPrice }} 元 / 百万</text>
+            </view>
+            <view class="kv kv--stack">
+              <text class="kv__k">时段</text>
+              <text class="kv__v">{{ price.periodReason }}</text>
+              <text class="kv__calc ft-num">按请求发出的时刻判断（北京时间 {{ (price.callTime || '').replace('T', ' ').slice(0, 19) }}）</text>
+            </view>
+            <view class="kv kv--stack">
+              <text class="kv__k">价目</text>
+              <text class="kv__v">{{ price.modelLabel }}</text>
+            </view>
+            <text class="card__note">
+              按 {{ price.source }} 估算，以 DeepSeek 账单为准。高峰：北京时间周一至周五 9:00–12:00、14:00–18:00（法定节假日除外），其余时段半价。输入已含图片，输出已含思考。{{ price.holidayCovered ? '' : '这一年的放假安排还没录入，节假日只按周末判断。' }}
+            </text>
+          </template>
+          <text v-else class="card__note">{{ price?.note || '没法算这条的价格。' }}</text>
         </view>
 
         <!-- 耗时与图片 -->
@@ -404,6 +453,38 @@ function copy(text: string | null | undefined, what: string) {
 }
 
 .kv--sub .kv__v {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.kv__row {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.kv__calc {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding: 8rpx 0 20rpx;
+}
+
+.price__total {
+  font-size: $text-xl;
+  font-weight: $weight-heavy;
+  color: $app-ink;
+}
+
+.price__cent {
   font-size: $text-sm;
   color: $app-ink-muted;
 }
