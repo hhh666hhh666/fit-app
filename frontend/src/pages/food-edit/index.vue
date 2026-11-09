@@ -49,8 +49,49 @@ const form = reactive<Record<string, string>>({
   // 扩展字段（不在 45 项正表内）：常显、选填
   gi: '',
   portionLabel: '',
-  portionGrams: ''
+  portionGrams: '',
+  // 五类选填营养一并占位：否则没展开填过的键是 undefined，trim() 会抛错
+  ...Object.fromEntries(OPTIONAL_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, ''])))
 })
+
+/**
+ * 录入基准：per100＝按每 100g/ml 填；serving＝按「每份」填（份量自定义，单位 g 或 ml）。
+ * 库里只存每 100 的数值——按份录入在保存时换算，份量同时存为常用份；编辑回填一律按每 100 显示。
+ */
+const basis = ref<'per100' | 'serving'>('per100')
+
+/** 所有按基准换算的营养字段（主组 ＋ 五类选填；GI 不随份量变，不在内）。 */
+const SCALED_KEYS = [
+  ...MAIN_FIELDS.map((f) => f.key),
+  ...OPTIONAL_GROUPS.flatMap((g) => g.fields.map((f) => f.key))
+]
+
+/** 当前填的份量（正数才有效）。 */
+function servingAmount(): number | null {
+  const n = Number(form.portionGrams.trim())
+  return form.portionGrams.trim() && Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** 两位小数、去掉尾零。 */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** 切换基准；已填数值在份量有效时跟着换算，免得每 100 的数被当成每份。 */
+function setBasis(next: 'per100' | 'serving', unit?: 'g' | 'ml') {
+  if (unit) form.unit = unit
+  if (basis.value === next) return
+  const amount = servingAmount()
+  if (amount != null) {
+    const factor = next === 'serving' ? amount / 100 : 100 / amount
+    for (const k of SCALED_KEYS) {
+      const t = form[k].trim()
+      const n = Number(t)
+      if (t && Number.isFinite(n)) form[k] = String(round2(n * factor))
+    }
+  }
+  basis.value = next
+}
 
 /** 折叠状态（默认全收起）。 */
 const openGroups = ref<Record<string, boolean>>({})
@@ -204,11 +245,21 @@ function buildPayload(): FoodPayload | null {
     main[r.key] = v
   }
 
+  // 按份录入：份量必填，营养值换算成每 100 再存，份量记为常用份
+  const perServing = basis.value === 'serving'
+  const amount = servingAmount()
+  if (perServing && amount == null) {
+    uni.showToast({ title: '先填一份是多少' + (form.unit === 'ml' ? ' ml' : ' g'), icon: 'none' })
+    return null
+  }
+  const toPer100 = (v: number) => (perServing ? round2((v * 100) / (amount as number)) : v)
+  for (const k of Object.keys(main)) main[k] = toPer100(main[k])
+
   const payload: Record<string, unknown> = {
     name,
     unit: form.unit === 'ml' ? 'ml' : 'g',
     ...main,
-    portionLabel: form.portionLabel.trim() || null,
+    portionLabel: form.portionLabel.trim() || (perServing ? '1份' : null),
     portionGrams: numOrNull('portionGrams') ?? null
   }
   // 扩展字段 GI：选填（空串＝清空），非法数字当场拦下
@@ -225,7 +276,7 @@ function buildPayload(): FoodPayload | null {
         uni.showToast({ title: `${fd.label}数字不正确`, icon: 'none' })
         return null
       }
-      payload[fd.key] = v
+      payload[fd.key] = v == null ? null : toPer100(v)
     }
   }
   return payload as unknown as FoodPayload
@@ -288,25 +339,60 @@ async function save() {
           <view class="units">
             <view
               class="unit"
-              :class="{ 'unit--active': form.unit !== 'ml' }"
-              @click="form.unit = 'g'"
+              :class="{ 'unit--active': basis === 'per100' && form.unit !== 'ml' }"
+              @click="setBasis('per100', 'g')"
             >
               每 100g
             </view>
             <view
               class="unit"
-              :class="{ 'unit--active': form.unit === 'ml' }"
-              @click="form.unit = 'ml'"
+              :class="{ 'unit--active': basis === 'per100' && form.unit === 'ml' }"
+              @click="setBasis('per100', 'ml')"
             >
               每 100ml
             </view>
+            <view
+              class="unit"
+              :class="{ 'unit--active': basis === 'serving' }"
+              @click="setBasis('serving')"
+            >
+              按份
+            </view>
           </view>
         </view>
+        <!-- 按份：一份多少（g 或 ml，自定义）＋ 份名称；保存时营养换算成每 100，份量记为常用份 -->
+        <template v-if="basis === 'serving'">
+          <view class="fld">
+            <text class="fld__label">一份多少</text>
+            <input
+              v-model="form.portionGrams"
+              type="digit"
+              class="fld__input ft-num"
+              placeholder="如：250"
+              placeholder-class="ph"
+            />
+            <view class="units units--sm">
+              <view class="unit" :class="{ 'unit--active': form.unit !== 'ml' }" @click="form.unit = 'g'">g</view>
+              <view class="unit" :class="{ 'unit--active': form.unit === 'ml' }" @click="form.unit = 'ml'">ml</view>
+            </view>
+          </view>
+          <view class="fld">
+            <text class="fld__label">份名称</text>
+            <input
+              v-model="form.portionLabel"
+              class="fld__input"
+              placeholder="如：1杯（不填记为 1份）"
+              placeholder-class="ph"
+              maxlength="16"
+            />
+          </view>
+          <text class="serving-hint">下面的营养按「每份」填，保存时自动换算成每 100{{ form.unit === 'ml' ? 'ml' : 'g' }}</text>
+        </template>
       </view>
 
       <!-- 主组（必填） -->
       <view class="glass block">
-        <text class="block__title">主要营养（必填）</text>
+        <text class="block__title">主要营养（{{ basis === 'serving' ? '每份，' : '' }}必填）</text>
         <view class="fld">
           <text class="fld__label">热量（大卡）<text v-if="isMissing('kcal')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.kcal" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
@@ -344,8 +430,8 @@ async function save() {
         </view>
       </view>
 
-      <!-- 常用份 -->
-      <view class="glass block">
+      <!-- 常用份（按份录入时份量已在上面填过，这里不再重复） -->
+      <view v-if="basis !== 'serving'" class="glass block">
         <text class="block__title">常用份（可选）</text>
         <view class="fld">
           <text class="fld__label">份标签</text>
@@ -366,7 +452,7 @@ async function save() {
       <!-- 更多营养（折叠） -->
       <view v-for="g in OPTIONAL_GROUPS" :key="g.title" class="glass block">
         <view class="group-head" @click="toggleGroup(g.title)">
-          <text class="block__title">{{ g.title }}（选填）</text>
+          <text class="block__title">{{ g.title }}（{{ basis === 'serving' ? '每份，' : '' }}选填）</text>
           <view class="group-head__arrow" :class="{ 'group-head__arrow--open': openGroups[g.title] }">
             <FtIcon name="chevron-right" :size="18" tone="muted" />
           </view>
@@ -462,6 +548,23 @@ async function save() {
   padding: 10rpx 24rpx;
   border-radius: $radius-pill;
   font-size: $text-base;
+  color: $app-ink-muted;
+}
+
+.units--sm {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.units--sm .unit {
+  padding: 6rpx 18rpx;
+  font-size: $text-sm;
+}
+
+.serving-hint {
+  display: block;
+  padding: 4rpx 0 12rpx;
+  font-size: $text-sm;
   color: $app-ink-muted;
 }
 
