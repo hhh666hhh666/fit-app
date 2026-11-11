@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { computed, ref, watch } from 'vue'
+import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
@@ -15,6 +15,7 @@ import { ask, TRASH_HINT } from '@/utils/confirm'
 // ── 动作库（晴窗，ADR 0041）──
 // 双模式：浏览（主页进入）/ 点选（计划编辑「添加动作」进入，点选即回填）
 // 已下架的预设（ADR 0048）：只有练过或排进过计划的人看得到，带「已下架」；能删（只对自己隐藏），也能复制一份。
+// 预设导入开源动作数据集后有一千多条（ADR 0055）：列表分批渲染，触底再加；点动作进详情页看动图和要领。
 
 const pick = usePickStore()
 
@@ -76,11 +77,21 @@ const counts = computed(() => {
 
 const filtered = computed(() => {
   const kw = keyword.value.trim()
+  const kwEn = kw.toLowerCase()
   return all.value.filter((e) => {
     if (activeMuscle.value && e.muscle !== activeMuscle.value) return false
-    if (kw && !e.name.includes(kw)) return false
+    if (kw && !e.name.includes(kw) && !(e.nameEn ?? '').toLowerCase().includes(kwEn)) return false
     return true
   })
+})
+
+// 分批渲染：一次铺一千多行，手机 WebView 会卡一下
+const BATCH = 60
+const shown = ref(BATCH)
+const visible = computed(() => filtered.value.slice(0, shown.value))
+watch([keyword, activeMuscle], () => (shown.value = BATCH))
+onReachBottom(() => {
+  if (shown.value < filtered.value.length) shown.value += BATCH
 })
 
 const sectTitle = computed(() => {
@@ -108,7 +119,7 @@ function onTapExercise(e: ExerciseItem) {
       openArchivedActions(e)
       return
     }
-    uni.showToast({ title: '动作详情建设中', icon: 'none' })
+    uni.navigateTo({ url: `/pages/exercise-detail/index?id=${e.id}` })
     return
   }
   pick.pick({ id: e.id, name: e.name, muscle: e.muscle })
@@ -245,7 +256,7 @@ async function confirmCreate() {
         <input
           v-model="keyword"
           class="search__input"
-          placeholder="搜索动作"
+          placeholder="搜索动作（中英文都行）"
           placeholder-class="search__ph"
           confirm-type="search"
         />
@@ -290,7 +301,7 @@ async function confirmCreate() {
           <text v-else-if="!selectMode" class="elist__tip">长按自定义或已下架的动作可批量删除</text>
         </view>
         <view
-          v-for="e in filtered"
+          v-for="e in visible"
           :key="e.id"
           class="erow"
           :class="{ 'is-dim': selectMode && !canDelete(e) }"
@@ -317,6 +328,7 @@ async function confirmCreate() {
           </view>
           <FtIcon v-else-if="!selectMode" name="chevron-right" :size="18" tone="subtle" />
         </view>
+        <text v-if="visible.length < filtered.length" class="elist__more">往下滑加载更多</text>
         <FtEmpty
           v-if="!loading && filtered.length === 0"
           :title="keyword.trim() ? '没有匹配的动作' : '这一类还没有动作'"
@@ -489,6 +501,14 @@ async function confirmCreate() {
 }
 
 .elist__tip {
+  font-size: $text-xs;
+  color: $app-ink-subtle;
+}
+
+.elist__more {
+  display: block;
+  padding: 24rpx 0 8rpx;
+  text-align: center;
   font-size: $text-xs;
   color: $app-ink-subtle;
 }

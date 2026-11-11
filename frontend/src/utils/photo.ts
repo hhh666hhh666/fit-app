@@ -214,6 +214,11 @@ export async function fetchMealPhoto(id: number, thumb: boolean): Promise<{ url:
   return { url, deleted: !url && isPhotoEmpty(key) }
 }
 
+/** 动作动图（ADR 0055）：文件不会变，同样走 blob 缓存；没有动图返回 null。 */
+export function fetchExerciseMedia(id: number, kind: 'gif' | 'thumb' = 'gif'): Promise<string | null> {
+  return fetchCached(`${API_BASE}/exercises/${id}/media?kind=${kind}`, `exercise-${kind}:${id}`)
+}
+
 /** 回收站列表里的缩略图；取不到返回 null。 */
 export function fetchTrashThumb(id: number): Promise<string | null> {
   return fetchCached(`${API_BASE}/trash/${id}/thumb`, `trash-thumb:${id}`)

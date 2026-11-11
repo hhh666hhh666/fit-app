@@ -158,7 +158,8 @@ const PERSIST_PATHS = new Set([
   '/settings',
   '/plans',
   '/schedule',
-  '/exercises',
+  // 动作列表导入数据集后约 180 KB，超过单条上限、本来就落不了盘；「我的」页改取计数（ADR 0055）
+  '/exercises/count',
   '/foods/count',
   '/diet/storage',
   '/food-recognition/usage',

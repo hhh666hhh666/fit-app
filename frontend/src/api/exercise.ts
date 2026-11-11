@@ -12,6 +12,27 @@ export interface ExerciseItem {
   preset: boolean
   /** 只出现在预置上：已下架、但这个用户用过（ADR 0048）。只读，可以对自己删掉。 */
   archived?: boolean
+  /** 英文名：只有导入过开源动作数据集的预置才有（ADR 0055），搜索也匹配它。 */
+  nameEn?: string | null
+}
+
+/** 动作详情（ADR 0055）：资料只有导入过数据集的预置才有，自定义动作全为空。 */
+export interface ExerciseDetail extends ExerciseItem {
+  equipment: string | null
+  target: string | null
+  secondary: string[]
+  steps: string[]
+  /** 有动图可取：`fetchExerciseMedia(id)` */
+  media: boolean
+}
+
+/** 动作库里看得到的动作数（「我的」页用）：导入数据集后一千多条，别为一个数字拉全量列表。 */
+export function getExerciseCount() {
+  return read<number>('/exercises/count', undefined, 'plan')
+}
+
+export function getExercise(id: number) {
+  return read<ExerciseDetail>(`/exercises/${id}`, undefined, 'plan')
 }
 
 export function listExercises(params?: { muscle?: string; keyword?: string }) {

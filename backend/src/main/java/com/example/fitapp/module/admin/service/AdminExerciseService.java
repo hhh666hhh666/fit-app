@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 管理端的预置动作（ADR 0048）：列表、增改、下架与上架。不做导入导出。
+ * 管理端的预置动作（ADR 0048）：列表、增改、下架与上架。导入导出在 {@link AdminExerciseImport}（ADR 0055）。
  * 被任何训练或计划引用过的动作锁定记录口径——改了会让历史组次的含义变掉（ADR 0025）。
  */
 @Service
@@ -31,19 +31,24 @@ public class AdminExerciseService {
     private final ExerciseMapper exerciseMapper;
     private final PresetHiddenService presetHiddenService;
 
-    /** 全部预置（几十条，不分页）：按排序、id。 */
+    /** 全部预置（导入数据集后一千多条，仍不分页：桌面表格放得下）：按排序、id。 */
     public List<AdminExerciseVO> list(String q, String muscle, String status) {
         String kw = q == null ? null : q.trim();
+        java.util.Set<Long> used = new java.util.HashSet<>(exerciseMapper.usedIds());
         return exerciseMapper.selectList(Wrappers.<Exercise>lambdaQuery()
+                        .select(Exercise.class, f -> !"steps".equals(f.getColumn()))
                         .isNull(Exercise::getUserId)
-                        .like(StringUtils.hasText(kw), Exercise::getName, kw)
+                        .and(StringUtils.hasText(kw), w -> w
+                                .like(Exercise::getName, kw)
+                                .or()
+                                .like(Exercise::getNameEn, kw))
                         .eq(StringUtils.hasText(muscle), Exercise::getMuscle, muscle)
                         .eq(AdminFoodService.STATUS_LISTED.equals(status), Exercise::getArchived, false)
                         .eq(AdminFoodService.STATUS_ARCHIVED.equals(status), Exercise::getArchived, true)
                         .orderByAsc(Exercise::getSortOrder)
                         .orderByAsc(Exercise::getId))
                 .stream()
-                .map(e -> toVO(e, exerciseMapper.usedByAnyone(e.getId())))
+                .map(e -> toVO(e, used.contains(e.getId())))
                 .toList();
     }
 
@@ -132,6 +137,6 @@ public class AdminExerciseService {
 
     private static AdminExerciseVO toVO(Exercise e, boolean used) {
         return new AdminExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), e.getSortOrder(),
-                Boolean.TRUE.equals(e.getArchived()), used, e.getUpdatedAt());
+                Boolean.TRUE.equals(e.getArchived()), used, e.getUpdatedAt(), e.getNameEn(), e.getMedia() != null);
     }
 }

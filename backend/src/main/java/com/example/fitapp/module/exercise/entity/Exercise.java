@@ -27,6 +27,27 @@ public class Exercise {
     /** 记录口径：`weight_reps`＝重量×次数（默认）／`floors`＝层数（爬楼）。见 ADR 0025。 */
     private String metric;
 
+    // ── 动作资料（ADR 0055，V42）：来自开源动作数据集，自定义动作全为空 ──
+
+    /** 数据集编号；导入时据此认出同一条。 */
+    private String sourceId;
+
+    private String nameEn;
+
+    /** 器械、目标肌：中文。 */
+    private String equipment;
+
+    private String target;
+
+    /** 辅助肌群：中文，顿号分隔。 */
+    private String secondary;
+
+    /** 动作要领：每步一行。 */
+    private String steps;
+
+    /** 动图文件键：{@code exercise-media/{media}.gif} 与 {@code .jpg}。 */
+    private String media;
+
     private Boolean archived;
 
     private Integer sortOrder;

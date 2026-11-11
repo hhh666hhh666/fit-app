@@ -7,7 +7,7 @@ import { displayName, getAccount, type AccountInfo } from '@/api/account'
 import { fetchAvatar } from '@/utils/photo'
 import { getBodyOverview } from '@/api/body'
 import { formatWeight, getWeightUnit, weightUnitShort } from '@/utils/weight'
-import { listExercises } from '@/api/exercise'
+import { getExerciseCount } from '@/api/exercise'
 import { getAgentTokenStatus, type AgentTokenStatus } from '@/api/agent'
 import { getFoodCount, getRecognitionUsage, getStorage, type RecognitionUsage, type StorageInfo } from '@/api/nutrition'
 import { useScheduleStore } from '@/stores/schedule'
@@ -64,13 +64,14 @@ async function loadStats() {
     // 累计口径走**全量聚合接口**（ADR 0023）：列表接口有 limit 封顶，拿它求和会把「累计」算成「最近 200 次」
     const [totals, exercises, foodStat] = await Promise.all([
       getWorkoutTotals(),
-      listExercises(),
+      // 动作库导入数据集后一千多条：同样走计数接口（ADR 0055）
+      getExerciseCount(),
       // 食物库含预置 1800+ 条：走统计接口拿精确总数（不拉列表）
       getFoodCount()
     ])
     totalCount.value = totals.count
     totalVolumeKg.value = Math.round(Number(totals.totalVolume) || 0)
-    exerciseCount.value = exercises.length
+    exerciseCount.value = exercises
     foodCount.value = foodStat.total
   } catch {
     // unwrap 已提示

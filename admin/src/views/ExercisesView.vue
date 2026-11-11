@@ -2,15 +2,21 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
-import { METRICS, MUSCLES, metricLabel, muscleLabel, timeText, type ExerciseRow } from '@/types'
+import { METRICS, MUSCLES, metricLabel, muscleLabel, timeText, type ExerciseRow, type ImportPreview } from '@/types'
 
-// 预置动作（ADR 0048）：增改、下架与上架；不做导入导出（几十条，手改就够）。
+// 预置动作（ADR 0048）：增改、下架与上架；导入导出（ADR 0055）——开源动作数据集一千多条就从这里进库，
+// 文件由 scripts/exercise-dataset/build.py 生成。动图文件不走这里，另由 sync-media.sh 放到服务器。
 // 有人练过或排进过计划的动作锁定记录口径——改了会让历史组次的含义变掉（ADR 0025）。
 
 const filters = reactive({ q: '', muscle: '', status: 'all' })
 const rows = ref<ExerciseRow[]>([])
 const loading = ref(false)
 const selected = ref<ExerciseRow[]>([])
+
+// 一千多行一次给全，前端分页，免得表格一次渲染太多
+const PAGE_SIZE = 100
+const page = ref(1)
+const pageRows = computed(() => rows.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
 
 onMounted(() => void load())
 
@@ -22,6 +28,7 @@ async function load() {
       muscle: filters.muscle,
       status: filters.status
     })
+    page.value = 1
   } catch {
     // api 层已经提示
   } finally {
@@ -50,6 +57,78 @@ async function setArchived(archived: boolean) {
     void load()
   } catch {
     // api 层已经提示
+  }
+}
+
+// ── 导出 ──
+const exporting = ref(false)
+
+async function doExport() {
+  exporting.value = true
+  try {
+    const data = await api.get<unknown[]>('/admin/exercises/export')
+    const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `preset-exercises-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success(`已导出 ${data.length} 条`)
+  } catch {
+    // api 层已经提示
+  } finally {
+    exporting.value = false
+  }
+}
+
+// ── 导入：选文件 → 预检 → 确认（文件近 1 MB，不往文本框里塞）──
+const imp = reactive({ show: false, text: '', file: '', preview: null as ImportPreview | null, busy: false })
+
+function openImport() {
+  Object.assign(imp, { show: true, text: '', file: '', preview: null })
+}
+
+function onFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    imp.text = String(reader.result ?? '')
+    imp.file = `${file.name}（${Math.round(file.size / 1024)} KB）`
+    imp.preview = null
+    void previewImport()
+  }
+  reader.readAsText(file, 'utf-8')
+}
+
+async function previewImport() {
+  if (!imp.text.trim()) {
+    ElMessage.warning('先选一个 JSON 文件')
+    return
+  }
+  imp.busy = true
+  try {
+    imp.preview = await api.post<ImportPreview>('/admin/exercises/import/preview', { text: imp.text })
+  } catch {
+    imp.preview = null
+  } finally {
+    imp.busy = false
+  }
+}
+
+async function commitImport() {
+  const p = imp.preview
+  if (!p || p.create + p.update === 0) return
+  imp.busy = true
+  try {
+    const r = await api.post<ImportPreview>('/admin/exercises/import', { text: imp.text })
+    ElMessage.success(`已新增 ${r.create} 条、更新 ${r.update} 条`)
+    imp.show = false
+    void load()
+  } catch {
+    // api 层已经提示；整批已回滚
+  } finally {
+    imp.busy = false
   }
 }
 
@@ -104,12 +183,16 @@ async function save() {
         <h2 class="page__title">预置动作</h2>
         <p class="page__hint">按排序值从小到大排在 App 的动作库里。</p>
       </div>
-      <el-button type="primary" @click="openCreate">新增预置动作</el-button>
+      <div>
+        <el-button @click="openImport">导入</el-button>
+        <el-button :loading="exporting" @click="doExport">导出</el-button>
+        <el-button type="primary" @click="openCreate">新增预置动作</el-button>
+      </div>
     </div>
 
     <div class="card">
       <div class="toolbar">
-        <el-input v-model="filters.q" placeholder="搜名称" clearable style="width: 220px" @change="load" />
+        <el-input v-model="filters.q" placeholder="搜名称（中英文）" clearable style="width: 220px" @change="load" />
         <el-select v-model="filters.muscle" placeholder="全部肌群" clearable style="width: 140px" @change="load">
           <el-option v-for="m in MUSCLES" :key="m.code" :label="m.label" :value="m.code" />
         </el-select>
@@ -125,7 +208,7 @@ async function save() {
 
       <el-table
         v-loading="loading"
-        :data="rows"
+        :data="pageRows"
         row-key="id"
         stripe
         style="width: 100%"
@@ -135,6 +218,10 @@ async function save() {
         <el-table-column type="selection" width="44" />
         <el-table-column prop="sortOrder" label="排序" width="70" align="right" />
         <el-table-column prop="name" label="名称" min-width="180" />
+        <el-table-column prop="nameEn" label="英文名" min-width="200" show-overflow-tooltip />
+        <el-table-column label="动图" width="70">
+          <template #default="{ row }">{{ row.media ? '有' : '—' }}</template>
+        </el-table-column>
         <el-table-column label="肌群" width="90">
           <template #default="{ row }">{{ muscleLabel(row.muscle) }}</template>
         </el-table-column>
@@ -154,7 +241,46 @@ async function save() {
           <template #default="{ row }"><span class="num">{{ timeText(row.updatedAt) }}</span></template>
         </el-table-column>
       </el-table>
+      <div v-if="rows.length > PAGE_SIZE" class="pager">
+        <span class="page__hint">共 {{ rows.length }} 条</span>
+        <el-pagination v-model:current-page="page" :page-size="PAGE_SIZE" :total="rows.length" layout="prev, pager, next" />
+      </div>
     </div>
+
+    <el-dialog v-model="imp.show" title="导入预置动作" width="720px">
+      <p class="page__hint">
+        格式和导出的文件一样。带 <code>id</code> 的按 id 更新；带 <code>sourceId</code>（数据集编号）且已导入过的，更新那一条；
+        和没有编号的老预置同名的，只给它补上资料，名字和肌群不动；其余新增，排到最后。记录口径和上下架状态都不动。
+        先预检，确认后一次性写入，中途出错整批回滚。
+      </p>
+      <div class="toolbar" style="margin-top: 12px">
+        <input type="file" accept=".json,application/json" @change="onFile" />
+        <span v-if="imp.file" class="page__hint">{{ imp.file }}</span>
+      </div>
+      <div v-if="imp.preview" class="preview">
+        <p>
+          新增 <b class="num">{{ imp.preview.create }}</b> 条，更新 <b class="num">{{ imp.preview.update }}</b> 条，
+          无效 <b class="num">{{ imp.preview.invalid.length }}</b> 条（会跳过）。
+        </p>
+        <el-table v-if="imp.preview.invalid.length" :data="imp.preview.invalid" size="small" max-height="220">
+          <el-table-column prop="index" label="第几条" width="80" />
+          <el-table-column prop="name" label="名称" min-width="160" />
+          <el-table-column prop="reason" label="原因" min-width="220" />
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="imp.show = false">取消</el-button>
+        <el-button :loading="imp.busy" @click="previewImport">预检</el-button>
+        <el-button
+          type="primary"
+          :loading="imp.busy"
+          :disabled="!imp.preview || imp.preview.create + imp.preview.update === 0"
+          @click="commitImport"
+        >
+          确认导入
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="dlg.show" :title="dlgTitle" width="480px">
       <el-form label-width="90px" @submit.prevent="save">
@@ -185,6 +311,17 @@ async function save() {
 </template>
 
 <style scoped>
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.preview {
+  margin-top: 12px;
+}
+
 .tip {
   width: 100%;
   margin-top: 4px;

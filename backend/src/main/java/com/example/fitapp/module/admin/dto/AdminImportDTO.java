@@ -3,7 +3,7 @@ package com.example.fitapp.module.admin.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
-/** 管理端粘贴或上传的预置食物 JSON（格式同导出，ADR 0048）。 */
+/** 管理端粘贴或上传的预置食物 / 预置动作 JSON（格式同各自的导出，ADR 0048、ADR 0055）。 */
 @Data
 public class AdminImportDTO {
 

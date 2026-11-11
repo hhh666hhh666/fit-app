@@ -6,6 +6,8 @@ import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.exercise.dto.ExerciseUpsertDTO;
 import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
+import com.example.fitapp.module.exercise.storage.ExerciseMediaStorage;
+import com.example.fitapp.module.exercise.vo.ExerciseDetailVO;
 import com.example.fitapp.module.exercise.vo.ExerciseVO;
 import com.example.fitapp.module.preset.PresetSql;
 import com.example.fitapp.module.preset.entity.PresetHidden;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -33,17 +36,66 @@ public class ExerciseService {
     private final ExerciseMapper exerciseMapper;
     private final ExerciseTrash exerciseTrash;
     private final PresetHiddenService presetHiddenService;
+    private final ExerciseMediaStorage mediaStorage;
 
     public List<ExerciseVO> list(Long userId, String muscle, String keyword) {
         List<Exercise> rows = exerciseMapper.selectList(
                 Wrappers.<Exercise>lambdaQuery()
+                        // 列表用不着要领，别把上千段长文本读出来（ADR 0055）
+                        .select(Exercise.class, f -> !"steps".equals(f.getColumn()))
                         // 没删的自定义动作 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
                         .apply(PresetSql.EXERCISE_VISIBLE, userId)
                         .eq(StringUtils.hasText(muscle), Exercise::getMuscle, muscle)
-                        .like(StringUtils.hasText(keyword), Exercise::getName, keyword)
+                        .and(StringUtils.hasText(keyword), w -> w
+                                .like(Exercise::getName, keyword)
+                                .or()
+                                .like(Exercise::getNameEn, keyword))
                         .orderByAsc(Exercise::getSortOrder)
                         .orderByAsc(Exercise::getId));
         return rows.stream().map(this::toVO).toList();
+    }
+
+    /** 动作库里看得到的动作数（「我的」页用）：导入数据集后一千多条，别为一个数字拉全量列表。 */
+    public long count(Long userId) {
+        Long n = exerciseMapper.selectCount(Wrappers.<Exercise>lambdaQuery()
+                .apply(PresetSql.EXERCISE_VISIBLE, userId));
+        return n == null ? 0 : n;
+    }
+
+    /** 动作详情（ADR 0055）：只给这个用户在动作库里看得到的动作。 */
+    public ExerciseDetailVO detail(Long userId, Long id) {
+        Exercise e = requireVisible(userId, id);
+        boolean preset = e.getUserId() == null;
+        return new ExerciseDetailVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), preset,
+                preset && Boolean.TRUE.equals(e.getArchived()),
+                e.getNameEn(), e.getEquipment(), e.getTarget(), split(e.getSecondary(), "、"),
+                split(e.getSteps(), "\n"), mediaStorage.find(e.getMedia(), ExerciseMediaStorage.Kind.GIF) != null);
+    }
+
+    /** 动图或缩略图文件；动作看不到、没有资料或文件不在都按 404。 */
+    public java.nio.file.Path media(Long userId, Long id, ExerciseMediaStorage.Kind kind) {
+        java.nio.file.Path p = mediaStorage.find(requireVisible(userId, id).getMedia(), kind);
+        if (p == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "这个动作没有动图");
+        }
+        return p;
+    }
+
+    private Exercise requireVisible(Long userId, Long id) {
+        Exercise e = id == null ? null : exerciseMapper.selectOne(Wrappers.<Exercise>lambdaQuery()
+                .eq(Exercise::getId, id)
+                .apply(PresetSql.EXERCISE_VISIBLE, userId));
+        if (e == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "动作不存在");
+        }
+        return e;
+    }
+
+    private static List<String> split(String text, String sep) {
+        if (!StringUtils.hasText(text)) {
+            return List.of();
+        }
+        return Arrays.stream(text.split(sep)).map(String::trim).filter(StringUtils::hasText).toList();
     }
 
     public ExerciseVO create(Long userId, ExerciseUpsertDTO dto) {
@@ -143,6 +195,6 @@ public class ExerciseService {
     private ExerciseVO toVO(Exercise e) {
         boolean preset = e.getUserId() == null;
         return new ExerciseVO(e.getId(), e.getName(), e.getMuscle(), e.getMetric(), preset,
-                preset && Boolean.TRUE.equals(e.getArchived()));
+                preset && Boolean.TRUE.equals(e.getArchived()), e.getNameEn());
     }
 }

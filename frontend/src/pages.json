@@ -40,6 +40,10 @@
       "style": { "navigationBarTitleText": "动作库" }
     },
     {
+      "path": "pages/exercise-detail/index",
+      "style": { "navigationBarTitleText": "动作详情" }
+    },
+    {
       "path": "pages/plans/index",
       "style": { "navigationBarTitleText": "训练计划" }
     },

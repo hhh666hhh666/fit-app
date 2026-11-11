@@ -5,6 +5,8 @@ import com.example.fitapp.module.exercise.entity.Exercise;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 public interface ExerciseMapper extends BaseMapper<Exercise> {
 
     /** 这个用户用过这个动作：训练或计划引用过（ADR 0048 的「用过」）。 */
@@ -22,4 +24,12 @@ public interface ExerciseMapper extends BaseMapper<Exercise> {
                  OR EXISTS (SELECT 1 FROM plan_exercise WHERE exercise_id = #{exerciseId}))
             """)
     boolean usedByAnyone(@Param("exerciseId") Long exerciseId);
+
+    /** 被任何训练或计划引用过的全部动作 id（管理端列表一次取，免得逐行查，ADR 0055）。 */
+    @Select("""
+            SELECT exercise_id FROM workout_block WHERE exercise_id IS NOT NULL
+            UNION
+            SELECT exercise_id FROM plan_exercise WHERE exercise_id IS NOT NULL
+            """)
+    List<Long> usedIds();
 }

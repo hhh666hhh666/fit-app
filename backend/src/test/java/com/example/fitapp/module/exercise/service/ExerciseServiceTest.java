@@ -1,17 +1,24 @@
 package com.example.fitapp.module.exercise.service;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.module.exercise.dto.ExerciseUpsertDTO;
 import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
+import com.example.fitapp.module.exercise.storage.ExerciseMediaStorage;
+import com.example.fitapp.module.exercise.vo.ExerciseDetailVO;
 import com.example.fitapp.module.exercise.vo.ExerciseVO;
 import com.example.fitapp.module.preset.service.PresetHiddenService;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,6 +39,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ExerciseServiceTest {
 
+    /** 列表按列挑选（不读要领）要用到表元数据。 */
+    @BeforeAll
+    static void registerTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Exercise.class);
+    }
+
     @Mock
     private PresetHiddenService presetHiddenService;
 
@@ -41,8 +54,11 @@ class ExerciseServiceTest {
     @Mock
     private ExerciseMapper exerciseMapper;
 
+    @Mock
+    private ExerciseMediaStorage mediaStorage;
+
     private ExerciseService service() {
-        return new ExerciseService(exerciseMapper, exerciseTrash, presetHiddenService);
+        return new ExerciseService(exerciseMapper, exerciseTrash, presetHiddenService, mediaStorage);
     }
 
     @Test
@@ -177,5 +193,68 @@ class ExerciseServiceTest {
 
         assertThrows(BusinessException.class, () -> service().archive(7L, 1L));
         verify(presetHiddenService, never()).hide(any(), any(), any(), any(), any());
+    }
+
+    // ── 动作详情与动图（ADR 0055）──
+
+    private static Exercise datasetPreset() {
+        Exercise e = new Exercise();
+        e.setId(5L);
+        e.setUserId(null);
+        e.setName("杠铃卧推");
+        e.setMuscle("chest");
+        e.setMetric("weight_reps");
+        e.setArchived(false);
+        e.setNameEn("barbell bench press");
+        e.setSecondary("肱三头肌、肩部");
+        e.setSteps("平躺在长凳上。\n握住杠铃。\n");
+        e.setMedia("0025-EIeI8Vf");
+        return e;
+    }
+
+    @Test
+    void detail_splitsSecondaryAndSteps_andReportsMedia() {
+        when(exerciseMapper.selectOne(any())).thenReturn(datasetPreset());
+        when(mediaStorage.find("0025-EIeI8Vf", ExerciseMediaStorage.Kind.GIF)).thenReturn(Path.of("/x.gif"));
+
+        ExerciseDetailVO vo = service().detail(7L, 5L);
+
+        assertEquals(List.of("肱三头肌", "肩部"), vo.secondary());
+        assertEquals(List.of("平躺在长凳上。", "握住杠铃。"), vo.steps());
+        assertTrue(vo.preset());
+        assertTrue(vo.media());
+    }
+
+    @Test
+    void detail_customExercise_hasEmptyListsAndNoMedia() {
+        Exercise e = new Exercise();
+        e.setId(9L);
+        e.setUserId(7L);
+        e.setName("我的动作");
+        e.setMuscle("arm");
+        e.setArchived(false);
+        when(exerciseMapper.selectOne(any())).thenReturn(e);
+
+        ExerciseDetailVO vo = service().detail(7L, 9L);
+
+        assertEquals(List.of(), vo.steps());
+        assertEquals(List.of(), vo.secondary());
+        assertFalse(vo.media());
+        assertFalse(vo.preset());
+    }
+
+    /** 看不到的动作（别人的、或已隐藏的下架预置）不能靠猜 id 取到资料和动图。 */
+    @Test
+    void detail_invisible_throwsNotFound() {
+        when(exerciseMapper.selectOne(any())).thenReturn(null);
+        assertThrows(BusinessException.class, () -> service().detail(7L, 5L));
+        assertThrows(BusinessException.class, () -> service().media(7L, 5L, ExerciseMediaStorage.Kind.GIF));
+    }
+
+    @Test
+    void media_fileMissing_throwsNotFound() {
+        when(exerciseMapper.selectOne(any())).thenReturn(datasetPreset());
+        when(mediaStorage.find("0025-EIeI8Vf", ExerciseMediaStorage.Kind.THUMB)).thenReturn(null);
+        assertThrows(BusinessException.class, () -> service().media(7L, 5L, ExerciseMediaStorage.Kind.THUMB));
     }
 }

@@ -54,6 +54,10 @@ export interface ExerciseRow {
   archived: boolean
   used: boolean
   updatedAt: string
+  /** 来自开源动作数据集（ADR 0055）；手工建的预置为 null */
+  nameEn: string | null
+  /** 导入时带了动图键 */
+  media: boolean
 }
 
 export interface UserRow {
