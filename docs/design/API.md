@@ -80,6 +80,7 @@
 - **鉴权多一道**：JWT 之后由 `security/AdminInterceptor.java` 查当前用户的管理员标记，不是管理员返回业务码 403「没有权限」（HTTP 仍是 200）。每次请求都查库，改了标记立即生效。
 - **没有删除接口**：预置的删除就是下架，`POST .../archive` 和 `.../unarchive` 都收 `{ ids }`，批量里混进非预置的 id 就整批拒绝。重新上架会清掉所有用户对它的隐藏。
 - **导入分两步**：`POST /api/admin/foods/import/preview` 只预检不写库，`POST /api/admin/foods/import` 重新预检一遍再在一个事务里写入；两者返回同一种结构（新增数、更新数、无效清单）。格式与 `GET /api/admin/foods/export` 一致，和 App 自建食物的 JSON 只多了 `id`、`category` 两个键（读取逻辑共用 `FoodJsonReader`）。
+- **动作资料与动图**（2026-11-11，[ADR 0055](../adr/0055-exercise-dataset-and-media.md)）：`GET /api/exercises/{id}` 给动作详情（含资料，自定义动作资料为空）；`GET /api/exercises/{id}/media?kind=gif|thumb` 直出动图或缩略图二进制（不走 Result 信封，要登录，没有文件按 404 语义返回）；`GET /api/exercises/count` 给动作库可见数。管理端多了 `GET /api/admin/exercises/export`、`POST /api/admin/exercises/import/preview`、`POST /api/admin/exercises/import`，请求体同预置食物导入（`{text}`）。
 - **App 这边的变化**：食物和动作列表多了 `archived` 字段，只会出现在用过它的人看到的已下架预置上；对这类预置调 `DELETE /api/foods/{id}` 或 `DELETE /api/exercises/{id}` 是对自己隐藏，回收站类型是 `preset_food`／`preset_exercise`。
 
 ## 外部 agent 取数接口

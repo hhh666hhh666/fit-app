@@ -78,6 +78,7 @@ Status: accepted
 - [ADR 0052](./0052-meal-ai-recognition-temporary-entry.md)：记一餐时 AI 识别——饭菜照片估算或营养成分表换算，记成不进食物库的临时条目；条目加钠快照；放开 ADR 0008 剩下的「AI 从饭菜照片估算营养」。
 - [ADR 0053](./0053-recognition-log-detail.md)：识别明细可点开看详情——每次识别多记入口、服务商、思考参数、图片大小、结束原因、请求 ID、失败原因和模型原文；照片仍不留。
 - [ADR 0054](./0054-recognition-price-deepseek.md)：识别详情显示价格——只算 DeepSeek，按北京时间工作日高峰 / 其余空闲（半价）估算；推翻 ADR 0018「不显示费用」在详情页的部分。
+- [ADR 0055](./0055-exercise-dataset-and-media.md)：预置动作接入开源动作数据集——1324 个动作经管理端导入，同名老预置只补资料；动图放上传目录、登录才给、不进仓库；App 加动作详情页（动图＋要领）。
 
 ## 与其他文档的分工
 

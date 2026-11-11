@@ -24,6 +24,9 @@
    ⚠️ 这个目录**必须持久**——它不随容器重建消失，但也绝不能写成容器里的可写层路径
    （那会导致「库还在、照片全没」）。建议先手工 `mkdir -p /srv/fit-app/uploads`，
    免得 Docker 自动创建时属主不对。备份目录 `/srv/fit-app/backups/` 与它分开，别放在 uploads 里面。
+   动作动图另放在同一目录的 `exercise-media/` 下（[ADR 0055](../docs/adr/0055-exercise-dataset-and-media.md)），
+   不随镜像发布：在本机跑 `bash scripts/exercise-dataset/sync-media.sh aliyun:/srv/fit-app/uploads` 同步上去，
+   重跑只补缺。没同步时动作详情页照常显示文字，只是没有动图。
 8. **异地备份（OSS）**——**可后补，不挡发版**：没配 `OSS_BUCKET` 时 `backup-to-oss.sh` 会优雅跳过
    （不是失败），库与图片的本地备份照常。想启用时再补这一项：服务器上装并配置 ossutil，
    凭据只存在于服务器、**不进仓库**：

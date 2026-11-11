@@ -52,6 +52,7 @@ YYYY-MM-DD-TODO-<主题>.md
 
 | 文件 | 主题 | 状态 | 优先级 |
 |------|------|------|--------|
+| [2026-11-09-TODO-动作详情页.md](./2026-11-09-TODO-动作详情页.md) | 动作详情页（动图与要领已做；复盘部分的趋势指标、个人备注、入口范围待拍板；数据集译名待校） | 待办 | 中 |
 | [2026-11-09-TODO-餐次AI识别后续.md](./2026-11-09-TODO-餐次AI识别后续.md) | 餐次 AI 识别后续（真实照片效果待线上验证；钠已记下但还不显示） | 待办 | 中 |
 | [2026-11-07-TODO-UI走查修复验收.md](./2026-11-07-TODO-UI走查修复验收.md) | UI 走查修复验收（前端已随 0.33.1 上线；安卓壳 0.1.8 apk 已打，待装机验收系统栏配色） | 待办 | 中 |
 | [2026-11-06-TODO-GitHub账号计费锁定.md](./2026-11-06-TODO-GitHub账号计费锁定.md) | GitHub 账号计费锁定（Actions 全部拒跑，等客服；期间手工发版） | 待办 | 高 |
@@ -117,6 +118,7 @@ YYYY-MM-DD-TODO-<主题>.md
 | 记一餐 AI 识别：饭菜估算／营养成分表换算 → 不进库的临时条目；条目加钠快照 | [ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md) |
 | 识别明细可点开：多记服务商、思考参数、失败原因与模型原文；照片仍不留 | [ADR 0053](../adr/0053-recognition-log-detail.md) |
 | 识别详情显示价格：只算 DeepSeek，按峰谷估算；小卡与列表仍不显示费用 | [ADR 0054](../adr/0054-recognition-price-deepseek.md) |
+| 预置动作接入开源动作数据集：管理端导入、同名老预置只补资料；动图放上传目录、登录才给、不进仓库 | [ADR 0055](../adr/0055-exercise-dataset-and-media.md) |
 | 训练开始：**先选计划**（周安排退为决定谁置顶）；计划名自定义，「休息」唯一固定词 | [ADR 0004](../adr/0004-week-schedule-driven-start.md)（数据结构与休息语义）／[ADR 0016](../adr/0016-start-training-with-plan-picker.md)（**收窄 0004**） |
 | 部署：独立子域 `fit.11-2.cn` ＋ 复用 quizzy 的 MySQL 与发布链路 | [ADR 0005](../adr/0005-deploy-with-quizzy-infra.md) |
 | 会话页组次流程：按目标预填、点勾仅完成、动作自由切换＋全组完成自动切下一个未完成动作（计划目标＝组/次/重量）；**组内按顺序推进**（越级点勾无反应） | [ADR 0007](../adr/0007-session-set-flow-and-target-weight.md)、[ADR 0010](../adr/0010-session-free-switch-and-early-finish.md)、[ADR 0021](../adr/0021-session-set-order-and-undo.md) |
