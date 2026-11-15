@@ -13,6 +13,7 @@ import com.example.fitapp.module.nutrition.mapper.FoodRecognitionMapper;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
 import com.example.fitapp.module.nutrition.vo.MealDraftVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionLogDetailVO;
+import com.example.fitapp.module.nutrition.vo.RecognitionStatsVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +34,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -346,6 +349,28 @@ public class FoodRecognitionService {
         return vo;
     }
 
+    private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
+
+    /**
+     * 用量统计（「用量统计」页，ADR 0054 后续注记）：范围内的合计、平均、按模型／入口拆分与逐日序列。
+     * 峰谷逐条判断，金额只能取出来逐条算再累加；只查轻量列，自用数据量小，不缓存、不建汇总表。
+     */
+    public RecognitionStatsVO stats(Long userId, String range) {
+        RecognitionStats.Range r = RecognitionStats.Range.of(range);
+        LocalDate today = LocalDate.now(BEIJING);
+        LocalDate start = r.start(today);
+        List<FoodRecognition> rows = recognitionMapper.selectList(Wrappers.<FoodRecognition>lambdaQuery()
+                .select(FoodRecognition::getId, FoodRecognition::getKind, FoodRecognition::getModel,
+                        FoodRecognition::getTokensIn, FoodRecognition::getTokensOut,
+                        FoodRecognition::getCachedTokens, FoodRecognition::getReasoningTokens,
+                        FoodRecognition::getDurationMs, FoodRecognition::getSuccess, FoodRecognition::getCreatedAt)
+                .eq(FoodRecognition::getUserId, userId)
+                // 调用时刻 ≤ 记录时刻，按记录时刻粗筛不会漏；精确的边界在 RecognitionStats 里按调用时刻判
+                .ge(start != null, FoodRecognition::getCreatedAt, start == null ? null : start.atStartOfDay())
+                .orderByAsc(FoodRecognition::getId));
+        return RecognitionStats.compute(rows, r, today);
+    }
+
     /** 用量明细分页（新的在前）。 */
     public List<FoodRecognition> logs(Long userId, Integer limit, Integer offset) {
         int size = Math.min(Math.max(limit == null ? LOG_DEFAULT_SIZE : limit, 1), LOG_MAX_SIZE);
@@ -370,8 +395,7 @@ public class FoodRecognitionService {
         RecognitionLogDetailVO vo = new RecognitionLogDetailVO();
         vo.setLog(row);
         // 计费时刻取请求发出的时刻：记录是调用结束后写的，往回减掉耗时
-        LocalDateTime callTime = row.getCreatedAt() == null ? null
-                : row.getCreatedAt().minusNanos(1_000_000L * (row.getDurationMs() == null ? 0 : row.getDurationMs()));
+        LocalDateTime callTime = RecognitionStats.callTime(row);
         if (callTime != null) {
             vo.setPrice(DeepSeekPricing.estimate(row.getModel(), callTime,
                     nz(row.getTokensIn()), nz(row.getCachedTokens()), nz(row.getTokensOut())));

@@ -4,6 +4,23 @@ export function formatThousands(n: number): string {
 }
 
 /**
+ * 金额（人民币元）的统一写法——识别用量的统计页、摘要卡、详情页共用（ADR 0054 后续注记）：
+ * 只用 `¥`、不写「元」，也不换算成「分」；一元及以上两位小数（¥12.34），不到一元四位小数（¥0.0064）——
+ * 一次识别通常只有几厘钱，两位小数会全变成 ¥0.01；大于 0 但不到万分之一元写 `<¥0.0001`；0 写 ¥0.00。
+ */
+export function formatYuan(v: number | string | null | undefined): string {
+  const n = Number(v ?? 0)
+  if (!Number.isFinite(n) || n === 0) return '¥0.00'
+  const sign = n < 0 ? '-' : ''
+  const a = Math.abs(n)
+  if (a < 0.0001) return `${sign}<¥0.0001`
+  const four = a.toFixed(4)
+  if (Number(four) < 1) return `${sign}¥${four}`
+  const [int, dec] = a.toFixed(2).split('.')
+  return `${sign}¥${formatThousands(Number(int))}.${dec}`
+}
+
+/**
  * 「重量 × 次数」：重量为 0 视为**自重**（双杠臂屈伸、引体向上……），念「自重 × 12」，
  * 不念「0 kg × 12」——后者看着像漏填。`withUnit=false` 给汇总页那种不带 kg 的紧凑写法。
  * 重量缺省（null / 空串）仍按「–」占位：那是真没填，不是自重。

@@ -6,6 +6,7 @@ import com.example.fitapp.module.nutrition.service.FoodRecognitionService;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
 import com.example.fitapp.module.nutrition.vo.MealDraftVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionLogDetailVO;
+import com.example.fitapp.module.nutrition.vo.RecognitionStatsVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.example.fitapp.security.UserContext;
 import lombok.RequiredArgsConstructor;
@@ -51,13 +52,22 @@ public class FoodRecognitionController {
         return Result.success(service.usage(UserContext.requireUserId()));
     }
 
-    /** 用量明细分页（新的在前；含输入/输出/缓存命中 token、模型、耗时、成败）。 */
+    /**
+     * 用量统计（「用量统计」页）：range＝all / month / week；合计、平均、按模型／入口拆分、逐日序列，
+     * 金额按 DeepSeek 价目逐条估算后合计（ADR 0054 后续注记）。
+     */
+    @GetMapping("/stats")
+    public Result<RecognitionStatsVO> stats(@RequestParam(required = false) String range) {
+        return Result.success(service.stats(UserContext.requireUserId(), range));
+    }
+
     /** 一条流水的全部信息（详情页用，ADR 0053）：含模型原始输出、失败原因、服务商与思考参数，以及价格估算（ADR 0054）。 */
     @GetMapping("/logs/{id}")
     public Result<RecognitionLogDetailVO> logDetail(@PathVariable Long id) {
         return Result.success(service.logDetail(UserContext.requireUserId(), id));
     }
 
+    /** 用量明细分页（新的在前；含输入/输出/缓存命中 token、模型、耗时、成败）。 */
     @GetMapping("/logs")
     public Result<List<FoodRecognition>> logs(@RequestParam(required = false) Integer limit,
                                               @RequestParam(required = false) Integer offset) {

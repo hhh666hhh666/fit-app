@@ -27,6 +27,11 @@ const props = defineProps<{
    * 组件本身不感知单位——单位换算留在调用方，别渗进绘图层。
    */
   formatValue?: (v: number) => string
+  /**
+   * 左侧 y 轴刻度的格式化（不传则取整）。值域很小的序列（如识别用量的金额，几厘钱）取整会全变成 0，
+   * 才需要传；刻度区只有约 34px 宽，写法要紧凑。
+   */
+  formatTick?: (v: number) => string
 }>()
 
 const MIN_SPAN = 3
@@ -182,7 +187,7 @@ function draw() {
     ctx.moveTo(PL, gy)
     ctx.lineTo(w - PR, gy)
     ctx.stroke()
-    ctx.fillText(String(Math.round(t)), 6, gy + 3)
+    ctx.fillText(props.formatTick ? props.formatTick(t) : String(Math.round(t)), 6, gy + 3)
   }
 
   // 目标线

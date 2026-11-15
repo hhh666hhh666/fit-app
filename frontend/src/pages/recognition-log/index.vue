@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
-import { listRecognitionLogs, type RecognitionLogItem } from '@/api/nutrition'
-import { formatDateTimeLabel, formatThousands } from '@/utils/format'
+import { getRecognitionStats, listRecognitionLogs, type RecognitionLogItem, type RecognitionStats } from '@/api/nutrition'
+import { formatDateTimeLabel, formatThousands, formatYuan } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtEmpty from '@/components/FtEmpty.vue'
+import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 
-// ── 识别明细（ADR 0018）：逐条流水——输入/输出/缓存命中 token、模型、耗时、成败；不显示费用 ──
+// ── 识别明细（ADR 0018）：逐条流水——输入/输出/缓存命中 token、模型、耗时、成败；列表不显示费用，
+//    顶部摘要卡（全部范围的估算金额）点进「用量统计」页（ADR 0054 后续注记） ──
 
 const PAGE_SIZE = 50
 
@@ -16,10 +18,26 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const finished = ref(false)
 
+/** 顶部摘要卡：固定按「全部」统计，点进「用量统计」页（ADR 0054 后续注记）。 */
+const summary = ref<RecognitionStats | null>(null)
+
 onShow(() => {
   if (!ensureLogin()) return
   void reload()
+  void loadSummary()
 })
+
+async function loadSummary() {
+  try {
+    summary.value = await getRecognitionStats('all')
+  } catch {
+    // unwrap 已提示；摘要卡缺了不影响明细
+  }
+}
+
+function openStats() {
+  uni.navigateTo({ url: '/pages/recognition-log/stats' })
+}
 
 async function reload() {
   loading.value = true
@@ -77,6 +95,16 @@ function durationText(ms: number): string {
     <view class="rlog__body">
       <FtPageHeader title="识别明细" back />
 
+      <view v-if="summary && summary.requests > 0" class="glass sum" role="button" @click="openStats">
+        <view class="sum__main">
+          <text class="sum__k">用量统计 · 全部</text>
+          <text class="sum__v ft-num">
+            估算 {{ summary.pricedRequests > 0 ? formatYuan(summary.cost) : '未计价' }} · {{ formatThousands(summary.totalTokens) }} token · {{ formatThousands(summary.requests) }} 次
+          </text>
+        </view>
+        <FtIcon name="chevron-right" :size="18" />
+      </view>
+
       <text class="note">每次拍照识别一条：用了多少 token、哪个模型、花了多久；点一条看全部信息</text>
 
       <view class="glass rlist">
@@ -113,6 +141,33 @@ function durationText(ms: number): string {
 
 .glass {
   @include glass-card;
+}
+
+.sum {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 28rpx;
+  color: $app-ink-subtle;
+  @include press(dim);
+}
+
+.sum__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.sum__k {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.sum__v {
+  font-size: $text-md;
+  color: $app-ink;
 }
 
 .note {

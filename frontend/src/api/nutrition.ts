@@ -520,3 +520,68 @@ export function getSettings() {
 export function updateSettings(payload: DietSetting) {
   return mutating('diet', () => unwrap(request.put<DietSetting>('/settings', payload)))
 }
+
+/** 用量统计的时间范围：全部 / 本月 / 近 7 天（北京时间，按请求发出的时刻划）。 */
+export type RecognitionStatsRange = 'all' | 'month' | 'week'
+
+/** 用量统计里按模型或按入口的一组。 */
+export interface RecognitionStatsGroup {
+  /** 模型名或入口（label / meal）；null＝老记录没记。 */
+  key: string | null
+  requests: number
+  /** token 合计（输入＋输出）。 */
+  tokens: number
+  /** 能计价部分的金额（元）。 */
+  cost: number
+  /** 其中算不了价的次数；等于 requests 时整组「未计价」。 */
+  unpricedRequests: number
+}
+
+/** 用量统计的一天。 */
+export interface RecognitionStatsDay {
+  date: string
+  requests: number
+  tokens: number
+  cost: number
+}
+
+/**
+ * 识别用量统计（「用量统计」页，ADR 0054 后续注记）。金额只合计能计价的记录（目前只有 DeepSeek），
+ * 由后端逐条估算后合计——前端不存价目。失败的调用照算 token 与钱。
+ */
+export interface RecognitionStats {
+  range: RecognitionStatsRange
+  /** 范围起止日；「全部」且没有记录时为 null。 */
+  from: string | null
+  to: string | null
+  requests: number
+  successes: number
+  failures: number
+  /** 输入（含缓存命中）、其中缓存命中、输出、其中思考、合计（输入＋输出）。 */
+  tokensIn: number
+  cachedTokens: number
+  tokensOut: number
+  reasoningTokens: number
+  totalTokens: number
+  cacheHitRate: number | null
+  cost: number
+  peakCost: number
+  offPeakCost: number
+  pricedRequests: number
+  unpricedRequests: number
+  unpricedTokens: number
+  avgTokens: number | null
+  avgCost: number | null
+  avgDurationMs: number | null
+  /** 能计价的记录落在放假表没覆盖的年份（这些年节假日只按周末判断）。 */
+  uncoveredHolidayYears: number[]
+  byModel: RecognitionStatsGroup[]
+  byKind: RecognitionStatsGroup[]
+  /** 从 from 到 to 每天一点，没记录的天为 0。 */
+  daily: RecognitionStatsDay[]
+}
+
+/** 用量统计。**不缓存**：识别一次就变。 */
+export function getRecognitionStats(range: RecognitionStatsRange = 'all') {
+  return read<RecognitionStats>('/food-recognition/stats', { range }, 'food', false)
+}

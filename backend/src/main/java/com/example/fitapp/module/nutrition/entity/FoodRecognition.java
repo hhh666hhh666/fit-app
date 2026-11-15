@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * 标签识别用量流水（ADR 0018）：每次识别调用一条，只增不改不删。
  *
  * <p>失败的调用也记——token 真实花了。cached_tokens 是输入 token 里命中隐式缓存的
- * 部分（单价不同，必须单列，混在一起算不清）。本表不折算费用（拍定口径）。</p>
+ * 部分（单价不同，必须单列，混在一起算不清）。本表不存费用：金额由详情与统计接口按记录现算（ADR 0054）。</p>
  */
 @Data
 @TableName("food_recognition")

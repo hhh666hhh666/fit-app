@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getRecognitionLog, type RecognitionLogDetail } from '@/api/nutrition'
-import { formatBytes, formatThousands } from '@/utils/format'
+import { formatBytes, formatThousands, formatYuan } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 
@@ -95,22 +95,7 @@ const tokens = computed(() => {
   return rows
 })
 
-/** 元：一分钱以下给 6 位小数，否则 4 位；去掉末尾的 0。 */
-function yuan(v: number | null | undefined): string {
-  const n = Number(v ?? 0)
-  if (n === 0) return '0 元'
-  const s = n < 0.01 ? n.toFixed(6) : n.toFixed(4)
-  return `${s.replace(/\.?0+$/, '')} 元`
-}
-
 const price = computed(() => rec.value?.price ?? null)
-
-/** 合计的「约多少分」：几厘钱的数直接读元不直观。 */
-const centText = computed(() => {
-  const t = Number(price.value?.total ?? 0)
-  if (t <= 0 || t >= 1) return ''
-  return `约 ${Number((t * 100).toFixed(3))} 分`
-})
 
 const durationText = computed(() => {
   const ms = rec.value?.durationMs ?? 0
@@ -234,16 +219,15 @@ function copy(text: string | null | undefined, what: string) {
           <text class="card__title">价格</text>
           <template v-if="price && price.supported">
             <view class="price">
-              <text class="price__total ft-num">{{ yuan(price.total) }}</text>
-              <text v-if="centText" class="price__cent ft-num">{{ centText }}</text>
+              <text class="price__total ft-num">{{ formatYuan(price.total) }}</text>
               <text class="badge" :class="price.peak ? 'badge--fail' : 'badge--ok'">{{ price.peak ? '高峰价' : '空闲价（半价）' }}</text>
             </view>
             <view v-for="it in price.items" :key="it.label" class="kv kv--stack">
               <view class="kv__row">
                 <text class="kv__k">{{ it.label }}</text>
-                <text class="kv__v ft-num">{{ yuan(it.cost) }}</text>
+                <text class="kv__v ft-num">{{ formatYuan(it.cost) }}</text>
               </view>
-              <text class="kv__calc ft-num">{{ formatThousands(it.tokens) }} token × {{ it.unitPrice }} 元 / 百万</text>
+              <text class="kv__calc ft-num">{{ formatThousands(it.tokens) }} token × ¥{{ it.unitPrice }} / 百万 token</text>
             </view>
             <view class="kv kv--stack">
               <text class="kv__k">时段</text>
@@ -482,11 +466,6 @@ function copy(text: string | null | undefined, what: string) {
   font-size: $text-xl;
   font-weight: $weight-heavy;
   color: $app-ink;
-}
-
-.price__cent {
-  font-size: $text-sm;
-  color: $app-ink-muted;
 }
 
 .kv__k {
