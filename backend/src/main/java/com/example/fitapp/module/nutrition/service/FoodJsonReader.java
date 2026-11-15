@@ -15,7 +15,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 食物 JSON 的读法（snake_case；kcal 或 kj 二选一，给 kJ 自动换算；常用份是嵌套的 {label, grams}）。
+ * 食物 JSON 的读法（snake_case；kcal 或 kj 二选一，给 kJ 自动换算；常用份是嵌套的 {label, grams}；
+ * 别名 aliases 是字符串数组，也可以是一个分隔好的串，读完已经规整过）。
  * App 的自建食物导入和管理端的预置导入共用这一份，格式只有一种。
  * 只管「读成 DTO」，查重和 Bean Validation 由调用方各自决定。
  */
@@ -81,6 +82,14 @@ public final class FoodJsonReader {
             return new Read(null, "字段类型不正确");
         }
         item.setName(name);
+        // 导入文件里的 copy_image_from 不认：图片只在 App 里「复制为自定义」时复制
+        item.setCopyImageFrom(null);
+
+        FoodAliases.Parsed aliases = FoodAliases.parse(item.getAliases(), name);
+        if (aliases.error() != null) {
+            return new Read(null, aliases.error());
+        }
+        item.setAliases(aliases.aliases());
 
         // 能量：kcal 或 kj（二选一；给 kJ 自动换算）
         if (item.getKcal() == null && node.hasNonNull("kj")) {

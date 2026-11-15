@@ -297,11 +297,12 @@ public class DietService {
         return id[0];
     }
 
-    /** 容量闸（ADR 0013）：餐照和日记图片共用一个上限（ADR 0044），超限直接拒绝。 */
+    /** 容量闸（ADR 0013）：餐照、日记图片、头像、自建食物的图片共用一个上限（ADR 0044、0051、0057），超限直接拒绝。 */
     public void checkPhotoQuota(Long userId, long delta) {
         // 回收站里的文件还在磁盘上，要算进去（ADR 0047）
         long used = mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId)
-                + avatarMapper.sumBytes(userId) + trashItemMapper.sumPhotoBytes(userId);
+                + avatarMapper.sumBytes(userId) + foodMapper.sumImageBytes(userId)
+                + trashItemMapper.sumPhotoBytes(userId);
         if (used + delta > photoQuotaBytes) {
             throw new BusinessException(ResultCode.BAD_REQUEST,
                     "照片空间已满（上限 " + quotaText() + "），请先到相册或回收站清理");
@@ -323,9 +324,9 @@ public class DietService {
     public StorageVO storage(Long userId) {
         StorageVO vo = new StorageVO();
         long trashBytes = trashItemMapper.sumPhotoBytes(userId);
-        // 头像也占照片空间，但不进相册，所以只算字节、不算张数（ADR 0051）
+        // 头像和食物图片也占照片空间，但不进相册，所以只算字节、不算张数（ADR 0051、0057）
         vo.setPhotoBytes(mealPhotoMapper.sumBytes(userId) + diaryPhotoMapper.sumBytes(userId)
-                + avatarMapper.sumBytes(userId) + trashBytes);
+                + avatarMapper.sumBytes(userId) + foodMapper.sumImageBytes(userId) + trashBytes);
         vo.setTrashBytes(trashBytes);
         vo.setPhotoCount((int) (mealPhotoMapper.countByUser(userId) + diaryPhotoMapper.countByUser(userId)));
         vo.setPhotoQuotaBytes(photoQuotaBytes);

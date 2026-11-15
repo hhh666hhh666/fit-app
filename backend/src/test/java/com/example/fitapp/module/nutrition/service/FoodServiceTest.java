@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,8 +63,12 @@ class FoodServiceTest {
     @Mock
     private FoodMapper foodMapper;
 
+    @Mock
+    private FoodImageService foodImageService;
+
     private FoodService service() {
-        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR, foodTrash, presetHiddenService);
+        return new FoodService(foodMapper, new ObjectMapper(), VALIDATOR, foodTrash, presetHiddenService,
+                foodImageService);
     }
 
     private static FoodSaveDTO dto(String name) {
@@ -202,7 +207,7 @@ class FoodServiceTest {
         full.setKcal(new BigDecimal("118"));
         full.setCalcium(new BigDecimal("100"));
         Food preset = presetFood(99L);
-        when(foodMapper.selectList(any())).thenReturn(List.of(full, preset));
+        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of(full, preset));
 
         List<Food> lite = service().listLite(7L, null, 10, 0);
 
@@ -289,22 +294,152 @@ class FoodServiceTest {
         verify(foodMapper, never()).update(ArgumentMatchers.<Food>isNull(), any());
     }
 
-    // ── 列表排序：收藏置顶 → 浏览次数降序 → 名称 ──
+    // ── 列表与搜索（ADR 0056）：排序写死在 FoodMapper.search 的注解 SQL 里，这里测传进去的参数 ──
 
     @Test
-    void listOrder_favoriteFirst_thenViewCount() {
-        when(foodMapper.selectList(any())).thenReturn(List.of());
+    void list_noKeyword_passesNoTermsAndRecentWindow() {
+        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
-        service().listLite(7L, null, 10, 0);
+        service().listLite(7L, "   ", 10, 20);
+
+        ArgumentCaptor<java.time.LocalDate> since = ArgumentCaptor.forClass(java.time.LocalDate.class);
+        var wrapper = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(foodMapper).search(wrapper.capture(), isNull(), eq(7L), since.capture(), eq(20), eq(10));
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"));
+        assertEquals(today.minusDays(FoodService.RECENT_DAYS - 1L), since.getValue(), "近 30 天含今天");
+        String sql = wrapper.getValue().getSqlSegment().toUpperCase();
+        assertFalse(sql.contains("ORDER BY"), "排序只在注解 SQL 里写，wrapper 不该带：" + sql);
+        assertFalse(sql.contains("LIKE"), "没有关键词就不该筛名字：" + sql);
+    }
+
+    @Test
+    void list_keyword_filtersNameOrAliasesInCharOrder() {
+        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+
+        service().listLite(7L, " 猪肠 ", null, null);
+
+        ArgumentCaptor<FoodSearch> terms = ArgumentCaptor.forClass(FoodSearch.class);
+        var wrapper = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(foodMapper).search(wrapper.capture(), terms.capture(), eq(7L), any(), isNull(), isNull());
+        assertEquals("猪肠", terms.getValue().getKw());
+        assertEquals("%猪%肠%", terms.getValue().getFuzzy());
+        String sql = wrapper.getValue().getSqlSegment();
+        assertTrue(sql.contains("food.name LIKE") && sql.contains("food.aliases LIKE"),
+                "要同时筛名字和别名：" + sql);
+    }
+
+    @Test
+    void count_keyword_usesSameFuzzyFilter() {
+        when(foodMapper.selectCount(any())).thenReturn(1L, 2L);
+
+        service().count(7L, "猪肠");
+
+        var captor = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(foodMapper, org.mockito.Mockito.times(2)).selectCount(captor.capture());
+        for (var w : captor.getAllValues()) {
+            String sql = w.getSqlSegment();
+            assertTrue(sql.contains("food.aliases LIKE"), "计数和列表的筛选要一致，否则滚动到底判断会错：" + sql);
+        }
+    }
+
+    // ── 别名（ADR 0056）──
+
+    @Test
+    void create_normalizesAliases() {
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        FoodSaveDTO d = dto("猪大肠");
+        d.setAliases(List.of(" 肥肠、大肠头 ", "肥肠", "猪大肠", ""));
+
+        service().create(7L, d);
+
+        ArgumentCaptor<Food> captor = ArgumentCaptor.forClass(Food.class);
+        verify(foodMapper).insert(captor.capture());
+        assertEquals(List.of("肥肠", "大肠头"), captor.getValue().getAliases(), "拆分、去重、去掉和名字一样的");
+    }
+
+    @Test
+    void create_tooManyAliases_throws() {
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        FoodSaveDTO d = dto("猪大肠");
+        d.setAliases(List.of("a b c d e f g h i j k"));
+
+        BusinessException e = assertThrows(BusinessException.class, () -> service().create(7L, d));
+        assertTrue(e.getMessage().contains("10"));
+    }
+
+    @Test
+    void update_setsAliasesColumnAsJoinedText() {
+        when(foodMapper.selectById(10L)).thenReturn(ownFood(10L, 7L));
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        FoodSaveDTO d = dto("猪大肠");
+        d.setAliases(List.of("肥肠", "大肠头"));
+
+        service().update(7L, 10L, d);
 
         var captor = ArgumentCaptor.forClass(
-                com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
-        verify(foodMapper).selectList(captor.capture());
-        String sql = captor.getValue().getSqlSegment().toUpperCase();
-        int fav = sql.indexOf("FAVORITE");
-        int view = sql.indexOf("VIEW_COUNT");
-        assertTrue(fav >= 0 && view >= 0 && fav < view,
-                "排序应为「收藏优先、再按浏览次数」：" + sql);
+                com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper.class);
+        verify(foodMapper).update(ArgumentMatchers.<Food>isNull(), captor.capture());
+        assertTrue(captor.getValue().getSqlSet().contains("aliases"), captor.getValue().getSqlSet());
+        assertTrue(captor.getValue().getParamNameValuePairs().containsValue("肥肠|大肠头"),
+                "wrapper 的 set 不走 TypeHandler，要直接给存库的写法：" + captor.getValue().getParamNameValuePairs());
+    }
+
+    @Test
+    void import_readsAliasesFromArrayOrString() {
+        when(foodMapper.selectList(any())).thenReturn(List.of());
+        String text = """
+                [{"name":"猪大肠","aliases":["肥肠","大肠头"],"kcal":196,"protein":6.9,"fat":18.7,"carb":0,"sodium":116},
+                 {"name":"马铃薯","aliases":"土豆、洋芋","kcal":81,"protein":2.6,"fat":0.2,"carb":17.8,"sodium":5.9}]
+                """;
+
+        ImportResultVO r = service().importText(7L, text);
+
+        assertEquals(2, r.getImported());
+        ArgumentCaptor<Food> captor = ArgumentCaptor.forClass(Food.class);
+        verify(foodMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        assertEquals(List.of("肥肠", "大肠头"), captor.getAllValues().get(0).getAliases());
+        assertEquals(List.of("土豆", "洋芋"), captor.getAllValues().get(1).getAliases());
+    }
+
+    @Test
+    void export_includesAliases() {
+        Food f = ownFood(1L, 7L);
+        f.setUnit("g");
+        f.setAliases(List.of("肥肠"));
+
+        Map<String, Object> m = service().toJsonMap(f);
+
+        assertEquals(List.of("肥肠"), m.get("aliases"));
+    }
+
+    // ── 复制为自定义带上图片（ADR 0057）──
+
+    @Test
+    void create_copyImageFrom_writesImageColumns() {
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        when(foodImageService.copyFrom(7L, 99L)).thenReturn(new FoodImageService.Copied("abc", 1234));
+        FoodSaveDTO d = dto("猪大肠");
+        d.setCopyImageFrom(99L);
+
+        service().create(7L, d);
+
+        ArgumentCaptor<Food> captor = ArgumentCaptor.forClass(Food.class);
+        verify(foodMapper).insert(captor.capture());
+        assertEquals("abc", captor.getValue().getImageKey());
+        assertEquals(1234, captor.getValue().getImageBytes());
+    }
+
+    @Test
+    void create_insertFails_discardsCopiedImage() {
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        FoodImageService.Copied copied = new FoodImageService.Copied("abc", 1234);
+        when(foodImageService.copyFrom(7L, 99L)).thenReturn(copied);
+        when(foodMapper.insert(any(Food.class))).thenThrow(new RuntimeException("db"));
+        FoodSaveDTO d = dto("猪大肠");
+        d.setCopyImageFrom(99L);
+
+        assertThrows(RuntimeException.class, () -> service().create(7L, d));
+        verify(foodImageService).discard(7L, copied);
     }
 
     @Test

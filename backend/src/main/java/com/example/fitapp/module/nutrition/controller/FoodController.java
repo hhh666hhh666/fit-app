@@ -1,15 +1,20 @@
 package com.example.fitapp.module.nutrition.controller;
 
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
+import com.example.fitapp.module.account.dto.CropDTO;
 import com.example.fitapp.module.nutrition.dto.FoodImportDTO;
 import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
+import com.example.fitapp.module.nutrition.service.FoodImageService;
 import com.example.fitapp.module.nutrition.service.FoodService;
 import com.example.fitapp.module.nutrition.vo.ImportResultVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import jakarta.validation.groups.Default;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,13 +25,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * 食物库接口：列表（搜索；lite=轻量字段＋limit/offset 分页，收藏置顶→浏览次数降序）+ 计数 +
- * 单条 / 浏览次数 +1 / 收藏标记 / 新建 / 编辑 / 删除 / JSON 文本导入 / 导出。
+ * 食物库接口：列表（搜索匹配名字和别名；lite=轻量字段＋limit/offset 分页；排序见 ADR 0056）+ 计数 +
+ * 单条 / 浏览次数 +1 / 收藏标记 / 新建 / 编辑 / 删除 / JSON 文本导入 / 导出 / 食物图片（ADR 0057）。
  * 列表与单条对「系统预置 + 自有」合并返回；预置的改删被服务层拦截（只读）。
  */
 @RestController
@@ -35,6 +41,7 @@ import java.util.Map;
 public class FoodController {
 
     private final FoodService foodService;
+    private final FoodImageService foodImageService;
 
     @GetMapping
     public Result<List<Food>> list(@RequestParam(required = false) String q,
@@ -87,6 +94,37 @@ public class FoodController {
     public Result<Void> delete(@PathVariable Long id) {
         foodService.delete(UserContext.requireUserId(), id);
         return Result.success();
+    }
+
+    /** 设食物图片（multipart：file ＋ 裁剪框 x、y、size，按摆正后的原图像素；不给框就居中取短边）。只限自建食物。 */
+    @PostMapping("/{id}/image")
+    public Result<Food> setImage(@PathVariable Long id,
+                                 @RequestParam("file") MultipartFile file,
+                                 @RequestParam(required = false) Integer x,
+                                 @RequestParam(required = false) Integer y,
+                                 @RequestParam(required = false) Integer size) {
+        return Result.success(foodImageService.setOwn(UserContext.requireUserId(), id, file, crop(x, y, size)));
+    }
+
+    /** 去掉食物图片（旧图直接删，不进回收站）。只限自建食物。 */
+    @DeleteMapping("/{id}/image")
+    public Result<Void> removeImage(@PathVariable Long id) {
+        foodImageService.removeOwn(UserContext.requireUserId(), id);
+        return Result.success();
+    }
+
+    /** 直出食物图片；kind＝thumb 取缩略图，否则取方图。预置与自有均可取；没有图 → 404。 */
+    @GetMapping("/{id}/image")
+    public ResponseEntity<Resource> image(@PathVariable Long id, @RequestParam(defaultValue = "full") String kind) {
+        return PhotoData.response(foodImageService.image(UserContext.requireUserId(), id, kind));
+    }
+
+    static CropDTO crop(Integer x, Integer y, Integer size) {
+        CropDTO c = new CropDTO();
+        c.setX(x);
+        c.setY(y);
+        c.setSize(size);
+        return c;
     }
 
     @PostMapping("/import")

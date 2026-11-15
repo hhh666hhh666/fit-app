@@ -1,6 +1,7 @@
 package com.example.fitapp.module.nutrition.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.common.BusinessException;
@@ -21,8 +22,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +32,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 食物库：列表（收藏置顶 → 浏览次数降序 → 名称）/ 单条增改删 / 浏览次数 +1 / 收藏标记 /
- * JSON 文本导入 / 导出。
+ * 食物库：列表与搜索（按匹配度分档 → 收藏 → 近 30 天记录次数 → 自建优先 → 名称，ADR 0056）/
+ * 单条增改删 / 浏览次数 +1 / 收藏标记 / JSON 文本导入 / 导出。
  * 库内两种来源：**系统预置**（user_id 为空，只读，可「复制为自定义」）＋ **用户自建**；
  * 列表/搜索两者合并返回；编辑为**整体覆盖**（空值要能清掉，走显式 set——全局 not_null 会跳过 null）。
  */
@@ -41,16 +43,20 @@ public class FoodService {
 
     /** 轻量列表的条数上限（防一次性拉全库）。 */
     private static final int LITE_MAX_LIMIT = 500;
+    /** 「常用」看最近多少天的记录次数（含今天）。 */
+    static final int RECENT_DAYS = 30;
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     private final FoodMapper foodMapper;
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final FoodTrash foodTrash;
     private final PresetHiddenService presetHiddenService;
+    private final FoodImageService foodImageService;
 
-    /** 列表/搜索：预置 + 自有合并，按浏览次数降序（常用上浮，同值按名称）。 */
+    /** 列表/搜索：预置 + 自有合并，排序见类注释。 */
     public List<Food> list(Long userId, String q) {
-        List<Food> foods = foodMapper.selectList(baseQuery(userId, q));
+        List<Food> foods = search(userId, q, null, null);
         foods.forEach(this::fillPreset);
         return foods;
     }
@@ -60,13 +66,25 @@ public class FoodService {
      * limit/offset 用于滚动分页（食物库页每页 100 条）；limit 为空表示不分页。
      */
     public List<Food> listLite(Long userId, String q, Integer limit, Integer offset) {
-        LambdaQueryWrapper<Food> w = baseQuery(userId, q);
+        Integer size = null;
+        Integer start = null;
         if (limit != null) {
-            int size = Math.min(Math.max(limit, 1), LITE_MAX_LIMIT);
-            int start = offset == null ? 0 : Math.max(offset, 0);
-            w.last("LIMIT " + start + ", " + size);
+            size = Math.min(Math.max(limit, 1), LITE_MAX_LIMIT);
+            start = offset == null ? 0 : Math.max(offset, 0);
         }
-        return foodMapper.selectList(w).stream().map(this::toLite).toList();
+        return search(userId, q, start, size).stream().map(this::toLite).toList();
+    }
+
+    private List<Food> search(Long userId, String q, Integer offset, Integer limit) {
+        FoodSearch terms = FoodSearch.of(q);
+        QueryWrapper<Food> w = Wrappers.<Food>query()
+                // 自建的 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
+                .apply(PresetSql.FOOD_VISIBLE, userId);
+        if (terms != null) {
+            w.apply(FoodSearch.FILTER, terms.getFuzzy());
+        }
+        LocalDate since = LocalDate.now(ZONE).minusDays(RECENT_DAYS - 1L);
+        return foodMapper.search(w, terms, userId, since, offset, limit);
     }
 
     /** 浏览次数 +1（详情页查看时调用）。预置与自有均可浏览；不存在或他人私有 → 404。 */
@@ -111,28 +129,15 @@ public class FoodService {
     }
 
     private LambdaQueryWrapper<Food> scopeQuery(Long ownerId, String q) {
-        String kw = q == null ? null : q.trim();
+        FoodSearch terms = FoodSearch.of(q);
         LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery()
-                .like(StringUtils.hasText(kw), Food::getName, kw);
+                .apply(terms != null, FoodSearch.FILTER, terms == null ? null : terms.getFuzzy());
         if (ownerId == null) {
             w.isNull(Food::getUserId);
         } else {
             w.eq(Food::getUserId, ownerId);
         }
         return w;
-    }
-
-    private LambdaQueryWrapper<Food> baseQuery(Long userId, String q) {
-        String kw = q == null ? null : q.trim();
-        return Wrappers.<Food>lambdaQuery()
-                // 自建的 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
-                .apply(PresetSql.FOOD_VISIBLE, userId)
-                .like(StringUtils.hasText(kw), Food::getName, kw)
-                // 排序：① 收藏置顶 ② 个人常用度（浏览次数降序）③ 名称、id 升序（保证分页稳定）
-                .orderByDesc(Food::getFavorite)
-                .orderByDesc(Food::getViewCount)
-                .orderByAsc(Food::getName)
-                .orderByAsc(Food::getId);
     }
 
     /** 只查自有（不含预置）：导出、导入查重专用。 */
@@ -151,9 +156,30 @@ public class FoodService {
         food.setUserId(userId);
         food.setName(name);
         food.setUnit(normalizeUnit(dto.getUnit()));
-        foodMapper.insert(food);
+        food.setAliases(aliasesOf(dto, name));
+        // 「复制为自定义」带上来源的图片（ADR 0057）；复制不成就当没有图
+        FoodImageService.Copied image = foodImageService.copyFrom(userId, dto.getCopyImageFrom());
+        if (image != null) {
+            food.setImageKey(image.imageKey());
+            food.setImageBytes(image.bytes());
+        }
+        try {
+            foodMapper.insert(food);
+        } catch (RuntimeException e) {
+            foodImageService.discard(userId, image);
+            throw e;
+        }
         food.setPreset(false);
         return food;
+    }
+
+    /** 规整别名；不合规直接报错（单条编辑用）。 */
+    public static List<String> aliasesOf(FoodSaveDTO dto, String name) {
+        FoodAliases.Parsed parsed = FoodAliases.parse(dto.getAliases(), name);
+        if (parsed.error() != null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, parsed.error());
+        }
+        return parsed.aliases();
     }
 
     public Food update(Long userId, Long id, FoodSaveDTO dto) {
@@ -187,11 +213,14 @@ public class FoodService {
 
     /**
      * 编辑是<b>整体覆盖</b>：可选字段要能被清空。全局 update-strategy=not_null，updateById 会静默跳过 null，
-     * 所以这里显式 set（含 null）。收藏、浏览次数、分类、下架标记不在这里（管理端另行处理分类）。
+     * 所以这里显式 set（含 null）。收藏、浏览次数、分类、下架标记、图片不在这里（管理端另行处理分类）。
+     * 别名不合规直接报错；导入路径的别名在 {@link FoodJsonReader} 里已经规整过，这里再规整一遍结果不变。
      */
     public static LambdaUpdateWrapper<Food> overwrite(LambdaUpdateWrapper<Food> w, String name, FoodSaveDTO dto) {
+        // 别名列有 TypeHandler，但 wrapper 的 set 不走它，所以直接给存库的写法
         return w
                 .set(Food::getName, name)
+                .set(Food::getAliases, FoodAliases.join(aliasesOf(dto, name)))
                 .set(Food::getUnit, normalizeUnit(dto.getUnit()))
                 .set(Food::getKcal, dto.getKcal())
                 .set(Food::getProtein, dto.getProtein())
@@ -294,6 +323,7 @@ public class FoodService {
             food.setUserId(userId);
             food.setName(name);
             food.setUnit(normalizeUnit(item.getUnit()));
+            food.setAliases(item.getAliases());
             foodMapper.insert(food);
             seen.add(name);
             result.setImported(result.getImported() + 1);
@@ -304,6 +334,9 @@ public class FoodService {
     public Map<String, Object> toJsonMap(Food f) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", f.getName());
+        if (f.getAliases() != null && !f.getAliases().isEmpty()) {
+            m.put("aliases", f.getAliases());
+        }
         m.put("unit", f.getUnit());
         putIfNotNull(m, "kcal", f.getKcal());
         putIfNotNull(m, "protein", f.getProtein());
@@ -403,6 +436,8 @@ public class FoodService {
         Food lite = new Food();
         lite.setId(f.getId());
         lite.setName(f.getName());
+        lite.setAliases(f.getAliases());
+        lite.setImageKey(f.getImageKey());
         lite.setUnit(f.getUnit());
         lite.setCategory(f.getCategory());
         lite.setArchived(f.getArchived());

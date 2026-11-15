@@ -2,6 +2,7 @@ package com.example.fitapp.module.nutrition.service;
 
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
+import com.example.fitapp.module.nutrition.storage.PhotoStorage;
 import com.example.fitapp.module.trash.entity.TrashItem;
 import com.example.fitapp.module.trash.mapper.TrashItemMapper;
 import com.example.fitapp.module.trash.service.TrashStore;
@@ -29,8 +30,44 @@ class FoodTrashTest {
     @Mock
     private TrashItemMapper trashItemMapper;
 
+    @Mock
+    private PhotoStorage photoStorage;
+
     private FoodTrash trash() {
-        return new FoodTrash(foodMapper, new TrashStore(trashItemMapper, new ObjectMapper()));
+        return new FoodTrash(foodMapper, new TrashStore(trashItemMapper, new ObjectMapper()), photoStorage);
+    }
+
+    @Test
+    void 有图片的食物_快照带上图片与字节数_恢复时别名和图片都回来() {
+        Food f = new Food();
+        f.setId(5L);
+        f.setUserId(7L);
+        f.setName("猪大肠");
+        f.setAliases(java.util.List.of("肥肠", "大肠头"));
+        f.setImageKey("abc");
+        f.setImageBytes(4096);
+        ArgumentCaptor<TrashItem> put = ArgumentCaptor.forClass(TrashItem.class);
+
+        trash().put(7L, f);
+
+        verify(trashItemMapper).insert(put.capture());
+        assertEquals(4096L, put.getValue().getPhotoBytes(), "回收站里的图片照样占照片空间");
+        when(foodMapper.selectCount(any())).thenReturn(0L);
+        trash().restore(7L, put.getValue());
+        ArgumentCaptor<Food> saved = ArgumentCaptor.forClass(Food.class);
+        verify(foodMapper).insert(saved.capture());
+        assertEquals(java.util.List.of("肥肠", "大肠头"), saved.getValue().getAliases());
+        assertEquals("abc", saved.getValue().getImageKey());
+    }
+
+    @Test
+    void 彻底删除时删掉图片文件() {
+        TrashItem i = new TrashItem();
+        i.setSnapshot("{\"id\":5,\"userId\":7,\"name\":\"猪大肠\",\"imageKey\":\"abc\"}");
+
+        trash().purge(i);
+
+        verify(photoStorage).delete("7/food/abc");
     }
 
 

@@ -1,5 +1,6 @@
 package com.example.fitapp.module.nutrition.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 单条新建 / 编辑食物。字段全集与《食物营养字段参考》一一对应（另加扩展字段 GI）；
@@ -24,6 +26,19 @@ public class FoodSaveDTO {
     @NotBlank(message = "食物名不能为空")
     @Size(max = 64, message = "食物名过长")
     private String name;
+
+    /**
+     * 别名（ADR 0056）：可以给一个列表，也可以给一个用顿号、逗号或空格分隔的串，规整与上限由服务层处理。
+     * 编辑是整体覆盖：不给＝清空。
+     */
+    @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+    private List<String> aliases;
+
+    /**
+     * 只在新建时有用：把这条食物的图片复制过来（「复制为自定义」带上预置的图，ADR 0057）。
+     * 来源必须是这个用户看得到的食物；没有图就当没给。
+     */
+    private Long copyImageFrom;
 
     /** g=每100g / ml=每100ml；缺省按 g。 */
     @Pattern(regexp = "g|ml", message = "单位只能是 g 或 ml")

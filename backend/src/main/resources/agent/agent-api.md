@@ -97,3 +97,4 @@ GET /api/agent/history?from=2026-01-01&to=2026-03-31
 - 微克 DFE：`folate`
 - 无单位：`gi`（升糖指数）
 - `portion`：常用份的名称和克数
+- `aliases`：别名（字符串数组），没有就不出现

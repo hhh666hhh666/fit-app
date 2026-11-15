@@ -8,18 +8,19 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 食物库的一条。表结构以迁移脚本 {@code V10__nutrition.sql}、{@code V11__food_gi.sql}、
  * {@code V12__food_preset.sql}、{@code V14__food_view_count.sql}、{@code V15__food_favorite.sql}、
- * {@code V36__admin_and_preset_archive.sql} 为准；
+ * {@code V36__admin_and_preset_archive.sql}、{@code V43__food_aliases_and_image.sql} 为准；
  * 营养字段全集（45 项）见 docs/design/食物营养字段参考.md——4+1 必填（能量/蛋白/脂肪/碳水/钠），其余可空；
  * 另有扩展字段 {@code gi}（选填，不在该表七类之内，口径见该文档「本表之外的扩展字段」）。
  *
  * <p>来源分两种：{@code user_id} 为空 = 系统预置（只读，用户可「复制为自定义」），否则为所属用户自建。</p>
  */
 @Data
-@TableName("food")
+@TableName(value = "food", autoResultMap = true)
 public class Food {
 
     @TableId(type = IdType.AUTO)
@@ -30,6 +31,10 @@ public class Food {
 
     private String name;
 
+    /** 别名（ADR 0056）：搜索时和名字同等对待；没有别名为 null。库里用 | 连接。 */
+    @TableField(typeHandler = AliasListTypeHandler.class)
+    private List<String> aliases;
+
     /** 基准单位：g=每100g / ml=每100ml。 */
     private String unit;
 
@@ -39,10 +44,10 @@ public class Food {
     /** 下架标记（只用于预置，ADR 0048）：没用过的人搜不到，用过的人带「已下架」看到。 */
     private Boolean archived;
 
-    /** 浏览次数（详情页每查看一次 +1；列表按其降序，同值按名称）。预置数据为全局共享计数。 */
+    /** 浏览次数（详情页每查看一次 +1）。预置数据为全局共享计数。不参与排序（ADR 0056 改按记录次数）。 */
     private Integer viewCount;
 
-    /** 收藏（置顶标记）：收藏者排在列表最前，同为收藏再按浏览次数降序。预置数据为全局共享标记。 */
+    /** 收藏（置顶标记）：同一匹配档里收藏的排最前（ADR 0056）。预置数据为全局共享标记。 */
     private Boolean favorite;
 
     // ── 主组（4+1 必填）──
@@ -161,6 +166,14 @@ public class Food {
 
     /** 常用份克重（如 50）。 */
     private BigDecimal portionGrams;
+
+    // ── 食物图片（ADR 0057）──
+
+    /** 图片文件键（随机串，换图就换）；null＝没有图片。前端拿它当缓存版本号。 */
+    private String imageKey;
+
+    /** 图片字节数（方图 ＋ 缩略图）；自建食物的算进照片空间。 */
+    private Integer imageBytes;
 
     private LocalDateTime createdAt;
 

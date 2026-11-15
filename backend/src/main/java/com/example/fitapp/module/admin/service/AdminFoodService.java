@@ -13,6 +13,7 @@ import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.service.FoodJsonReader;
+import com.example.fitapp.module.nutrition.service.FoodSearch;
 import com.example.fitapp.module.nutrition.service.FoodService;
 import com.example.fitapp.module.preset.entity.PresetHidden;
 import com.example.fitapp.module.preset.service.PresetHiddenService;
@@ -60,10 +61,12 @@ public class AdminFoodService {
                                            long page, long size) {
         long p = Math.max(page, 1);
         long s = Math.min(Math.max(size, 1), PAGE_SIZE_MAX);
-        String kw = q == null ? null : q.trim();
+        FoodSearch terms = FoodSearch.of(q);
         LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery()
                 .isNull(Food::getUserId)
-                .like(StringUtils.hasText(kw), Food::getName, kw)
+                // 名字或别名里连着包含关键词（管理端按名称排，不需要 App 那套分档）。
+                // 别名列带 TypeHandler，lambda 条件会拿它去转参数，所以走 apply
+                .apply(terms != null, FoodSearch.FILTER, terms == null ? null : terms.getContains())
                 .eq(StringUtils.hasText(category), Food::getCategory, category)
                 .eq(STATUS_LISTED.equals(status), Food::getArchived, false)
                 .eq(STATUS_ARCHIVED.equals(status), Food::getArchived, true);
@@ -257,6 +260,9 @@ public class AdminFoodService {
         food.setName(dto.getName().trim());
         food.setUnit(dto.getUnit() == null || dto.getUnit().isBlank() ? "g" : dto.getUnit());
         food.setCategory(category.trim());
+        food.setAliases(FoodService.aliasesOf(dto, food.getName()));
+        food.setImageKey(null);
+        food.setImageBytes(0);
         food.setArchived(false);
         food.setFavorite(null);
         food.setViewCount(null);
@@ -291,7 +297,7 @@ public class AdminFoodService {
     }
 
     private static AdminFoodRowVO toRow(Food f) {
-        return new AdminFoodRowVO(f.getId(), f.getName(), f.getCategory(), f.getUnit(),
+        return new AdminFoodRowVO(f.getId(), f.getName(), f.getAliases(), f.getImageKey(), f.getCategory(), f.getUnit(),
                 f.getKcal(), f.getProtein(), f.getFat(), f.getCarb(), f.getSodium(),
                 Boolean.TRUE.equals(f.getArchived()), f.getUpdatedAt());
     }

@@ -1,6 +1,7 @@
 package com.example.fitapp.module.admin.controller;
 
 import com.example.fitapp.common.PageResult;
+import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.admin.dto.AdminIdsDTO;
 import com.example.fitapp.module.admin.dto.AdminImportDTO;
@@ -8,9 +9,14 @@ import com.example.fitapp.module.admin.dto.PresetFoodSaveDTO;
 import com.example.fitapp.module.admin.service.AdminFoodService;
 import com.example.fitapp.module.admin.vo.AdminFoodRowVO;
 import com.example.fitapp.module.admin.vo.ImportPreviewVO;
+import com.example.fitapp.module.account.dto.CropDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
+import com.example.fitapp.module.nutrition.service.FoodImageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -33,6 +40,7 @@ import java.util.Map;
 public class AdminFoodController {
 
     private final AdminFoodService service;
+    private final FoodImageService foodImageService;
 
     @GetMapping
     public Result<PageResult<AdminFoodRowVO>> page(@RequestParam(required = false) String q,
@@ -72,6 +80,32 @@ public class AdminFoodController {
     @PutMapping("/{id}")
     public Result<Food> update(@PathVariable Long id, @Valid @RequestBody PresetFoodSaveDTO body) {
         return Result.success(service.update(id, body));
+    }
+
+    /** 给预置食物设图片（ADR 0057；multipart：file ＋ 可选裁剪框 x、y、size，不给就居中取短边）。对所有人生效。 */
+    @PostMapping("/{id}/image")
+    public Result<Food> setImage(@PathVariable Long id,
+                                 @RequestParam("file") MultipartFile file,
+                                 @RequestParam(required = false) Integer x,
+                                 @RequestParam(required = false) Integer y,
+                                 @RequestParam(required = false) Integer size) {
+        CropDTO crop = new CropDTO();
+        crop.setX(x);
+        crop.setY(y);
+        crop.setSize(size);
+        return Result.success(foodImageService.setPreset(id, file, crop));
+    }
+
+    @DeleteMapping("/{id}/image")
+    public Result<Void> removeImage(@PathVariable Long id) {
+        foodImageService.removePreset(id);
+        return Result.success();
+    }
+
+    /** 管理端预览用；kind＝thumb 取缩略图。 */
+    @GetMapping("/{id}/image")
+    public ResponseEntity<Resource> image(@PathVariable Long id, @RequestParam(defaultValue = "full") String kind) {
+        return PhotoData.response(foodImageService.image(null, id, kind));
     }
 
     @PostMapping("/archive")
