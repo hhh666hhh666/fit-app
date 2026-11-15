@@ -262,6 +262,12 @@ function switchTo(i: number) {
   void loadLastForBlock(i)
 }
 
+/** 查当前动作的要领：前进一页到动作详情，会话页留在栈里，返回即接着练。 */
+function openDetail() {
+  const id = curBlock.value?.exerciseId
+  if (id) uni.navigateTo({ url: `/pages/exercise-detail/index?id=${id}` })
+}
+
 /** 从 from 起环形找下一个「还有未完成组」的动作；都完成返回 -1。 */
 function nextUnfinished(from: number): number {
   const list = session.value?.blocks ?? []
@@ -820,6 +826,18 @@ function comingSoon(tip: string) {
             <view class="card__title-row">
               <text class="card__title">{{ curBlock.name }}</text>
               <text class="card__tag">{{ curBlock.muscle }}</text>
+              <!-- 查要领：进动作详情（动图＋要领），返回后会话原样还在（会话存本机，计时走墙钟）。
+                   放在标题行最右、远离组行与完成钮，免得训练中误触跳走 -->
+              <view
+                v-if="curBlock.exerciseId"
+                class="card__info"
+                role="button"
+                aria-label="查看动作要领"
+                @click="openDetail"
+              >
+                <text>要领</text>
+                <FtIcon name="chevron-right" :size="14" :stroke="2.2" />
+              </view>
             </view>
             <view class="card__meta">
               <text v-if="curBlock.last === '暂无记录'">上次 暂无记录</text>
@@ -1143,6 +1161,16 @@ function comingSoon(tip: string) {
   color: $app-ink;
 }
 
+.card__info {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 12rpx 8rpx 12rpx 20rpx;
+  font-size: $text-sm;
+  color: $app-ink-2;
+}
 .card__tag {
   padding: 4rpx 20rpx;
   border-radius: $radius-pill;
