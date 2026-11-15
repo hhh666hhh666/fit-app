@@ -29,6 +29,12 @@ public class MealDraftVO {
      */
     private BigDecimal grams;
 
+    /**
+     * {@link #grams} 是服务端兜底填的 100（照片没估出整份重量）：这时模型给的营养其实是「整份总量」，
+     * 前端改份量要保持总量不变；其余情况每 100 才是准的，改份量营养按比例跟着变。
+     */
+    private boolean gramsGuessed;
+
     private BigDecimal kcal;
     private BigDecimal protein;
     private BigDecimal fat;

@@ -119,6 +119,7 @@ class FoodRecognitionServiceTest {
         assertEquals("photo", vo.getKind());
         assertEquals("番茄炒蛋盖饭", vo.getName());
         assertEquals(0, new BigDecimal("400").compareTo(vo.getGrams()));
+        assertFalse(vo.isGramsGuessed());
         assertEquals(0, new BigDecimal("150").compareTo(vo.getKcal()));
         assertEquals(0, new BigDecimal("5").compareTo(vo.getProtein()));
         assertEquals(0, new BigDecimal("300").compareTo(vo.getSodium()));
@@ -138,6 +139,8 @@ class FoodRecognitionServiceTest {
 
         assertEquals("ml", vo.getUnit());
         assertEquals(0, new BigDecimal("100").compareTo(vo.getGrams()));
+        // 兜底的份量：前端据此在改份量时保持整份总量不变
+        assertTrue(vo.isGramsGuessed());
         assertEquals(0, new BigDecimal("80").compareTo(vo.getKcal()));
         assertTrue(vo.getUncertain().contains("grams"));
         // 估不出来的留空，交给用户补
@@ -156,6 +159,7 @@ class FoodRecognitionServiceTest {
 
         assertEquals("label", vo.getKind());
         assertNull(vo.getGrams());
+        assertFalse(vo.isGramsGuessed());
         assertEquals(0, new BigDecimal("250.96").compareTo(vo.getKcal()));
         assertEquals(List.of("kcal"), vo.getUncertain());
     }

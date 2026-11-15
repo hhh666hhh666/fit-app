@@ -296,6 +296,7 @@ public class FoodRecognitionService {
         vo.setUnit(d.getUnit());
         if (photo) {
             vo.setGrams(hasServing ? serving.decimalValue() : FALLBACK_PORTION);
+            vo.setGramsGuessed(!hasServing);
         } else if (hasServing) {
             vo.setGrams(serving.decimalValue());
         }

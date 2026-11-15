@@ -265,6 +265,8 @@ export interface MealDraft {
   name: string
   unit: 'g' | 'ml'
   grams: number | null
+  /** grams 是服务端兜底的 100（照片没估出重量）：营养其实是整份总量，改份量时总量不变。 */
+  gramsGuessed?: boolean
   kcal: number | null
   protein: number | null
   fat: number | null

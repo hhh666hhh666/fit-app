@@ -340,6 +340,12 @@ async function confirmAdd() {
 // ── AI 识别 → 临时食物（ADR 0052）──
 // 拍一份饭菜（估算）或一张营养成分表（照表换算）→ 草稿在弹层里核对、补齐 → 记成一条临时条目，不进食物库。
 // 草稿给的是每 100 ＋ 这一份的量；表单默认按「这一份」显示（知道份量时），也可切到每 100 填。
+//
+// 数值模型：表单里显示的数只是「视图」，真相是 anchor 口径下的不舍入数（core）。
+// - 一般情况 anchor＝每 100：改份量时密度不变，「这一份」的数按比例跟着变（吃两份就是两倍）。
+// - 照片没估出重量（gramsGuessed，服务端兜底 100）时 anchor＝这一份：模型给的是整份总量，
+//   改份量只是在纠正重量，总量不变、每 100 跟着变。
+// 显示的数一律由 core 现算、两位小数，来回切换不累积舍入误差。
 
 type NutriKey = 'kcal' | 'protein' | 'fat' | 'carb' | 'sodium'
 const NUTRI: { key: NutriKey; label: string; unit: string; required: boolean }[] = [
@@ -350,14 +356,25 @@ const NUTRI: { key: NutriKey; label: string; unit: string; required: boolean }[]
   { key: 'sodium', label: '钠', unit: 'mg', required: false }
 ]
 
+type Basis = 'portion' | 'per100'
+
 interface TmpFood {
   kind: MealDraft['kind']
   name: string
   unit: 'g' | 'ml'
   grams: string
-  /** portion＝下面的数是「这一份」的；per100＝每 100（g / ml）。 */
-  basis: 'portion' | 'per100'
+  /** portion＝下面显示的数是「这一份」的；per100＝每 100（g / ml）。 */
+  basis: Basis
+  /** core 按哪个口径存：份量变时这个口径的数不动（见上方数值模型）。 */
+  anchor: Basis
+  /** anchor 口径下的不舍入真值；null＝空着。 */
+  core: Record<NutriKey, number | null>
+  /** 输入框里的文字（视图）。 */
   vals: Record<NutriKey, string>
+  /** 份量无效时在与 anchor 不同的口径下填的数：还没法换算进 core，等份量有效再换。 */
+  pending: NutriKey[]
+  /** 主人亲手改过的字段：不再标「待核对」。 */
+  touched: MealDraftKey[]
   uncertain: MealDraftKey[]
   missing: MealDraftKey[]
 }
@@ -367,11 +384,78 @@ const tmp = ref<TmpFood | null>(null)
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
+/** 解析一个份量 / 营养输入：正数（份量）或非负数（营养）才算；空或非法为 null。 */
+function parseNum(raw: string, positive = false): number | null {
+  const t = raw.trim()
+  const n = Number(t)
+  if (!t || !Number.isFinite(n)) return null
+  return positive ? (n > 0 ? n : null) : n >= 0 ? n : null
+}
+
 /** 当前填的份量（正数才算）。 */
 function tmpGrams(): number | null {
-  const t = tmp.value?.grams.trim() ?? ''
-  const n = Number(t)
-  return t && Number.isFinite(n) && n > 0 ? n : null
+  return parseNum(tmp.value?.grams ?? '', true)
+}
+
+/** 把 from 口径的数换到 to 口径；g 是这一份的量。 */
+function convert(v: number, from: Basis, to: Basis, g: number): number {
+  if (from === to) return v
+  return to === 'portion' ? (v * g) / 100 : (v * 100) / g
+}
+
+/** 份量有效时：先把 pending 的文字换算进 core，再按 core 重画与 anchor 不同口径的显示。 */
+function syncTmp(t: TmpFood) {
+  const g = tmpGrams()
+  if (g == null) return
+  for (const k of t.pending) {
+    const v = parseNum(t.vals[k])
+    t.core[k] = v == null ? null : convert(v, t.basis, t.anchor, g)
+  }
+  t.pending = []
+  if (t.basis === t.anchor) return
+  for (const n of NUTRI) {
+    const c = t.core[n.key]
+    t.vals[n.key] = c == null ? '' : String(round2(convert(c, t.anchor, t.basis, g)))
+  }
+}
+
+/** uni 的 input 事件：值在 detail.value（类型声明不准，这里统一取成字符串）。 */
+function inputText(e: unknown): string {
+  const v = (e as { detail?: { value?: unknown } })?.detail?.value
+  return v == null ? '' : String(v)
+}
+
+function touch(t: TmpFood, key: MealDraftKey) {
+  if (!t.touched.includes(key)) t.touched.push(key)
+}
+
+function onTmpName(v: string) {
+  const t = tmp.value
+  if (!t) return
+  t.name = v
+  touch(t, 'name')
+}
+
+function onTmpGrams(v: string) {
+  const t = tmp.value
+  if (!t) return
+  t.grams = v
+  touch(t, 'grams')
+  syncTmp(t)
+}
+
+function onTmpVal(key: NutriKey, v: string) {
+  const t = tmp.value
+  if (!t) return
+  t.vals[key] = v
+  touch(t, key)
+  const g = tmpGrams()
+  if (t.basis !== t.anchor && g == null) {
+    if (!t.pending.includes(key)) t.pending.push(key)
+    return
+  }
+  const n = parseNum(v)
+  t.core[key] = n == null ? null : convert(n, t.basis, t.anchor, g ?? 100)
 }
 
 async function startRecognize() {
@@ -398,10 +482,15 @@ async function startRecognize() {
 
 function openTmp(d: MealDraft) {
   const g = d.grams != null && d.grams > 0 ? d.grams : null
+  const anchor: Basis = d.gramsGuessed && g != null ? 'portion' : 'per100'
+  const basis: Basis = g != null ? 'portion' : 'per100'
+  const core = {} as Record<NutriKey, number | null>
   const vals = {} as Record<NutriKey, string>
   for (const n of NUTRI) {
     const v = d[n.key]
-    vals[n.key] = v == null ? '' : String(g != null ? round2((v * g) / 100) : v)
+    // 草稿一律是每 100；anchor 为这一份时 g 必然有值
+    core[n.key] = v == null ? null : convert(v, 'per100', anchor, g ?? 100)
+    vals[n.key] = v == null ? '' : String(round2(convert(v, 'per100', basis, g ?? 100)))
   }
   cancelSelect()
   tmp.value = {
@@ -409,36 +498,44 @@ function openTmp(d: MealDraft) {
     name: d.name ?? '',
     unit: d.unit === 'ml' ? 'ml' : 'g',
     grams: g != null ? String(g) : '',
-    basis: g != null ? 'portion' : 'per100',
+    basis,
+    anchor,
+    core,
     vals,
+    pending: [],
+    touched: [],
     uncertain: d.uncertain ?? [],
     missing: d.missing ?? []
   }
 }
 
-/** 切换「这一份 / 每 100」：份量有效时已填的数跟着换算。 */
-function setTmpBasis(next: TmpFood['basis']) {
+/** 切换「这一份 / 每 100」：没有份量就没法换算，先让主人填份量。 */
+function setTmpBasis(next: Basis) {
   const t = tmp.value
   if (!t || t.basis === next) return
-  const g = tmpGrams()
-  if (g != null) {
-    const factor = next === 'portion' ? g / 100 : 100 / g
-    for (const n of NUTRI) {
-      const raw = t.vals[n.key].trim()
-      const v = Number(raw)
-      if (raw && Number.isFinite(v)) t.vals[n.key] = String(round2(v * factor))
-    }
+  if (tmpGrams() == null) {
+    uni.showToast({ title: '先填这一份有多少，才能换算', icon: 'none' })
+    return
   }
+  syncTmp(t)
   t.basis = next
+  if (next === t.anchor) {
+    for (const n of NUTRI) {
+      const c = t.core[n.key]
+      t.vals[n.key] = c == null ? '' : String(round2(c))
+    }
+  } else {
+    syncTmp(t)
+  }
 }
 
-/** 字段角标：没给出且还空着＝待补；拿不准＝待核对。 */
+/** 字段角标：没给出且还空着＝待补；拿不准且主人还没动过＝待核对。 */
 function tmpTag(key: MealDraftKey): string {
   const t = tmp.value
   if (!t) return ''
   const empty = key === 'name' ? !t.name.trim() : key === 'grams' ? !t.grams.trim() : !t.vals[key as NutriKey].trim()
   if (empty && (t.missing.includes(key) || key === 'name' || key === 'grams')) return '待补'
-  if (!empty && t.uncertain.includes(key)) return '待核对'
+  if (!empty && t.uncertain.includes(key) && !t.touched.includes(key)) return '待核对'
   return ''
 }
 
@@ -459,6 +556,7 @@ async function confirmTmp() {
     uni.showToast({ title: '填上这一份有多少', icon: 'none' })
     return
   }
+  syncTmp(t)
   const per100 = {} as Record<NutriKey, number | null>
   for (const n of NUTRI) {
     const raw = t.vals[n.key].trim()
@@ -470,12 +568,12 @@ async function confirmTmp() {
       per100[n.key] = null
       continue
     }
-    const v = Number(raw)
-    if (!Number.isFinite(v) || v < 0) {
+    const c = t.core[n.key]
+    if (parseNum(raw) == null || c == null) {
       uni.showToast({ title: `${n.label}数字不正确`, icon: 'none' })
       return
     }
-    per100[n.key] = t.basis === 'portion' ? round2((v * 100) / g) : v
+    per100[n.key] = round2(convert(c, t.anchor, 'per100', g))
   }
   saving.value = true
   try {
@@ -640,11 +738,11 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               </text>
               <view class="tmp__fld">
                 <text class="tmp__label">名称<text v-if="tmpTag('name')" class="tmp__tag"> {{ tmpTag('name') }}</text></text>
-                <input v-model="tmp.name" class="tmp__input" placeholder="如：番茄炒蛋盖饭" placeholder-class="asearch__ph" maxlength="64" />
+                <input :value="tmp.name" class="tmp__input" @input="onTmpName(inputText($event))" placeholder="如：番茄炒蛋盖饭" placeholder-class="asearch__ph" maxlength="64" />
               </view>
               <view class="tmp__fld">
                 <text class="tmp__label">这一份<text v-if="tmpTag('grams')" class="tmp__tag"> {{ tmpTag('grams') }}</text></text>
-                <input v-model="tmp.grams" type="digit" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
+                <input :value="tmp.grams" type="digit" @input="onTmpGrams(inputText($event))" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
                 <view class="tmp__seg">
                   <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.unit === 'g' }" @click="tmp.unit = 'g'">g</text>
                   <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.unit === 'ml' }" @click="tmp.unit = 'ml'">ml</text>
@@ -661,7 +759,7 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
                 <text class="tmp__label">
                   {{ n.label }}（{{ n.unit }}）<text v-if="!n.required" class="tmp__opt">选填</text><text v-if="tmpTag(n.key)" class="tmp__tag"> {{ tmpTag(n.key) }}</text>
                 </text>
-                <input v-model="tmp.vals[n.key]" type="digit" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
+                <input :value="tmp.vals[n.key]" type="digit" @input="onTmpVal(n.key, inputText($event))" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
               </view>
               <view class="tmp__foot">
                 <view class="pick__btn" :class="{ 'pick__btn--disabled': saving }" role="button" @click="confirmTmp">记进这一餐</view>
