@@ -221,7 +221,6 @@ const holidayNote = computed(() => {
             :key="`${range}-${metric}`"
             :points="points"
             :height="180"
-            :zero-based="true"
             :format-value="formatPoint"
             :format-tick="formatTick"
           />

@@ -10,7 +10,9 @@ import { getCurrentInstance, nextTick, onMounted, onUnmounted, ref, watch } from
 //       触摸事件给的坐标也是 CSS 像素，两把尺子必须是同一把——否则准星会指错位置、
 //       捏合缩放的锚点会漂。
 
-const props = defineProps<{
+// ⚠️ 默认值必须用 withDefaults 写明：Vue 会把**没传的布尔 prop 转成 false**，
+//    只在类型上标「默认 true」是不生效的（2026-11-15 之前饮食页就因此一直没从 0 起）。
+const props = withDefaults(defineProps<{
   /** 逐日数据（按日期升序）；value 已按当前指标取好。 */
   points: { date: string; value: number }[]
   /** 目标值（画一条虚线）；null 表示不画。 */
@@ -32,7 +34,9 @@ const props = defineProps<{
    * 才需要传；刻度区只有约 34px 宽，写法要紧凑。
    */
   formatTick?: (v: number) => string
-}>()
+}>(), {
+  zeroBased: true,
+})
 
 const MIN_SPAN = 3
 const MAX_SPAN = 365
