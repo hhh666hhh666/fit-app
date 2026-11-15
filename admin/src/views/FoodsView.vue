@@ -171,7 +171,7 @@ const num = (v: number | null) => (v == null ? '—' : String(Number(v)))
 
     <div class="card">
       <div class="toolbar">
-        <el-input v-model="filters.q" placeholder="搜名称" clearable style="width: 220px" @change="search" />
+        <el-input v-model="filters.q" placeholder="搜名称或别名" clearable style="width: 220px" @change="search" />
         <el-select v-model="filters.category" placeholder="全部分类" clearable filterable style="width: 220px" @change="search">
           <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
         </el-select>
@@ -201,7 +201,13 @@ const num = (v: number | null) => (v == null ? '—' : String(Number(v)))
         @row-click="openRow"
       >
         <el-table-column type="selection" width="44" />
-        <el-table-column prop="name" label="名称" min-width="200" show-overflow-tooltip />
+        <el-table-column label="名称" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.imageKey" size="small" type="info" style="margin-left: 6px">有图</el-tag>
+            <div v-if="row.aliases?.length" class="alias">也叫：{{ row.aliases.join('、') }}</div>
+          </template>
+        </el-table-column>
         <el-table-column prop="category" label="分类" min-width="170" show-overflow-tooltip />
         <el-table-column label="单位" width="90">
           <template #default="{ row }">{{ per(row) }}</template>
@@ -284,6 +290,11 @@ const num = (v: number | null) => (v == null ? '—' : String(Number(v)))
 </template>
 
 <style scoped>
+.alias {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 .pager {
   display: flex;
   align-items: center;

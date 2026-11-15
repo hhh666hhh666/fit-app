@@ -13,12 +13,16 @@ export type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 export interface FoodItem {
   id: number
   name: string
+  /** 别名（ADR 0056）：搜索时和名字同等对待；没有别名时缺省。 */
+  aliases?: string[] | null
+  /** 食物图片的版本号（ADR 0057）：有值＝有图，换图就变；图片本身走 utils/photo.ts 的 fetchFoodImage。 */
+  imageKey?: string | null
   unit: 'g' | 'ml'
   /** 分类（预置数据带《中国食物成分表》大类；用户自建无）。 */
   category?: string | null
-  /** 浏览次数（详情页查看次数；食物库列表按此降序）。 */
+  /** 浏览次数（详情页查看次数；不再参与排序，ADR 0056）。 */
   viewCount?: number | null
-  /** 收藏（置顶标记）：收藏者排在食物库列表最前，同为收藏再按浏览次数降序。 */
+  /** 收藏（置顶标记）：同一匹配档里收藏的排最前（ADR 0056）。 */
   favorite?: boolean | null
   kcal: number
   protein: number
@@ -75,8 +79,11 @@ export interface FoodItem {
   archived?: boolean | null
 }
 
-/** 新建 / 编辑食物的提交体。 */
-export type FoodPayload = Omit<FoodItem, 'id'>
+/**
+ * 新建 / 编辑食物的提交体。编辑是整体覆盖：aliases 不给就是清空。
+ * copyImageFrom 只在新建时有用——「复制为自定义」把来源的图片复制过来（ADR 0057）。
+ */
+export type FoodPayload = Omit<FoodItem, 'id' | 'imageKey'> & { copyImageFrom?: number | null }
 
 export interface MealItem {
   id: number
@@ -147,7 +154,8 @@ export interface ImportResult {
 // ── 食物库 ──
 
 /**
- * 列表/搜索（预置＋自有合并，按浏览次数降序）；lite=轻量字段（列表与记录选择用，不带全套营养），limit/offset 分页。
+ * 列表/搜索（预置＋自有合并；搜名字和别名，按字顺序也能命中；按匹配度 → 收藏 → 近 30 天记过几次 → 自建优先 → 名称排，
+ * ADR 0056）；lite=轻量字段（列表与记录选择用，不带全套营养），limit/offset 分页。
  *
  * 只缓存**无搜索词的首屏**：带 `q` 的结果随输入变化、缓存只会占内存；续页不缓存（删改后与前页对不齐）。
  */

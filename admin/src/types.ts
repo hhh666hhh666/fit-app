@@ -15,6 +15,10 @@ export interface PageResult<T> {
 export interface FoodRow {
   id: number
   name: string
+  /** 别名（ADR 0056）；没有为 null。 */
+  aliases: string[] | null
+  /** 食物图片版本号（ADR 0057）；null＝没有图。 */
+  imageKey: string | null
   category: string | null
   unit: 'g' | 'ml'
   kcal: number
@@ -30,6 +34,8 @@ export interface FoodRow {
 export type FoodDetail = {
   id: number
   name: string
+  aliases?: string[] | null
+  imageKey?: string | null
   unit: 'g' | 'ml'
   category: string | null
   archived: boolean

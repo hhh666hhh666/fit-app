@@ -1,5 +1,6 @@
 <!--
-  头像裁剪框（ADR 0051）：全屏深色层，中间一个固定的正方形框（按圆形预览），图在下面拖动和缩放。
+  方形裁剪框（头像 ADR 0051、食物图片 ADR 0057）：全屏深色层，中间一个固定的正方形框，图在下面拖动和缩放。
+  头像按圆形预览（shape 缺省），食物图片按圆角方形预览（shape="square"）。
   手机上单指拖动、双指捏合缩放；电脑上鼠标拖动、滚轮缩放。图始终盖满框，不会露出空白。
 
   坐标一律用「摆正后的原图像素」：显示的可能是本机原图，也可能是服务端的预览图（长边 1280），
@@ -22,6 +23,8 @@ const props = defineProps<{
   title?: string
   confirmText?: string
   busy?: boolean
+  /** 预览形状：circle＝头像（缺省），square＝食物图片。裁出来的都是正方形。 */
+  shape?: 'circle' | 'square'
 }>()
 const emit = defineEmits<{ confirm: [crop: CropBox]; cancel: [] }>()
 
@@ -223,7 +226,7 @@ function confirm() {
 
     <!-- 框：外面压暗，圆形是头像会显示的样子，方框是实际存下的范围 -->
     <view class="crop__frame" :style="frameStyle">
-      <view class="crop__circle" />
+      <view class="crop__circle" :class="{ 'crop__circle--square': shape === 'square' }" />
     </view>
 
     <view class="crop__top" @touchstart.stop @mousedown.stop>
@@ -289,6 +292,10 @@ function confirm() {
   box-sizing: border-box;
   /* 圆外压暗：一圈超大阴影盖住整屏，圆里留空 */
   box-shadow: 0 0 0 9999px $viewer-scrim;
+}
+
+.crop__circle--square {
+  border-radius: $radius-md;
 }
 
 .crop__top {

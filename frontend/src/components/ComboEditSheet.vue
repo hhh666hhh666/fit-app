@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
+import FoodThumb from '@/components/FoodThumb.vue'
+import { matchedAlias } from '@/utils/food-match'
 import { ref } from 'vue'
 import { useBackClose } from '@/utils/backStack'
 import { ask } from '@/utils/confirm'
@@ -210,8 +212,10 @@ async function save() {
           </view>
           <view class="plist">
             <view v-for="f in foods" :key="f.id" class="prow" @click="pickFood(f)">
+              <FoodThumb v-if="f.imageKey" :id="f.id" :image-key="f.imageKey" :size="40" class="prow__thumb" />
               <view class="prow__mid">
                 <text class="prow__name">{{ f.name }}</text>
+                <text v-if="matchedAlias(f, keyword)" class="prow__alias">别名：{{ matchedAlias(f, keyword) }}</text>
                 <text class="prow__sub ft-num">每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g</text>
               </view>
               <text class="prow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
@@ -483,6 +487,18 @@ async function save() {
 }
 
 .prow__sub {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.prow__thumb {
+  margin-right: 16rpx;
+}
+
+.prow__alias {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: $text-xs;
   color: $app-ink-muted;
 }

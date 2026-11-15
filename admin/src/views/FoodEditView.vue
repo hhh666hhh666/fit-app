@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { api } from '@/api'
@@ -8,6 +8,8 @@ import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@shared/food-fields'
 
 // 新建 / 编辑预置食物（ADR 0048）：能量、蛋白质、脂肪、碳水、单位、分类必填，钠可以不填；
 // 其余字段按七类分组折叠。字段清单和 App 共用 frontend/src/utils/food-fields.ts。
+// 别名（ADR 0056）一个输入框，顿号、逗号或空格分隔；食物图片（ADR 0057）在已保存的预置上才能设，
+// 选图后服务端居中截成方图（管理端没有裁剪框，要换取景就先在本机裁好再传）。
 
 const route = useRoute()
 const router = useRouter()
@@ -19,7 +21,7 @@ const NUM_KEYS = [...MAIN_FIELDS.map((f) => f.key), ...OPTIONAL_GROUPS.flatMap((
 
 const formRef = ref<FormInstance>()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 表单字段由字段表动态生成
-const form = reactive<Record<string, any>>({ name: '', unit: 'g', category: '', portionLabel: '', portionGrams: null })
+const form = reactive<Record<string, any>>({ name: '', aliases: '', unit: 'g', category: '', portionLabel: '', portionGrams: null })
 for (const k of NUM_KEYS) form[k] = null
 const archived = ref(false)
 const updatedAt = ref<string | undefined>()
@@ -42,6 +44,7 @@ onMounted(async () => {
   try {
     const f = await api.get<FoodDetail>(`/admin/foods/${id.value}`)
     form.name = f.name
+    form.aliases = (f.aliases ?? []).join('、')
     form.unit = f.unit || 'g'
     form.category = f.category ?? ''
     form.portionLabel = f.portionLabel ?? ''
@@ -49,6 +52,7 @@ onMounted(async () => {
     for (const k of NUM_KEYS) form[k] = f[k] == null ? null : Number(f[k])
     archived.value = f.archived === true
     updatedAt.value = f.updatedAt
+    void loadImage(f.imageKey ?? null)
     // 有值的分组默认展开
     openGroups.value = OPTIONAL_GROUPS.filter((g) => g.fields.some((fd) => form[fd.key] != null)).map((g) => g.title)
   } catch {
@@ -72,9 +76,79 @@ async function checkName() {
   }
 }
 
+// ── 食物图片：对所有人生效 ──
+
+const imageUrl = ref<string | null>(null)
+const imageKey = ref<string | null>(null)
+const imageBusy = ref(false)
+const fileInput = ref<HTMLInputElement>()
+
+async function loadImage(key: string | null) {
+  if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
+  imageUrl.value = null
+  imageKey.value = key
+  if (!key || id.value == null) return
+  imageUrl.value = await api.blobUrl(`/admin/foods/${id.value}/image?v=${key}`)
+}
+
+onBeforeUnmount(() => {
+  if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
+})
+
+async function onFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || id.value == null) return
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    ElMessage.error('只支持 JPEG/PNG 图片')
+    return
+  }
+  imageBusy.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const f = await api.postForm<FoodDetail>(`/admin/foods/${id.value}/image`, fd)
+    await loadImage(f.imageKey ?? null)
+    ElMessage.success('图片已更新')
+  } catch {
+    // api 层已经提示
+  } finally {
+    imageBusy.value = false
+  }
+}
+
+async function removeImage() {
+  if (id.value == null) return
+  try {
+    await ElMessageBox.confirm('旧图会直接删除，所有人都看不到这张图了。', '去掉图片？', {
+      confirmButtonText: '去掉',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  imageBusy.value = true
+  try {
+    await api.del(`/admin/foods/${id.value}/image`)
+    await loadImage(null)
+    ElMessage.success('已去掉图片')
+  } catch {
+    // api 层已经提示
+  } finally {
+    imageBusy.value = false
+  }
+}
+
 function payload() {
   const body: Record<string, unknown> = {
     name: String(form.name ?? '').trim(),
+    // 别名按分隔符拆开交给服务端规整（去重、去掉和名字一样的、上限 10 个各 16 字）
+    aliases: String(form.aliases ?? '')
+      .split(/[、，,；;/|\s]+/)
+      .map((a) => a.trim())
+      .filter(Boolean),
     unit: form.unit,
     category: String(form.category ?? '').trim()
   }
@@ -162,6 +236,27 @@ const unitText = computed(() => (form.unit === 'ml' ? '100ml' : '100g'))
           <span v-if="nameTaken" class="form__warn">已有同名的预置食物，确认不是重复录入。</span>
         </div>
       </el-form-item>
+      <el-form-item label="别名">
+        <el-input v-model="form.aliases" maxlength="200" placeholder="如：肥肠、大肠头" />
+        <div class="form__tip">顿号、逗号或空格隔开，最多 10 个、每个不超过 16 字；搜索时和名字同等对待。名字方括号里的叫法本来就搜得到，不用重复填。</div>
+      </el-form-item>
+      <el-form-item label="图片">
+        <template v-if="isNew">
+          <span class="form__tip form__tip--inline" style="margin: 0">保存之后才能设图片。</span>
+        </template>
+        <template v-else>
+          <div class="pic">
+            <img v-if="imageUrl" :src="imageUrl" class="pic__img" alt="食物图片" />
+            <div v-else class="pic__img pic__img--empty">无</div>
+            <div>
+              <input ref="fileInput" type="file" accept="image/jpeg,image/png" hidden @change="onFile" />
+              <el-button :loading="imageBusy" @click="fileInput?.click()">{{ imageKey ? '换一张' : '上传图片' }}</el-button>
+              <el-button v-if="imageKey" :disabled="imageBusy" type="danger" plain @click="removeImage">去掉</el-button>
+              <div class="form__tip">居中截成方图，对所有人生效；不算进任何用户的照片空间。</div>
+            </div>
+          </div>
+        </template>
+      </el-form-item>
       <el-form-item label="单位" prop="unit">
         <el-radio-group v-model="form.unit">
           <el-radio-button value="g">每 100g</el-radio-button>
@@ -237,6 +332,29 @@ const unitText = computed(() => (form.unit === 'ml' ? '100ml' : '100g'))
 .form__tip--inline {
   width: auto;
   margin: 0 0 0 12px;
+}
+
+.pic {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.pic__img {
+  width: 120px;
+  height: 120px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--el-fill-color-light);
+}
+
+.pic__img--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .form__warn {

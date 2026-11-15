@@ -24,6 +24,8 @@ import { choosePhoto, compress, deletePhoto, fetchMealPhoto, pickAndUploadPhotos
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
+import FoodThumb from '@/components/FoodThumb.vue'
+import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
 import { ask, TRASH_HINT } from '@/utils/confirm'
@@ -722,12 +724,14 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
             <!-- 食物列表 -->
             <view v-else class="foods">
               <view v-for="f in shownFoods" :key="f.id" class="frow" @click="selectFood(f)">
+                <FoodThumb v-if="f.imageKey" :id="f.id" :image-key="f.imageKey" :size="40" class="frow__thumb" />
                 <view class="frow__mid">
                   <view class="frow__line">
                     <text class="frow__name">{{ f.name }}</text>
                     <text v-if="f.preset" class="frow__badge">预设</text>
                     <text v-if="f.archived" class="frow__badge">已下架</text>
                   </view>
+                  <text v-if="matchedAlias(f, keyword)" class="frow__alias">别名：{{ matchedAlias(f, keyword) }}</text>
                   <text class="frow__sub ft-num">
                     每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g
                   </text>
@@ -1328,6 +1332,18 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 }
 
 .frow__sub {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.frow__thumb {
+  margin-right: 16rpx;
+}
+
+.frow__alias {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: $text-xs;
   color: $app-ink-muted;
 }

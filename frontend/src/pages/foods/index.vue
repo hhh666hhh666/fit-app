@@ -17,6 +17,8 @@ import { choosePhoto, compress } from '@/utils/photo'
 import { useRecognitionStore } from '@/stores/recognition'
 import { ensureLogin } from '@/utils/guard'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
+import FoodThumb from '@/components/FoodThumb.vue'
+import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
@@ -25,7 +27,8 @@ import FtSheet from '@/components/FtSheet.vue'
 import { ask } from '@/utils/confirm'
 import { formatThousands } from '@/utils/format'
 
-// ── 食物库：列表（预置＋自有，按浏览次数降序）/ 服务端搜索 / 滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
+// ── 食物库：列表（预置＋自有，排序见 ADR 0056）/ 服务端搜索（名字和别名，按字顺序也能命中）/
+//    滚动分页（每页 100）/ 点条目进详情页 / JSON 导入导出 ──
 //    预置 1800+ 条：lite 轻量字段 ＋ 服务端搜索 ＋ 每页 100 条触底加载（前端不再全量拉取）。
 
 const PAGE_SIZE = 100
@@ -299,12 +302,14 @@ function copyExport() {
             <text class="flist__count ft-num">{{ keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种` }}</text>
           </view>
           <view v-for="f in list" :key="f.id" class="frow" @click="onTap(f)">
+            <FoodThumb v-if="f.imageKey" :id="f.id" :image-key="f.imageKey" />
             <view class="frow__mid">
               <view class="frow__line">
                 <text class="frow__name">{{ f.name }}</text>
                 <text v-if="f.preset" class="frow__badge">预设</text>
                 <text v-if="f.archived" class="frow__badge">已下架</text>
               </view>
+              <text v-if="matchedAlias(f, keyword)" class="frow__alias">别名：{{ matchedAlias(f, keyword) }}</text>
               <text class="frow__sub ft-num">{{ perText(f) }}</text>
             </view>
             <FtIcon name="chevron-right" :size="18" tone="subtle" />
@@ -554,6 +559,14 @@ function copyExport() {
 
 .frow__sub {
   font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.frow__alias {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $text-xs;
   color: $app-ink-muted;
 }
 

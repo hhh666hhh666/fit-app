@@ -76,8 +76,49 @@ async function send<T>(method: string, url: string, body?: unknown, query?: Quer
   throw new ApiError(result.code, result.message)
 }
 
+/** multipart 上传（食物图片）：不能带 JSON 的 Content-Type，由浏览器自己写边界。 */
+async function sendForm<T>(url: string, form: FormData): Promise<T> {
+  const token = getToken()
+  let res: Response
+  try {
+    res = await fetch(`/api${url}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form
+    })
+  } catch {
+    ElMessage.error('网络异常，请稍后重试')
+    throw new ApiError(-1, 'network')
+  }
+  let result: Result<T>
+  try {
+    result = (await res.json()) as Result<T>
+  } catch {
+    ElMessage.error(res.ok ? '服务器返回了看不懂的内容' : `请求失败（HTTP ${res.status}）`)
+    throw new ApiError(-1, 'bad response')
+  }
+  if (result.code === 0) return result.data
+  ElMessage.error(result.message || '上传失败')
+  throw new ApiError(result.code, result.message)
+}
+
+/** 取一张要登录才给的图，返回 object URL（调用方用完自己 revoke）；没有图返回 null。 */
+async function blobUrl(url: string): Promise<string | null> {
+  const token = getToken()
+  try {
+    const res = await fetch(`/api${url}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) return null
+    return URL.createObjectURL(await res.blob())
+  } catch {
+    return null
+  }
+}
+
 export const api = {
   get: <T>(url: string, query?: Query) => send<T>('GET', url, undefined, query),
   post: <T>(url: string, body?: unknown) => send<T>('POST', url, body),
-  put: <T>(url: string, body?: unknown) => send<T>('PUT', url, body)
+  put: <T>(url: string, body?: unknown) => send<T>('PUT', url, body),
+  del: <T>(url: string) => send<T>('DELETE', url),
+  postForm: sendForm,
+  blobUrl
 }

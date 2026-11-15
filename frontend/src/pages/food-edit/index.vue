@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
   createFood,
@@ -11,6 +11,8 @@ import {
 import { useRecognitionStore } from '@/stores/recognition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
+import { fetchFoodImage, pickCropOriginal, removeFoodImage, uploadFoodImage, type CropBox } from '@/utils/photo'
+import AvatarCropper from '@/components/AvatarCropper.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
@@ -18,6 +20,8 @@ import { ask } from '@/utils/confirm'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
+//    别名（ADR 0056）一个输入框，顿号、逗号或空格分隔；食物图片（ADR 0057）用方形裁剪框——
+//    编辑已有食物时选完就上传；新建 / 复制时先留在本机，保存成功拿到 id 再上传（复制时没换图就让服务端复制来源的图）。
 
 const editId = ref<number | null>(null)
 /** 「复制为自定义」的来源（预置食物 id）；有值时表单预填但保存走新建。 */
@@ -40,6 +44,7 @@ const pageTitle = computed(() =>
 /** 表单：数值字段一律字符串（空串 = 未填），提交时转换。 */
 const form = reactive<Record<string, string>>({
   name: '',
+  aliases: '',
   unit: 'g',
   kcal: '',
   protein: '',
@@ -145,6 +150,7 @@ async function loadExisting() {
       editId.value = null
     }
     fillForm(f)
+    showRemoteImage(f.id, f.imageKey)
     if (copyFromId.value != null) {
       uni.showToast({ title: '已带出预设数据，可修改后保存', icon: 'none' })
     }
@@ -156,6 +162,7 @@ async function loadExisting() {
 function fillForm(f: FoodPayload) {
   const toStr = (v: unknown) => (v == null ? '' : String(v))
   form.name = f.name ?? ''
+  form.aliases = (f.aliases ?? []).join('、')
   form.unit = f.unit
   form.kcal = toStr(f.kcal)
   form.protein = toStr(f.protein)
@@ -170,6 +177,119 @@ function fillForm(f: FoodPayload) {
       form[fd.key] = toStr((f as unknown as Record<string, unknown>)[fd.key])
     }
   }
+}
+
+// ── 食物图片 ──
+
+/** 当前显示的图：remote＝库里已有（或复制来源）的图，local＝本机刚选好、还没传的图。 */
+const image = ref<
+  | { kind: 'none' }
+  | { kind: 'remote'; foodId: number; imageKey: string; url: string | null }
+  | { kind: 'local'; blob: Blob; crop: CropBox; url: string }
+>({ kind: 'none' })
+/** 裁剪框：选了图还没确认时打开。 */
+const cropper = ref<{ blob: Blob; src: string; width: number; height: number } | null>(null)
+const imageBusy = ref(false)
+
+function showRemoteImage(foodId: number, imageKey: string | null | undefined) {
+  if (!imageKey) {
+    image.value = { kind: 'none' }
+    return
+  }
+  image.value = { kind: 'remote', foodId, imageKey, url: null }
+  void fetchFoodImage(foodId, imageKey, 'thumb').then((url) => {
+    const cur = image.value
+    if (cur.kind === 'remote' && cur.imageKey === imageKey) image.value = { ...cur, url }
+  })
+}
+
+function dropLocalUrl() {
+  if (image.value.kind === 'local') URL.revokeObjectURL(image.value.url)
+}
+
+onBeforeUnmount(() => {
+  dropLocalUrl()
+  if (cropper.value) URL.revokeObjectURL(cropper.value.src)
+})
+
+/** 本机图的宽高（浏览器按 EXIF 摆正后的，和服务端口径一致）。 */
+function naturalSize(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () => reject(new Error('decode'))
+    img.src = url
+  })
+}
+
+async function pickImage() {
+  const blob = await pickCropOriginal('食物图片')
+  if (!blob) return
+  const src = URL.createObjectURL(blob)
+  try {
+    const { width, height } = await naturalSize(src)
+    cropper.value = { blob, src, width, height }
+  } catch {
+    URL.revokeObjectURL(src)
+    uni.showToast({ title: '这张图读不出来，换一张试试', icon: 'none' })
+  }
+}
+
+function closeCropper() {
+  if (cropper.value) URL.revokeObjectURL(cropper.value.src)
+  cropper.value = null
+}
+
+async function onCropConfirm(crop: CropBox) {
+  const c = cropper.value
+  if (!c) return
+  if (isEdit.value) {
+    // 已有的食物：直接传，服务端截好方图
+    imageBusy.value = true
+    try {
+      const key = await uploadFoodImage(editId.value as number, c.blob, crop)
+      if (key) showRemoteImage(editId.value as number, key)
+    } finally {
+      imageBusy.value = false
+      closeCropper()
+    }
+    return
+  }
+  // 新建 / 复制：先留在本机，保存后再传；预览用本机原图按裁剪框摆出来
+  dropLocalUrl()
+  image.value = { kind: 'local', blob: c.blob, crop, url: c.src }
+  cropper.value = null
+}
+
+const localImageBox = ref<{ width: number; height: number } | null>(null)
+async function measureLocal() {
+  const cur = image.value
+  if (cur.kind !== 'local') return
+  localImageBox.value = await naturalSize(cur.url).catch(() => null)
+}
+
+function removeImage() {
+  const cur = image.value
+  if (cur.kind === 'none') return
+  if (!isEdit.value) {
+    dropLocalUrl()
+    image.value = { kind: 'none' }
+    return
+  }
+  void ask({
+    title: '去掉图片？',
+    content: '旧图会直接删除，不进回收站。',
+    confirmText: '去掉',
+    danger: true
+  }).then(async (ok) => {
+    if (!ok || editId.value == null) return
+    imageBusy.value = true
+    try {
+      if (await removeFoodImage(editId.value)) image.value = { kind: 'none' }
+    } finally {
+      imageBusy.value = false
+    }
+  })
 }
 
 /** 字段是否低置信度（识别不确定，标「待核对」）。 */
@@ -255,8 +375,14 @@ function buildPayload(): FoodPayload | null {
   const toPer100 = (v: number) => (perServing ? round2((v * 100) / (amount as number)) : v)
   for (const k of Object.keys(main)) main[k] = toPer100(main[k])
 
+  // 别名：按分隔符拆开交给服务端规整（去重、去掉和名字一样的、上限 10 个各 16 字）
+  const aliases = form.aliases
+    .split(/[、，,；;/|\s]+/)
+    .map((a) => a.trim())
+    .filter(Boolean)
   const payload: Record<string, unknown> = {
     name,
+    aliases,
     unit: form.unit === 'ml' ? 'ml' : 'g',
     ...main,
     portionLabel: form.portionLabel.trim() || (perServing ? '1份' : null),
@@ -291,7 +417,12 @@ async function save() {
     if (isEdit.value) {
       await updateFood(editId.value as number, payload)
     } else {
-      await createFood(payload)
+      const cur = image.value
+      // 复制为自定义而且没换图：让服务端把来源的图复制一份
+      if (copyFromId.value != null && cur.kind === 'remote') payload.copyImageFrom = cur.foodId
+      const created = await createFood(payload)
+      // 本机选好的图：食物有了 id 才能传；传不成也不影响已经保存的食物（已 toast）
+      if (cur.kind === 'local') await uploadFoodImage(created.id, cur.blob, cur.crop)
     }
     uni.showToast({ title: '已保存', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 400)
@@ -333,6 +464,14 @@ async function save() {
           placeholder="如：鸡胸肉（生）"
           placeholder-class="ph"
           maxlength="64"
+        />
+        <text class="block__label block__label--gap">别名（选填）</text>
+        <input
+          v-model="form.aliases"
+          class="alias-input"
+          placeholder="如：肥肠、大肠头（顿号、逗号或空格隔开）"
+          placeholder-class="ph"
+          maxlength="200"
         />
         <view class="unit-row">
           <text class="block__label">数值基准</text>
@@ -388,6 +527,40 @@ async function save() {
           </view>
           <text class="serving-hint">下面的营养按「每份」填，保存时自动换算成每 100{{ form.unit === 'ml' ? 'ml' : 'g' }}</text>
         </template>
+      </view>
+
+      <!-- 食物图片（选填）：一张方图当封面，在列表里认得出它 -->
+      <view class="glass block">
+        <text class="block__title">图片（选填）</text>
+        <view class="pic">
+          <view class="pic__box" role="button" aria-label="选图片" @click="pickImage">
+            <image v-if="image.kind === 'remote' && image.url" class="pic__img" :src="image.url" mode="aspectFill" />
+            <view v-else-if="image.kind === 'local'" class="pic__local">
+              <image
+                class="pic__local-img"
+                :src="image.url"
+                :style="localImageBox ? {
+                  width: `${(localImageBox.width / image.crop.size) * 100}%`,
+                  height: `${(localImageBox.height / image.crop.size) * 100}%`,
+                  left: `${(-image.crop.x / image.crop.size) * 100}%`,
+                  top: `${(-image.crop.y / image.crop.size) * 100}%`
+                } : {}"
+                mode="scaleToFill"
+                @load="measureLocal"
+              />
+            </view>
+            <FtIcon v-else-if="image.kind === 'none'" name="plus" :size="26" tone="muted" />
+          </view>
+          <view class="pic__ops">
+            <text class="pic__hint">{{ image.kind === 'none' ? '拍一张或从相册选，裁成方图' : '列表里会显示这张小图' }}</text>
+            <view class="pic__btns">
+              <text class="pic__btn" :class="{ 'pic__btn--off': imageBusy }" @click="pickImage">
+                {{ image.kind === 'none' ? '选图片' : '换一张' }}
+              </text>
+              <text v-if="image.kind !== 'none'" class="pic__btn pic__btn--danger" :class="{ 'pic__btn--off': imageBusy }" @click="removeImage">去掉</text>
+            </view>
+          </view>
+        </view>
       </view>
 
       <!-- 主组（必填） -->
@@ -473,6 +646,18 @@ async function save() {
 
     </view>
 
+    <AvatarCropper
+      v-if="cropper"
+      :src="cropper.src"
+      :width="cropper.width"
+      :height="cropper.height"
+      shape="square"
+      title="裁剪食物图片"
+      :busy="imageBusy"
+      @confirm="onCropConfirm"
+      @cancel="closeCropper"
+    />
+
     <!-- 保存：贴底悬浮的主按钮，与汇总页「完成」同一位置 -->
     <view class="fe__bottom">
       <FtButton variant="primary" block :disabled="saving" class="fe__save" @click="save">保存</FtButton>
@@ -521,6 +706,91 @@ async function save() {
   font-size: $text-lg;
   font-weight: $weight-bold;
   color: $app-ink;
+}
+
+.block__label--gap {
+  padding-top: 24rpx;
+}
+
+.alias-input {
+  width: 100%;
+  height: 80rpx;
+  box-sizing: border-box;
+  padding: 0 24rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+  font-size: $text-base;
+  color: $app-ink;
+}
+
+.pic {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 16rpx 0 20rpx;
+}
+
+.pic__box {
+  position: relative;
+  flex: none;
+  width: 160rpx;
+  height: 160rpx;
+  overflow: hidden;
+  border-radius: $radius-md;
+  background: $app-surface-2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  @include press(dim);
+}
+
+.pic__img {
+  width: 100%;
+  height: 100%;
+}
+
+.pic__local {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.pic__local-img {
+  position: absolute;
+  max-width: none;
+}
+
+.pic__ops {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.pic__hint {
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.pic__btns {
+  display: flex;
+  gap: 32rpx;
+}
+
+.pic__btn {
+  font-size: $text-base;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.pic__btn--danger {
+  color: $app-danger;
+}
+
+.pic__btn--off {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .ph {

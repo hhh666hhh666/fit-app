@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
+import { fetchFoodImage } from '@/utils/photo'
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
@@ -11,6 +12,7 @@ import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 食物详情（只读）：预置＝「复制为自定义」；自有＝编辑/删除。食物库列表点条目进入。 ──
+//    有食物图片的顶上一张方图（ADR 0057）；有别名的在名字下面列出「也叫」（ADR 0056）。
 //    已下架的预置（ADR 0048）：只有用过的人看得到，带「已下架」，底栏换成「删除 / 复制一份」。
 //    只展示「有值」的营养字段（空字段不占版面）；主组固定显示（未测显示 —）。
 
@@ -57,6 +59,21 @@ const archived = computed(() => preset.value && food.value?.archived === true)
 const hasBar = computed(() => !!food.value && (!preset.value || archived.value))
 const starred = computed(() => (food.value?.name ?? '').endsWith('*'))
 const favorited = computed(() => food.value?.favorite === true)
+const aliasText = computed(() => (food.value?.aliases?.length ? food.value.aliases.join('、') : null))
+
+// ── 食物图片：版本号变了才重新取 ──
+
+const coverUrl = ref<string | null>(null)
+watch(
+  () => (food.value?.imageKey ? `${food.value.id}:${food.value.imageKey}` : null),
+  async (key) => {
+    coverUrl.value = null
+    const f = food.value
+    if (!key || !f?.imageKey) return
+    const got = await fetchFoodImage(f.id, f.imageKey, 'full')
+    if (food.value?.imageKey === f.imageKey) coverUrl.value = got
+  }
+)
 
 // ── 收藏（星标）：收藏＝食物库列表置顶 ──
 
@@ -168,6 +185,11 @@ function doDelete() {
       </FtPageHeader>
 
       <template v-if="food">
+        <!-- 食物图片（有才显示；取图期间先占好方形的位置） -->
+        <view v-if="food.imageKey" class="fd__cover">
+          <image v-if="coverUrl" class="fd__cover-img" :src="coverUrl" mode="aspectFill" />
+        </view>
+
         <!-- 名称与来源 -->
         <view class="glass">
           <view class="fd__name-row">
@@ -175,6 +197,7 @@ function doDelete() {
             <text v-if="preset" class="fd__badge">预设</text>
             <text v-if="archived" class="fd__badge">已下架</text>
           </view>
+          <text v-if="aliasText" class="fd__meta">也叫：{{ aliasText }}</text>
           <text v-if="food.category" class="fd__meta">{{ food.category }}</text>
           <text class="fd__meta">以下数值均为每 100{{ food.unit === 'ml' ? 'ml' : 'g' }}</text>
           <text v-if="starred" class="fd__meta">营养数据来自公开资料补全，供参考</text>
@@ -260,6 +283,20 @@ function doDelete() {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.fd__cover {
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: $radius-lg;
+  background: $app-surface-2;
+}
+
+.fd__cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .fd__name-row {

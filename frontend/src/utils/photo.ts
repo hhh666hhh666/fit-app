@@ -333,7 +333,12 @@ export interface CropBox {
 }
 
 /** 选一张图当头像的原图：返回本机 blob（不压缩，原样保留）；取消或不合格返回 null（已 toast）。 */
-export async function pickAvatarOriginal(): Promise<Blob | null> {
+export function pickAvatarOriginal(): Promise<Blob | null> {
+  return pickCropOriginal('头像')
+}
+
+/** 选一张要在服务端裁成方图的原图（头像、食物图片）；label 用在提示里。 */
+export async function pickCropOriginal(label: string): Promise<Blob | null> {
   const picked = await choosePhoto()
   if (picked.cancelled) return null
   if (!picked.path) {
@@ -344,7 +349,7 @@ export async function pickAvatarOriginal(): Promise<Blob | null> {
   try {
     const blob = await (await fetch(picked.path)).blob()
     if (!AVATAR_MIME.includes(blob.type)) {
-      uni.showToast({ title: '头像只支持 JPEG/PNG 图片', icon: 'none' })
+      uni.showToast({ title: `${label}只支持 JPEG/PNG 图片`, icon: 'none' })
       return null
     }
     if (blob.size > MAX_BYTES) {
@@ -392,4 +397,61 @@ export async function uploadAvatar(blob: Blob, crop: CropBox): Promise<boolean> 
 /** 取头像的一种图；取不到返回 null。 */
 export function fetchAvatar(id: number, kind: AvatarImageKind = 'crop'): Promise<string | null> {
   return fetchCached(`${API_BASE}/account/avatars/${id}/image?kind=${kind}`, avatarKey(id, kind))
+}
+
+// ── 食物图片（ADR 0057）：每条食物一张方图，裁剪框和头像共用；缓存键带 imageKey，换图自然换键，不用手动作废 ──
+
+export type FoodImageKind = 'thumb' | 'full'
+
+/** 取一条食物的图片；没有图或取不到返回 null。imageKey 是食物上的版本号。 */
+export function fetchFoodImage(id: number, imageKey: string, kind: FoodImageKind = 'thumb'): Promise<string | null> {
+  return fetchCached(`${API_BASE}/foods/${id}/image?kind=${kind}&v=${imageKey}`, `food-${kind}:${id}:${imageKey}`)
+}
+
+/** 给自建食物设图（本机原图 ＋ 裁剪框，服务端截方图），成功返回新的 imageKey；失败已 toast、返回 null。 */
+export async function uploadFoodImage(foodId: number, blob: Blob, crop: CropBox): Promise<string | null> {
+  uni.showLoading({ title: '上传中…' })
+  try {
+    const fd = new FormData()
+    fd.append('file', blob, blob.type === 'image/png' ? 'food.png' : 'food.jpg')
+    fd.append('x', String(crop.x))
+    fd.append('y', String(crop.y))
+    fd.append('size', String(crop.size))
+    const res = await fetch(`${API_BASE}/foods/${foodId}/image`, { method: 'POST', headers: authHeader(), body: fd })
+    let body: { code?: number; message?: string; data?: { imageKey?: string | null } } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      /* 非 JSON（如 nginx 错误页） */
+    }
+    uni.hideLoading()
+    if (res.ok && body && body.code === 0) {
+      // 食物列表（缩略图版本号）和存储占用都变了
+      invalidate('food', 'diet')
+      return body.data?.imageKey ?? null
+    }
+    uni.showToast({ title: (body && body.message) || '上传失败', icon: 'none' })
+    return null
+  } catch {
+    uni.hideLoading()
+    uni.showToast({ title: '上传失败，请检查网络', icon: 'none' })
+    return null
+  }
+}
+
+/** 去掉自建食物的图片（旧图直接删，不进回收站）。成功返回 true；失败已 toast。 */
+export async function removeFoodImage(foodId: number): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/foods/${foodId}/image`, { method: 'DELETE', headers: authHeader() })
+    const body = (await res.json().catch(() => null)) as { code?: number; message?: string } | null
+    if (res.ok && body && body.code === 0) {
+      invalidate('food', 'diet')
+      return true
+    }
+    uni.showToast({ title: (body && body.message) || '操作失败', icon: 'none' })
+    return false
+  } catch {
+    uni.showToast({ title: '操作失败，请检查网络', icon: 'none' })
+    return false
+  }
 }
