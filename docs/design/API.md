@@ -67,6 +67,14 @@
 - **恢复**（`POST /api/trash/restore`）任一条不归属则整批不动；有话要告诉主人时带 `note`；丢掉的训练带 `session`，由前端写回本机。
 - **丢掉的训练**（`POST /api/trash/sessions`）按用户和开始时刻去重，重复补传算成功。
 
+## 食物库接口
+
+`/api/foods`（[ADR 0056](../adr/0056-food-search-ranking-and-aliases.md)、[ADR 0057](../adr/0057-food-image.md)）走登录态 JWT，字段以接口文档运行时为准。有三处要注意：
+
+- **搜索与排序**：`q` 里的字按顺序出现在名字或别名里就算命中；排序由服务端决定（匹配度分档 → 收藏 → 本人近 30 天记录次数 → 自建优先 → 名称、id）。`GET /api/foods/count` 用同一个筛选条件。
+- **别名**：新建和编辑都带 `aliases`（字符串数组，也收一个分隔好的串），服务端负责拆分、去重和校验（最多 10 个，每个不超过 16 字），编辑是整体覆盖，不给就清空。新建时可以带 `copyImageFrom`，把那条食物的图片复制过来（「复制为自定义」用）。
+- **图片**：`POST /api/foods/{id}/image`（multipart：`file` ＋ 可选 `x`、`y`、`size`，口径同头像）只收 JPEG/PNG，只限自建食物；`DELETE` 同路径去掉图片（不进回收站）；`GET /api/foods/{id}/image?kind=thumb|full` 直出二进制，没有图时返回 404。列表里的 `imageKey` 是图片版本号，换图就变。
+
 餐照接口按 id：`/api/diet/photos/{id}` 与 `/thumb`，某一餐的列表是 `/api/diet/photos/of-meal`（[ADR 0045](../adr/0045-meal-photos-multiple-per-meal.md)）。
 
 记一餐的 AI 识别（[ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md)）：`POST /api/food-recognition/meal` 照片进、临时食物草稿出，不落库，营养是每 100、`grams` 是这一份的量；`POST /api/diet/meals/custom` 记一条临时条目（营养按每 100 传，钠可空），条目的 `foodId` 为空。条目返回都多带 `sodium`，老条目为 `null`。
@@ -81,6 +89,7 @@
 - **没有删除接口**：预置的删除就是下架，`POST .../archive` 和 `.../unarchive` 都收 `{ ids }`，批量里混进非预置的 id 就整批拒绝。重新上架会清掉所有用户对它的隐藏。
 - **导入分两步**：`POST /api/admin/foods/import/preview` 只预检不写库，`POST /api/admin/foods/import` 重新预检一遍再在一个事务里写入；两者返回同一种结构（新增数、更新数、无效清单）。格式与 `GET /api/admin/foods/export` 一致，和 App 自建食物的 JSON 只多了 `id`、`category` 两个键（读取逻辑共用 `FoodJsonReader`）。
 - **动作资料与动图**（2026-11-11，[ADR 0055](../adr/0055-exercise-dataset-and-media.md)）：`GET /api/exercises/{id}` 给动作详情（含资料，自定义动作资料为空）；`GET /api/exercises/{id}/media?kind=gif|thumb` 直出动图或缩略图二进制（不走 Result 信封，要登录，没有文件按 404 语义返回）；`GET /api/exercises/count` 给动作库可见数。管理端多了 `GET /api/admin/exercises/export`、`POST /api/admin/exercises/import/preview`、`POST /api/admin/exercises/import`，请求体同预置食物导入（`{text}`）。
+- **食物别名与图片**（2026-11-15，[ADR 0056](../adr/0056-food-search-ranking-and-aliases.md)、[ADR 0057](../adr/0057-food-image.md)）：管理端食物的增改、导入导出都带 `aliases`（字符串数组，也收一个用顿号分隔的串）；列表的 `q` 同时搜名字和别名。`POST`／`DELETE /api/admin/foods/{id}/image` 设或去掉预置食物的图片（multipart 的 `file`，不给裁剪框就居中截取），`GET` 同路径直出图片供预览。
 - **App 这边的变化**：食物和动作列表多了 `archived` 字段，只会出现在用过它的人看到的已下架预置上；对这类预置调 `DELETE /api/foods/{id}` 或 `DELETE /api/exercises/{id}` 是对自己隐藏，回收站类型是 `preset_food`／`preset_exercise`。
 
 ## 外部 agent 取数接口
