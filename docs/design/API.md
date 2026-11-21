@@ -71,7 +71,7 @@
 
 `/api/foods`（[ADR 0056](../adr/0056-food-search-ranking-and-aliases.md)、[ADR 0057](../adr/0057-food-image.md)）走登录态 JWT，字段以接口文档运行时为准。有三处要注意：
 
-- **搜索与排序**：`q` 里的字按顺序出现在名字或别名里就算命中；排序由服务端决定（匹配度分档 → 收藏 → 本人近 30 天记录次数 → 自建优先 → 名称、id）。`GET /api/foods/count` 用同一个筛选条件。
+- **搜索与排序**：`q` 里的字按顺序出现在名字或别名里就算命中；`q` 全是字母时，名字或别名的拼音首字母连着包含它也算命中（`zr` → 猪肉，[ADR 0058](../adr/0058-food-search-two-tiers-and-pinyin-initials.md)）。排序由服务端决定（两档：完全一样／其余命中 → 收藏 → 本人近 30 天记录次数 → 自建优先 → 名称、id）。`GET /api/foods/count` 用同一个筛选条件。管理端列表的 `q` 同样认首字母。
 - **别名**：新建和编辑都带 `aliases`（字符串数组，也收一个分隔好的串），服务端负责拆分、去重和校验（最多 10 个，每个不超过 16 字），编辑是整体覆盖，不给就清空。新建时可以带 `copyImageFrom`，把那条食物的图片复制过来（「复制为自定义」用）。
 - **图片**：`POST /api/foods/{id}/image`（multipart：`file` ＋ 可选 `x`、`y`、`size`，口径同头像）只收 JPEG/PNG，只限自建食物；`DELETE` 同路径去掉图片（不进回收站）；`GET /api/foods/{id}/image?kind=thumb|full` 直出二进制，没有图时返回 404。列表里的 `imageKey` 是图片版本号，换图就变。
 

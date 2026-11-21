@@ -13,6 +13,7 @@ import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.service.FoodJsonReader;
+import com.example.fitapp.module.nutrition.service.FoodInitials;
 import com.example.fitapp.module.nutrition.service.FoodSearch;
 import com.example.fitapp.module.nutrition.service.FoodService;
 import com.example.fitapp.module.preset.entity.PresetHidden;
@@ -63,11 +64,13 @@ public class AdminFoodService {
         long s = Math.min(Math.max(size, 1), PAGE_SIZE_MAX);
         FoodSearch terms = FoodSearch.of(q);
         LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery()
-                .isNull(Food::getUserId)
-                // 名字或别名里连着包含关键词（管理端按名称排，不需要 App 那套分档）。
-                // 别名列带 TypeHandler，lambda 条件会拿它去转参数，所以走 apply
-                .apply(terms != null, FoodSearch.FILTER, terms == null ? null : terms.getContains())
-                .eq(StringUtils.hasText(category), Food::getCategory, category)
+                .isNull(Food::getUserId);
+        // 名字或别名里连着包含关键词，全是字母时也比拼音首字母（管理端按名称排，不需要 App 那套分档）。
+        // 别名列带 TypeHandler，lambda 条件会拿它去转参数，所以走 apply
+        if (terms != null) {
+            terms.filter(w, terms.getContains());
+        }
+        w.eq(StringUtils.hasText(category), Food::getCategory, category)
                 .eq(STATUS_LISTED.equals(status), Food::getArchived, false)
                 .eq(STATUS_ARCHIVED.equals(status), Food::getArchived, true);
         if ("updated".equals(sort)) {
@@ -261,6 +264,7 @@ public class AdminFoodService {
         food.setUnit(dto.getUnit() == null || dto.getUnit().isBlank() ? "g" : dto.getUnit());
         food.setCategory(category.trim());
         food.setAliases(FoodService.aliasesOf(dto, food.getName()));
+        food.setInitials(FoodInitials.of(food.getName(), food.getAliases()));
         food.setImageKey(null);
         food.setImageBytes(0);
         food.setArchived(false);

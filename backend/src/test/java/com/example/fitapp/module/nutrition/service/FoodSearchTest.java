@@ -22,10 +22,23 @@ class FoodSearchTest {
 
         assertEquals("猪肠", t.getKw());
         assertEquals("%|猪肠|%", t.getExactAlias());
-        assertEquals("猪肠%", t.getPrefix());
-        assertEquals("%|猪肠%", t.getPrefixAlias());
         assertEquals("%猪肠%", t.getContains());
         assertEquals("%猪%肠%", t.getFuzzy());
+        assertNull(t.getInitialsExact(), "有汉字就不走首字母");
+        assertNull(t.getInitialsContains());
+    }
+
+    @Test
+    void lettersOnlyAlsoMatchInitials() {
+        FoodSearch t = FoodSearch.of(" ZR ");
+
+        assertEquals("%|zr|%", t.getInitialsExact());
+        assertEquals("%zr%", t.getInitialsContains());
+    }
+
+    @Test
+    void mixedLettersAndDigitsDoNotUseInitials() {
+        assertNull(FoodSearch.of("zr2").getInitialsContains());
     }
 
     @Test

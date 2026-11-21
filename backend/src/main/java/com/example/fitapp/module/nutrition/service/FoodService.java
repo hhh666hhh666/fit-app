@@ -81,7 +81,7 @@ public class FoodService {
                 // 自建的 ＋ 对这个用户可见的预置（已下架的只给用过、没隐藏的人看，ADR 0048）
                 .apply(PresetSql.FOOD_VISIBLE, userId);
         if (terms != null) {
-            w.apply(FoodSearch.FILTER, terms.getFuzzy());
+            terms.filter(w, terms.getFuzzy());
         }
         LocalDate since = LocalDate.now(ZONE).minusDays(RECENT_DAYS - 1L);
         return foodMapper.search(w, terms, userId, since, offset, limit);
@@ -130,8 +130,10 @@ public class FoodService {
 
     private LambdaQueryWrapper<Food> scopeQuery(Long ownerId, String q) {
         FoodSearch terms = FoodSearch.of(q);
-        LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery()
-                .apply(terms != null, FoodSearch.FILTER, terms == null ? null : terms.getFuzzy());
+        LambdaQueryWrapper<Food> w = Wrappers.<Food>lambdaQuery();
+        if (terms != null) {
+            terms.filter(w, terms.getFuzzy());
+        }
         if (ownerId == null) {
             w.isNull(Food::getUserId);
         } else {
@@ -157,6 +159,7 @@ public class FoodService {
         food.setName(name);
         food.setUnit(normalizeUnit(dto.getUnit()));
         food.setAliases(aliasesOf(dto, name));
+        food.setInitials(FoodInitials.of(name, food.getAliases()));
         // 「复制为自定义」带上来源的图片（ADR 0057）；复制不成就当没有图
         FoodImageService.Copied image = foodImageService.copyFrom(userId, dto.getCopyImageFrom());
         if (image != null) {
@@ -218,9 +221,11 @@ public class FoodService {
      */
     public static LambdaUpdateWrapper<Food> overwrite(LambdaUpdateWrapper<Food> w, String name, FoodSaveDTO dto) {
         // 别名列有 TypeHandler，但 wrapper 的 set 不走它，所以直接给存库的写法
+        List<String> aliases = aliasesOf(dto, name);
         return w
                 .set(Food::getName, name)
-                .set(Food::getAliases, FoodAliases.join(aliasesOf(dto, name)))
+                .set(Food::getAliases, FoodAliases.join(aliases))
+                .set(Food::getInitials, FoodInitials.of(name, aliases))
                 .set(Food::getUnit, normalizeUnit(dto.getUnit()))
                 .set(Food::getKcal, dto.getKcal())
                 .set(Food::getProtein, dto.getProtein())
@@ -324,6 +329,7 @@ public class FoodService {
             food.setName(name);
             food.setUnit(normalizeUnit(item.getUnit()));
             food.setAliases(item.getAliases());
+            food.setInitials(FoodInitials.of(name, food.getAliases()));
             foodMapper.insert(food);
             seen.add(name);
             result.setImported(result.getImported() + 1);

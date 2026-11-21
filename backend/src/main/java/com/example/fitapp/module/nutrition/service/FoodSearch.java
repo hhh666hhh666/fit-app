@@ -1,12 +1,15 @@
 package com.example.fitapp.module.nutrition.service;
 
+import com.baomidou.mybatisplus.core.conditions.interfaces.Join;
 import lombok.Getter;
 
 /**
- * 食物搜索的关键词怎么变成 SQL 参数（ADR 0056）。
+ * 食物搜索的关键词怎么变成 SQL 参数（ADR 0056，分档与拼音见 ADR 0058）。
  *
- * <p>筛选：关键词里的字按顺序出现在名字或别名里就算命中（「猪肠」命中「猪大肠」），中间可以隔别的字。
- * 排序先看匹配度，名字和每个别名取最好的那一档：完全一样 ＞ 开头一样 ＞ 连着包含 ＞ 只是按字顺序对得上。</p>
+ * <p>筛选：关键词里的字按顺序出现在名字或别名里就算命中（「猪肠」命中「猪大肠」），中间可以隔别的字；
+ * 关键词全是字母时，名字或别名的拼音首字母连着包含它也算命中（{@code zr} 命中「猪肉」）。
+ * 排序只分两档：名字、名字方括号里的叫法、某个别名或某段首字母<b>完全一样</b>的在前，其余命中的在后；
+ * 档内再比收藏、记录次数、自建（见 FoodMapper.search）。</p>
  *
  * <p>LIKE 的转义符用 {@code !}，不用反斜杠——反斜杠在 MySQL 的 NO_BACKSLASH_ESCAPES 模式下不是转义符。
  * 这里的字段是给 Mapper 注解 SQL 用的，一律走参数绑定，不拼进 SQL。</p>
@@ -31,22 +34,28 @@ public final class FoodSearch {
     private final String kw;
     /** 某个别名完全一样：{@code %|kw|%}，比的是 {@link #SEGMENTS}。 */
     private final String exactAlias;
-    /** 名字开头一样：{@code kw%}。 */
-    private final String prefix;
-    /** 某个别名开头一样：{@code %|kw%}，比的是 {@link #SEGMENTS}。 */
-    private final String prefixAlias;
     /** 连着包含：{@code %kw%}。 */
     private final String contains;
     /** 按字顺序：{@code %猪%肠%}，空白不算字。筛选用它。 */
     private final String fuzzy;
+    /** 关键词全是字母时，某段首字母完全一样：{@code %|zr|%}；否则 null（不走首字母）。 */
+    private final String initialsExact;
+    /** 关键词全是字母时，首字母连着包含：{@code %zr%}；否则 null。 */
+    private final String initialsContains;
 
     private FoodSearch(String kw) {
         String e = escape(kw);
         this.kw = kw;
         this.exactAlias = "%|" + e + "|%";
-        this.prefix = e + "%";
-        this.prefixAlias = "%|" + e + "%";
         this.contains = "%" + e + "%";
+        if (kw.matches("[A-Za-z]+")) {
+            String lower = kw.toLowerCase();
+            this.initialsExact = "%|" + lower + "|%";
+            this.initialsContains = "%" + lower + "%";
+        } else {
+            this.initialsExact = null;
+            this.initialsContains = null;
+        }
         StringBuilder sb = new StringBuilder("%");
         kw.codePoints().filter(cp -> !Character.isWhitespace(cp)).forEach(cp ->
                 sb.append(escape(new String(Character.toChars(cp)))).append('%'));
@@ -68,6 +77,22 @@ public final class FoodSearch {
      */
     public static final String FILTER =
             "(food.name LIKE {0}" + ESCAPE + " OR food.aliases LIKE {0}" + ESCAPE + ")";
+
+    /** 关键词全是字母时的筛选：在 {@link #FILTER} 之外，首字母 LIKE {1} 也算命中。 */
+    static final String FILTER_WITH_INITIALS =
+            "(food.name LIKE {0}" + ESCAPE + " OR food.aliases LIKE {0}" + ESCAPE + " OR food.initials LIKE {1})";
+
+    /**
+     * 把筛选条件放进 wrapper：名字或别名 LIKE {@code pattern}（App 给 {@link #getFuzzy()}、管理端给 {@link #getContains()}），
+     * 关键词全是字母时再加首字母。列表和计数必须走同一个方法，否则食物库页滚动到底的判断会错。
+     */
+    public void filter(Join<?> w, String pattern) {
+        if (initialsContains == null) {
+            w.apply(FILTER, pattern);
+        } else {
+            w.apply(FILTER_WITH_INITIALS, pattern, initialsContains);
+        }
+    }
 
     /**
      * ⚠️ 别名列带 TypeHandler：lambda 条件（{@code like(Food::getAliases, ..)}、{@code eq}）会拿它去转参数，

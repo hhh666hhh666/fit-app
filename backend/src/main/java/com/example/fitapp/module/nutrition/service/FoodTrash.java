@@ -59,6 +59,7 @@ public class FoodTrash implements TrashHandler {
         Food f = store.read(item, Food.class);
         String original = f.getName();
         f.setName(freeName(userId, original));
+        f.setInitials(FoodInitials.of(f.getName(), f.getAliases()));
         foodMapper.insert(f);
         return original.equals(f.getName()) ? null : "已有同名食物，改名为「" + f.getName() + "」";
     }

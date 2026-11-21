@@ -16,9 +16,9 @@ import java.util.List;
 public interface FoodMapper extends BaseMapper<Food> {
 
     /**
-     * 食物库列表与搜索（ADR 0056）。筛选条件由调用方放进 wrapper（可见范围、关键词），这里只管排序和分页：
-     * ① 有关键词时先按匹配度分档（名字、名字方括号里的叫法、每个别名，取最好的一档；见 FoodSearch.SEGMENTS）
-     * ② 收藏 ③ 这个用户从 since 起记过几次 ④ 自建排在预置前面 ⑤ 名称、id（分页稳定）。
+     * 食物库列表与搜索（ADR 0056，分档改两档见 ADR 0058）。筛选条件由调用方放进 wrapper（可见范围、关键词），这里只管排序和分页：
+     * ① 有关键词时先分两档：名字、名字方括号里的叫法、某个别名（见 FoodSearch.SEGMENTS）或某段拼音首字母完全一样的在前，
+     * 其余命中的在后 ② 收藏 ③ 这个用户从 since 起记过几次 ④ 自建排在预置前面 ⑤ 名称、id（分页稳定）。
      * wrapper 里不要放 orderBy——ORDER BY 在这里写死。
      */
     @ResultMap("mybatis-plus_Food")
@@ -28,10 +28,10 @@ public interface FoodMapper extends BaseMapper<Food> {
             ORDER BY
             <if test="t != null">
               CASE
-                WHEN food.name = #{t.kw} OR ${@com.example.fitapp.module.nutrition.service.FoodSearch@SEGMENTS} LIKE #{t.exactAlias} ESCAPE '!' THEN 0
-                WHEN food.name LIKE #{t.prefix} ESCAPE '!' OR ${@com.example.fitapp.module.nutrition.service.FoodSearch@SEGMENTS} LIKE #{t.prefixAlias} ESCAPE '!' THEN 1
-                WHEN food.name LIKE #{t.contains} ESCAPE '!' OR food.aliases LIKE #{t.contains} ESCAPE '!' THEN 2
-                ELSE 3
+                WHEN food.name = #{t.kw} OR ${@com.example.fitapp.module.nutrition.service.FoodSearch@SEGMENTS} LIKE #{t.exactAlias} ESCAPE '!'
+                <if test="t.initialsExact != null"> OR food.initials LIKE #{t.initialsExact}</if>
+                THEN 0
+                ELSE 1
               END,
             </if>
               food.favorite DESC,

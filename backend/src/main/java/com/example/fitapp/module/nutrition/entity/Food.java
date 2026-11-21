@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -34,6 +35,13 @@ public class Food {
     /** 别名（ADR 0056）：搜索时和名字同等对待；没有别名为 null。库里用 | 连接。 */
     @TableField(typeHandler = AliasListTypeHandler.class)
     private List<String> aliases;
+
+    /**
+     * 名字与别名的拼音首字母（ADR 0058），如 {@code |fq|xhs|}；只给搜索用，不出接口。
+     * 写名字、别名的地方都要跟着算（{@link com.example.fitapp.module.nutrition.service.FoodInitials}）；NULL＝还没算，启动时补。
+     */
+    @JsonIgnore
+    private String initials;
 
     /** 基准单位：g=每100g / ml=每100ml。 */
     private String unit;

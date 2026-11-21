@@ -98,6 +98,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- 食物搜索的拼音首字母（ADR 0058）：只用它查汉字的读音，多音字取全部读音 -->
+        <dependency>
+            <groupId>com.belerweb</groupId>
+            <artifactId>pinyin4j</artifactId>
+            <version>2.5.1</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
