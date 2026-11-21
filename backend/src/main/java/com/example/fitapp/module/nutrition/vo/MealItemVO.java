@@ -18,6 +18,9 @@ public class MealItemVO {
 
     private String foodName;
 
+    /** 临时条目：没挂食物库（AI 识别记的，或来源食物已删），营养只在快照里；能改名，会出现在记一餐的列表里（scope #48）。 */
+    private boolean temporary;
+
     /** 实际摄入量（克；ml 单位食物为毫升）。 */
     private BigDecimal grams;
 

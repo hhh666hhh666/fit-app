@@ -79,6 +79,8 @@
 
 记一餐的 AI 识别（[ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md)）：`POST /api/food-recognition/meal` 照片进、临时食物草稿出，不落库，营养是每 100、`grams` 是这一份的量（照片没估出重量时服务端兜底 100，并带 `gramsGuessed: true`——这时营养其实是整份总量）；`POST /api/diet/meals/custom` 记一条临时条目（营养按每 100 传，钠可空），条目的 `foodId` 为空。条目返回都多带 `sodium`，老条目为 `null`。
 
+临时条目的改名与复用（scope #48，2026-11-21）：条目多带 `temporary`（＝`foodId` 为空，含来源食物已删的条目）。`PUT /api/diet/meals/{id}` 改成「给了哪项改哪项」：`grams`、`name` 都可选，`name` 只有临时条目能改，否则 400。`GET /api/diet/picks?q=&limit=` 是记一餐弹层的列表：每行是 `{type: food, food}` 或 `{type: temp, temp}`，`temp` 是近 30 天吃过的一种临时条目（名字和每 100 营养一样的合成一种，带上次份量 `grams`、次数 `count`、最近日期 `lastDate`），和食物按同一套规则排好（两档 → 收藏 → 近 30 天次数 → 自建，临时条目算自建、不能收藏）。再记一条走 `POST /api/diet/meals/custom`。
+
 识别明细（[ADR 0053](../adr/0053-recognition-log-detail.md)）：`GET /api/food-recognition/logs` 分页列表不带 `rawOutput`、`requestJson`、`responseJson`；`GET /api/food-recognition/logs/{id}` 给一条的全部字段，外加 `price`（价格估算，只算 DeepSeek，按北京时间峰谷，[ADR 0054](../adr/0054-recognition-price-deepseek.md)），不是自己的返回 404。`GET /api/food-recognition/stats?range=all|month|week`（缺省或不认识的值按 `all`）给用量统计：合计（次数／成败、token 分项、估算金额及高峰／空闲拆分、未计价次数与 token）、平均每次、缓存命中率、`byModel`／`byKind` 分组、`daily` 逐日序列（没记录的天为 0）、放假表没覆盖的年份；金额按记录逐条估算后合计，时间按请求发出的时刻、北京时间划分。
 
 ## 管理端接口

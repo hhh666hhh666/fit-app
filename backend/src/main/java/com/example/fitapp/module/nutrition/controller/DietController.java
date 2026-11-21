@@ -9,6 +9,8 @@ import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.entity.MealPhoto;
 import com.example.fitapp.module.nutrition.service.DietService;
+import com.example.fitapp.module.nutrition.service.MealPickService;
+import com.example.fitapp.module.nutrition.vo.MealPickVO;
 import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
 import com.example.fitapp.module.nutrition.vo.StorageVO;
@@ -40,10 +42,21 @@ import java.util.List;
 public class DietController {
 
     private final DietService dietService;
+    private final MealPickService mealPickService;
 
     @GetMapping
     public Result<DayOverviewVO> day(@RequestParam String date) {
         return Result.success(dietService.day(UserContext.requireUserId(), date));
+    }
+
+    /**
+     * 记一餐弹层的列表（scope #48）：食物库的食物和近 30 天吃过的临时条目排在一起。
+     * 每行是 {type: food, food: {...}} 或 {type: temp, temp: {...}}。
+     */
+    @GetMapping("/picks")
+    public Result<List<MealPickVO>> picks(@RequestParam(required = false) String q,
+                                          @RequestParam(defaultValue = "200") int limit) {
+        return Result.success(mealPickService.picks(UserContext.requireUserId(), q, limit));
     }
 
     @PostMapping("/meals")

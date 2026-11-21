@@ -5,6 +5,7 @@ import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
 import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
+import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.entity.DietDaily;
 import com.example.fitapp.module.nutrition.entity.Food;
@@ -208,6 +209,33 @@ class DietServiceTest {
 
         assertThrows(BusinessException.class, () -> service().addMeal(7L, dto));
         verify(mealLogMapper, never()).insert(any(MealLog.class));
+    }
+
+    @Test
+    void updateMeal_renamesTemporaryEntry() {
+        MealLog l = log("lunch", "红烧肉", "150", "300", "10", "5", "25");
+        l.setId(3L);
+        when(mealLogMapper.selectById(3L)).thenReturn(l);
+        MealUpdateDTO dto = new MealUpdateDTO();
+        dto.setName("  妈妈做的红烧肉 ");
+
+        MealItemVO item = service().updateMeal(7L, 3L, dto);
+
+        assertEquals("妈妈做的红烧肉", item.getFoodName());
+        assertTrue(item.isTemporary());
+        assertEquals(new BigDecimal("150"), item.getGrams(), "没给份量就不动");
+    }
+
+    @Test
+    void updateMeal_libraryEntryCannotBeRenamed() {
+        MealLog l = log("lunch", "米饭", "100", "116", "2.6", "25.9", "0.3");
+        l.setFoodId(5L);
+        when(mealLogMapper.selectById(3L)).thenReturn(l);
+        MealUpdateDTO dto = new MealUpdateDTO();
+        dto.setName("白米饭");
+
+        assertThrows(BusinessException.class, () -> service().updateMeal(7L, 3L, dto));
+        verify(mealLogMapper, never()).updateById(any(MealLog.class));
     }
 
     @Test

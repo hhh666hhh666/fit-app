@@ -90,6 +90,8 @@ export interface MealItem {
   meal: MealKey
   foodId?: number | null
   foodName: string
+  /** 临时条目：没挂食物库（AI 识别记的，或来源食物已删）；能改名，会出现在记一餐的列表里（scope #48）。 */
+  temporary: boolean
   /** 实际摄入量（克；ml 单位食物为毫升）。 */
   grams: number
   kcal: number
@@ -405,8 +407,36 @@ export function addCustomMeal(payload: {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals/custom', payload)))
 }
 
-export function updateMeal(id: number, grams: number) {
-  return mutating('diet', () => unwrap(request.put<MealItem>(`/diet/meals/${id}`, { grams })))
+/** 改一条条目：给了哪项改哪项；名称只有临时条目能改。 */
+export function updateMeal(id: number, patch: { grams?: number; name?: string }) {
+  return mutating('diet', () => unwrap(request.put<MealItem>(`/diet/meals/${id}`, patch)))
+}
+
+/** 吃过的一种临时条目（名字和营养一样的合成一种）；营养是每 100。 */
+export interface TempPick {
+  name: string
+  /** 上一次记的份量。 */
+  grams: number
+  kcal: number
+  protein: number
+  fat: number
+  carb: number
+  sodium?: number | null
+  /** 近 30 天记过几次。 */
+  count: number
+  lastDate: string
+}
+
+export type MealPick = { type: 'food'; food: FoodItem } | { type: 'temp'; temp: TempPick }
+
+/**
+ * 记一餐弹层的列表（scope #48）：食物库的食物和近 30 天吃过的临时条目，由服务端按同一套规则排好。
+ * 依赖饮食和食物库两个域：记了一餐、改了食物都要重取。
+ */
+export function listMealPicks(q?: string, limit = 200) {
+  const params: Record<string, unknown> = { limit }
+  if (q) params.q = q
+  return read<MealPick[]>('/diet/picks', params, ['diet', 'food'], !q)
 }
 
 export function deleteMeal(id: number) {

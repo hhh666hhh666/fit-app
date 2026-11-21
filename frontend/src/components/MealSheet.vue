@@ -7,18 +7,19 @@ import {
   deleteMeal,
   getDay,
   listCombos,
-  listFoods,
+  listMealPicks,
   updateMeal,
   listMealPhotos,
   recognizeMeal,
   type AlbumPhoto,
   type ComboItem,
   type FoodComboVO,
-  type FoodItem,
   type MealDraft,
   type MealDraftKey,
   type MealItem,
-  type MealKey
+  type MealKey,
+  type MealPick,
+  type TempPick
 } from '@/api/nutrition'
 import { choosePhoto, compress, deletePhoto, fetchMealPhoto, pickAndUploadPhotos } from '@/utils/photo'
 import PhotoViewer from '@/components/PhotoViewer.vue'
@@ -28,7 +29,7 @@ import FoodThumb from '@/components/FoodThumb.vue'
 import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
-import { ask, TRASH_HINT } from '@/utils/confirm'
+import { ask, askInput, TRASH_HINT } from '@/utils/confirm'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -63,9 +64,25 @@ const viewer = ref({ show: false, index: 0, urls: [] as (string | null)[] })
 /** 轻量列表条数上限（预置 1800+ 条：搜索走服务端，初始只带前 N 条）。 */
 const FOOD_LIMIT = 200
 const keyword = ref('')
-const foods = ref<FoodItem[]>([])
-const selected = ref<FoodItem | null>(null)
+/** 列表：食物库的食物 ＋ 吃过的临时条目，服务端按同一套规则排好（scope #48）。 */
+const foods = ref<MealPick[]>([])
+
+/** 选中的一行：食物（foodId）或吃过的临时条目（temp，照它的营养再记一条）。 */
+interface Choice {
+  name: string
+  unit: 'g' | 'ml'
+  kcal: number
+  protein: number
+  portionGrams?: number | null
+  portionLabel?: string | null
+  foodId?: number
+  temp?: TempPick
+}
+const selected = ref<Choice | null>(null)
 const grams = ref('')
+
+const pickKey = (p: MealPick) =>
+  p.type === 'food' ? `f${p.food.id}` : `t${p.temp.name}|${p.temp.kcal}|${p.temp.protein}|${p.temp.fat}|${p.temp.carb}|${p.temp.sodium ?? ''}`
 
 // ── 改份量（行内） ──
 const editingId = ref<number | null>(null)
@@ -163,10 +180,7 @@ watch(keyword, () => {
 async function searchFoods() {
   try {
     // 预置＋自有合并；lite 轻量字段 + 条数上限（搜索交给服务端）
-    foods.value = await listFoods(keyword.value.trim() || undefined, {
-      lite: true,
-      limit: FOOD_LIMIT
-    })
+    foods.value = await listMealPicks(keyword.value.trim() || undefined, FOOD_LIMIT)
   } catch {
     // request 层已统一提示
   }
@@ -297,10 +311,26 @@ async function onComboSaved() {
 
 // ── 添加 ──
 
-function selectFood(f: FoodItem) {
-  selected.value = f
-  // 默认份量：有常用份按 1 份，否则 100（g / ml）
-  grams.value = String(f.portionGrams ?? 100)
+function selectPick(p: MealPick) {
+  if (p.type === 'food') {
+    const f = p.food
+    selected.value = {
+      name: f.name,
+      unit: f.unit === 'ml' ? 'ml' : 'g',
+      kcal: f.kcal,
+      protein: f.protein,
+      portionGrams: f.portionGrams,
+      portionLabel: f.portionLabel,
+      foodId: f.id
+    }
+    // 默认份量：有常用份按 1 份，否则 100（g / ml）
+    grams.value = String(f.portionGrams ?? 100)
+  } else {
+    const t = p.temp
+    selected.value = { name: t.name, unit: 'g', kcal: t.kcal, protein: t.protein, temp: t }
+    // 临时条目：默认上次的份量
+    grams.value = String(t.grams)
+  }
 }
 
 function usePortion(n: number) {
@@ -324,7 +354,20 @@ async function confirmAdd() {
   }
   saving.value = true
   try {
-    const item = await addMeal({ date: props.date, meal: props.meal, foodId: f.id, grams: g })
+    const t = f.temp
+    const item = t
+      ? await addCustomMeal({
+          date: props.date,
+          meal: props.meal,
+          name: t.name,
+          grams: g,
+          kcal: t.kcal,
+          protein: t.protein,
+          fat: t.fat,
+          carb: t.carb,
+          sodium: t.sodium ?? null
+        })
+      : await addMeal({ date: props.date, meal: props.meal, foodId: f.foodId as number, grams: g })
     items.value.push(item)
     cancelSelect()
     keyword.value = ''
@@ -604,13 +647,18 @@ async function confirmTmp() {
 function onItemTap(it: MealItem) {
   // 正在改这一条的份量：点的是行里的输入框，别再弹一次菜单（菜单会被键盘顶上去、正好盖住数字）
   if (editingId.value === it.id) return
+  // 临时条目多一项「改名」（scope #48）；从食物库记的条目名字是食物的快照，不能改
+  const actions = it.temporary ? ['修改份量', '改名', '删除'] : ['修改份量', '删除']
   uni.showActionSheet({
-    itemList: ['修改份量', '删除'],
+    itemList: actions,
     success: ({ tapIndex }) => {
-      if (tapIndex === 0) {
+      const a = actions[tapIndex]
+      if (a === '修改份量') {
         editingId.value = it.id
         editGrams.value = String(it.grams)
-      } else if (tapIndex === 1) {
+      } else if (a === '改名') {
+        void renameItem(it)
+      } else if (a === '删除') {
         void removeItem(it)
       }
     }
@@ -638,7 +686,7 @@ async function confirmEdit() {
   }
   saving.value = true
   try {
-    const updated = await updateMeal(id, g)
+    const updated = await updateMeal(id, { grams: g })
     const idx = items.value.findIndex((x) => x.id === id)
     if (idx >= 0) items.value[idx] = updated
     editingId.value = null
@@ -647,6 +695,28 @@ async function confirmEdit() {
     // request 层已统一提示
   } finally {
     saving.value = false
+  }
+}
+
+async function renameItem(it: MealItem) {
+  const name = await askInput({ title: '改名', value: it.foodName, placeholder: '名称', confirmText: '保存' })
+  if (name == null || name === it.foodName) return
+  if (!name) {
+    uni.showToast({ title: '名称不能为空', icon: 'none' })
+    return
+  }
+  if (name.length > 64) {
+    uni.showToast({ title: '名称不能超过 64 字', icon: 'none' })
+    return
+  }
+  try {
+    const updated = await updateMeal(it.id, { name })
+    const idx = items.value.findIndex((x) => x.id === it.id)
+    if (idx >= 0) items.value[idx] = updated
+    emit('changed')
+    void searchFoods() // 列表里那一种临时条目也跟着换名字
+  } catch {
+    // request 层已统一提示
   }
 }
 
@@ -670,7 +740,7 @@ async function removeItem(it: MealItem) {
 
 const mealKcal = computed(() => Math.round(items.value.reduce((s, i) => s + Number(i.kcal || 0), 0)))
 
-const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
+const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
 </script>
 
 <template>
@@ -821,20 +891,39 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
 
             <!-- 食物列表 -->
             <view v-else class="foods">
-              <view v-for="f in shownFoods" :key="f.id" class="frow" @click="selectFood(f)">
-                <FoodThumb v-if="f.imageKey" :id="f.id" :image-key="f.imageKey" :size="40" class="frow__thumb" />
-                <view class="frow__mid">
-                  <view class="frow__line">
-                    <text class="frow__name">{{ f.name }}</text>
-                    <text v-if="f.preset" class="frow__badge">预设</text>
-                    <text v-if="f.archived" class="frow__badge">已下架</text>
+              <view v-for="p in shownFoods" :key="pickKey(p)" class="frow" @click="selectPick(p)">
+                <template v-if="p.type === 'food'">
+                  <FoodThumb
+                    v-if="p.food.imageKey"
+                    :id="p.food.id"
+                    :image-key="p.food.imageKey"
+                    :size="40"
+                    class="frow__thumb"
+                  />
+                  <view class="frow__mid">
+                    <view class="frow__line">
+                      <text class="frow__name">{{ p.food.name }}</text>
+                      <text v-if="p.food.preset" class="frow__badge">预设</text>
+                      <text v-if="p.food.archived" class="frow__badge">已下架</text>
+                    </view>
+                    <text v-if="matchedAlias(p.food, keyword)" class="frow__alias">
+                      别名：{{ matchedAlias(p.food, keyword) }}
+                    </text>
+                    <text class="frow__sub ft-num">每100{{ unitText(p.food) }} · 蛋白 {{ p.food.protein }}g</text>
                   </view>
-                  <text v-if="matchedAlias(f, keyword)" class="frow__alias">别名：{{ matchedAlias(f, keyword) }}</text>
-                  <text class="frow__sub ft-num">
-                    每100{{ unitText(f) }} · 蛋白 {{ f.protein }}g
-                  </text>
-                </view>
-                <text class="frow__kcal ft-num">{{ Math.round(f.kcal) }} 大卡</text>
+                  <text class="frow__kcal ft-num">{{ Math.round(p.food.kcal) }} 大卡</text>
+                </template>
+                <!-- 吃过的临时条目：照上次的营养再记一条，不进食物库（scope #48） -->
+                <template v-else>
+                  <view class="frow__mid">
+                    <view class="frow__line">
+                      <text class="frow__name">{{ p.temp.name }}</text>
+                      <text class="frow__badge">临时</text>
+                    </view>
+                    <text class="frow__sub ft-num">每100g · 蛋白 {{ p.temp.protein }}g · 上次 {{ p.temp.grams }}g</text>
+                  </view>
+                  <text class="frow__kcal ft-num">{{ Math.round(p.temp.kcal) }} 大卡</text>
+                </template>
               </view>
               <view v-if="foods.length === 0" class="foods__empty">
                 没有找到匹配的食物——可去「食物库」新增，或点「AI 识别」拍一张
@@ -863,7 +952,10 @@ const unitText = (f: FoodItem) => (f.unit === 'ml' ? 'ml' : 'g')
               </template>
               <template v-else>
                 <view class="irow__mid">
-                  <text class="irow__name">{{ it.foodName }}</text>
+                  <view class="frow__line">
+                    <text class="irow__name">{{ it.foodName }}</text>
+                    <text v-if="it.temporary" class="frow__badge">临时</text>
+                  </view>
                   <text class="irow__sub ft-num">
                     {{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
                   </text>

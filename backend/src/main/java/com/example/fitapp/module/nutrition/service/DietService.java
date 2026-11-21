@@ -232,7 +232,19 @@ public class DietService {
 
     public MealItemVO updateMeal(Long userId, Long id, MealUpdateDTO dto) {
         MealLog log = requireOwnMeal(userId, id);
-        log.setGrams(dto.getGrams());
+        if (dto.getGrams() == null && dto.getName() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "没有要修改的内容");
+        }
+        if (dto.getName() != null) {
+            // 从食物库记的条目，名字是那条食物的快照；只有临时条目（没挂食物库）能改名（scope #48）
+            if (log.getFoodId() != null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "从食物库记的条目不能改名");
+            }
+            log.setFoodName(dto.getName().trim());
+        }
+        if (dto.getGrams() != null) {
+            log.setGrams(dto.getGrams());
+        }
         mealLogMapper.updateById(log);
         return toItem(log);
     }
@@ -491,6 +503,7 @@ public class DietService {
         i.setMeal(l.getMeal());
         i.setFoodId(l.getFoodId());
         i.setFoodName(l.getFoodName());
+        i.setTemporary(l.getFoodId() == null);
         i.setGrams(l.getGrams());
         i.setKcal(actual(l.getKcalPer100(), l.getGrams()));
         i.setProtein(actual(l.getProteinPer100(), l.getGrams()));

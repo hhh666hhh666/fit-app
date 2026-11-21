@@ -45,7 +45,7 @@ public class FoodService {
     private static final int LITE_MAX_LIMIT = 500;
     /** 「常用」看最近多少天的记录次数（含今天）。 */
     static final int RECENT_DAYS = 30;
-    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     private final FoodMapper foodMapper;
     private final ObjectMapper objectMapper;
@@ -73,6 +73,13 @@ public class FoodService {
             start = offset == null ? 0 : Math.max(offset, 0);
         }
         return search(userId, q, start, size).stream().map(this::toLite).toList();
+    }
+
+    /**
+     * 记一餐列表用（{@link MealPickService}）：已排好序的前 {@code limit} 条，带首字母（算分档要用），还没转成轻量字段。
+     */
+    List<Food> searchForPicks(Long userId, String q, int limit) {
+        return search(userId, q, 0, Math.min(Math.max(limit, 1), LITE_MAX_LIMIT));
     }
 
     private List<Food> search(Long userId, String q, Integer offset, Integer limit) {
@@ -438,7 +445,7 @@ public class FoodService {
     }
 
     /** 轻量视图：只留列表/记录选择所需字段，其余置空（Jackson non_null 下不输出）。 */
-    private Food toLite(Food f) {
+    Food toLite(Food f) {
         Food lite = new Food();
         lite.setId(f.getId());
         lite.setName(f.getName());

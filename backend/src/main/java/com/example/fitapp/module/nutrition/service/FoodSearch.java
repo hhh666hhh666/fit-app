@@ -3,6 +3,8 @@ package com.example.fitapp.module.nutrition.service;
 import com.baomidou.mybatisplus.core.conditions.interfaces.Join;
 import lombok.Getter;
 
+import java.util.List;
+
 /**
  * 食物搜索的关键词怎么变成 SQL 参数（ADR 0056，分档与拼音见 ADR 0058）。
  *
@@ -38,6 +40,8 @@ public final class FoodSearch {
     private final String contains;
     /** 按字顺序：{@code %猪%肠%}，空白不算字。筛选用它。 */
     private final String fuzzy;
+    /** 关键词全是字母时的小写形式（拿去比首字母）；否则 null。 */
+    private final String letters;
     /** 关键词全是字母时，某段首字母完全一样：{@code %|zr|%}；否则 null（不走首字母）。 */
     private final String initialsExact;
     /** 关键词全是字母时，首字母连着包含：{@code %zr%}；否则 null。 */
@@ -50,9 +54,11 @@ public final class FoodSearch {
         this.contains = "%" + e + "%";
         if (kw.matches("[A-Za-z]+")) {
             String lower = kw.toLowerCase();
+            this.letters = lower;
             this.initialsExact = "%|" + lower + "|%";
             this.initialsContains = "%" + lower + "%";
         } else {
+            this.letters = null;
             this.initialsExact = null;
             this.initialsContains = null;
         }
@@ -98,6 +104,52 @@ public final class FoodSearch {
      * ⚠️ 别名列带 TypeHandler：lambda 条件（{@code like(Food::getAliases, ..)}、{@code eq}）会拿它去转参数，
      * 传字符串直接报 ClassCastException。查别名一律走 {@code apply} 绑字符串，就像 {@link #FILTER}。
      */
+    // ── Java 里的同口径判断（记一餐列表要把临时条目和食物排在一起，见 MealPickService）──
+
+    /**
+     * 是否命中：字按顺序出现在某个叫法里（忽略大小写，和 MySQL 的排序规则一致），或全是字母时首字母连着包含。
+     * 和 {@link #FILTER_WITH_INITIALS} 同一口径。
+     */
+    public boolean matches(String name, List<String> aliases, String initials) {
+        if (inOrder(name) || (aliases != null && aliases.stream().anyMatch(this::inOrder))) {
+            return true;
+        }
+        return letters != null && initials != null && initials.contains(letters);
+    }
+
+    /** 分档：名字、名字里 ［ ］ 、 ， 隔开的一段、某个别名或某段首字母完全一样是 0，其余命中是 1。 */
+    public int tier(String name, List<String> aliases, String initials) {
+        String k = kw.toLowerCase();
+        if (name != null && name.toLowerCase().equals(k)) {
+            return 0;
+        }
+        if (name != null) {
+            for (String seg : name.split("[［］、，]")) {
+                if (seg.toLowerCase().equals(k)) {
+                    return 0;
+                }
+            }
+        }
+        if (aliases != null && aliases.stream().anyMatch(a -> a.toLowerCase().equals(k))) {
+            return 0;
+        }
+        return letters != null && initials != null && initials.contains("|" + letters + "|") ? 0 : 1;
+    }
+
+    private boolean inOrder(String text) {
+        if (text == null) {
+            return false;
+        }
+        int[] want = kw.toLowerCase().codePoints().filter(cp -> !Character.isWhitespace(cp)).toArray();
+        int i = 0;
+        for (int cp : text.toLowerCase().codePoints().toArray()) {
+            if (i < want.length && cp == want[i]) {
+                i++;
+            }
+        }
+        return want.length > 0 && i == want.length;
+    }
+
     static String escape(String s) {
         return s.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }

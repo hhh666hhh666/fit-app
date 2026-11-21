@@ -17,7 +17,8 @@ interface Entry {
   promise: Promise<unknown>
   /** 解析后的值。落盘要用——Promise 里的值取不出来，只能另记一份。 */
   value?: unknown
-  domain: CacheDomain
+  /** 一个或几个域：任一个域被作废，这条就作废（如记一餐列表同时依赖饮食和食物库）。 */
+  domain: CacheDomain | CacheDomain[]
   /** 写入当天的本机日期（YYYY-MM-DD）；跨零点即视为过期。 */
   day: string
   /** 去掉查询参数的路径，白名单判定用。 */
@@ -54,7 +55,7 @@ function keyOf(url: string, params?: Record<string, unknown>): string {
 export function read<T>(
   url: string,
   params: Record<string, unknown> | undefined,
-  domain: CacheDomain,
+  domain: CacheDomain | CacheDomain[],
   cached = true
 ): Promise<T> {
   const key = keyOf(url, params)
@@ -87,7 +88,8 @@ export function read<T>(
 export function invalidate(...domains: CacheDomain[]): void {
   let touched = false
   for (const [key, entry] of store) {
-    if (domains.includes(entry.domain)) {
+    const own = Array.isArray(entry.domain) ? entry.domain : [entry.domain]
+    if (own.some((d) => domains.includes(d))) {
       store.delete(key)
       touched = true
     }
@@ -167,7 +169,7 @@ const PERSIST_PATHS = new Set([
 ])
 
 interface SnapshotEntry {
-  d: CacheDomain
+  d: CacheDomain | CacheDomain[]
   day: string
   val: unknown
 }

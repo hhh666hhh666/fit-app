@@ -41,4 +41,17 @@ public interface MealLogMapper extends BaseMapper<MealLog> {
             ) t
             """)
     LocalDate selectEarliestDate(@Param("userId") Long userId);
+
+    /** 这些食物各被这个用户从 since 起记过几次（记一餐列表排序用，和 FoodMapper.search 的次数同口径）。 */
+    @Select("""
+            <script>
+            SELECT food_id AS fid, COUNT(*) AS cnt FROM meal_log
+            WHERE user_id = #{userId} AND log_date &gt;= #{since}
+              AND food_id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+            GROUP BY food_id
+            </script>
+            """)
+    List<java.util.Map<String, Object>> countRecentByFood(@Param("userId") Long userId,
+                                                           @Param("since") LocalDate since,
+                                                           @Param("ids") List<Long> ids);
 }
