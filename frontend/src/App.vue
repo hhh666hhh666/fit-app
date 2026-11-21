@@ -151,6 +151,23 @@ uni-modal .uni-modal__bd {
   overflow-wrap: anywhere;
 }
 
+/* 带输入框的确认框（utils/confirm.ts 的 askInput）：默认是 20px 灰底等宽框，换成和表单输入框一样的样子。
+   输入框直接挂在 .uni-modal 下（不在 __bd 里），左右留白要自己给 */
+uni-modal .uni-modal__textarea {
+  box-sizing: border-box;
+  width: calc(100% - 80rpx);
+  margin: 24rpx 40rpx 32rpx;
+  height: 88rpx;
+  padding: 0 24rpx;
+  border-radius: $radius-sm;
+  background: $app-surface;
+  box-shadow: inset 0 0 0 1rpx $app-line;
+  font-family: $font-text;
+  font-size: $text-md;
+  line-height: 88rpx;
+  color: $app-ink;
+}
+
 uni-modal .uni-modal__ft {
   gap: 16rpx;
   padding: 0 32rpx 32rpx;

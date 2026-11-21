@@ -16,7 +16,7 @@ import AvatarCropper from '@/components/AvatarCropper.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
-import { ask } from '@/utils/confirm'
+import { ask, askInput } from '@/utils/confirm'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
@@ -71,6 +71,9 @@ const SCALED_KEYS = [
   ...OPTIONAL_GROUPS.flatMap((g) => g.fields.map((f) => f.key))
 ]
 
+/** 每 100g 热量的合理上限：纯油脂约 900 kcal，超过就在保存前提醒一次（每 100ml 不提醒）。 */
+const KCAL_PER100G_MAX = 900
+
 /** 当前填的份量（正数才有效）。 */
 function servingAmount(): number | null {
   const n = Number(form.portionGrams.trim())
@@ -82,20 +85,69 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-/** 切换基准；已填数值在份量有效时跟着换算，免得每 100 的数被当成每份。 */
-function setBasis(next: 'per100' | 'serving', unit?: 'g' | 'ml') {
+/** 有没有已经填了的、要随基准换算的营养数。 */
+function hasScaledValues(): boolean {
+  return SCALED_KEYS.some((k) => form[k].trim() !== '')
+}
+
+/**
+ * 切换基准；已填数值跟着换算，免得每 100 的数被当成每份（线上「姜糖」就是这样被多除了一次）。
+ * 已经填了数、份量还空着时，先问一份多少——不问就没法换算，填了才切过去，取消就留在原来的基准。
+ */
+async function setBasis(next: 'per100' | 'serving', unit?: 'g' | 'ml') {
+  if (basis.value === next) {
+    if (unit) form.unit = unit
+    return
+  }
+  let amount = servingAmount()
+  if (amount == null && hasScaledValues()) {
+    const u = (unit ?? form.unit) === 'ml' ? 'ml' : 'g'
+    // 可编辑确认框没有说明文字的位置（content 会变成输入框的预填值），说明放进标题
+    const t = await askInput({
+      title: next === 'serving' ? `已填的数要换算成每份：一份多少 ${u}？` : `已填的数要换算成每 100：一份多少 ${u}？`,
+      placeholder: '如：250',
+      confirmText: '换算'
+    })
+    if (t == null) return
+    const n = Number(t)
+    if (!t || !Number.isFinite(n) || n <= 0) {
+      uni.showToast({ title: '份量要大于 0', icon: 'none' })
+      return
+    }
+    form.portionGrams = String(n)
+    amount = n
+  }
   if (unit) form.unit = unit
-  if (basis.value === next) return
-  const amount = servingAmount()
   if (amount != null) {
     const factor = next === 'serving' ? amount / 100 : 100 / amount
     for (const k of SCALED_KEYS) {
       const t = form[k].trim()
       const n = Number(t)
-      if (t && Number.isFinite(n)) form[k] = String(round2(n * factor))
+      if (!t || !Number.isFinite(n)) continue
+      const o = per100Origin[k]
+      if (next === 'per100' && o && o.shown === t && o.amount === amount) {
+        form[k] = String(o.per100) // 换算后没动过：还原原数，不带舍入误差
+      } else {
+        form[k] = String(round2(n * factor))
+        if (next === 'serving') per100Origin[k] = { shown: form[k], per100: n, amount }
+      }
     }
   }
+  if (next === 'per100') for (const k of Object.keys(per100Origin)) delete per100Origin[k]
   basis.value = next
+}
+
+/**
+ * 从每 100 换算成每份时记下原数：每份只留两位小数，再换回每 100 会有误差（1.10 → 0.06 → 1.12）。
+ * 某格换算后没再改过、份量也没变，保存或切回时直接用原数。
+ */
+const per100Origin: Record<string, { shown: string; per100: number; amount: number }> = {}
+
+/** 按份录入时把这一格换算成每 100；换算后没动过的格子用原数。 */
+function servingToPer100(key: string, v: number, amount: number): number {
+  const o = per100Origin[key]
+  if (o && o.shown === form[key].trim() && o.amount === amount) return o.per100
+  return round2((v * 100) / amount)
 }
 
 /** 折叠状态（默认全收起）。 */
@@ -372,8 +424,8 @@ function buildPayload(): FoodPayload | null {
     uni.showToast({ title: '先填一份是多少' + (form.unit === 'ml' ? ' ml' : ' g'), icon: 'none' })
     return null
   }
-  const toPer100 = (v: number) => (perServing ? round2((v * 100) / (amount as number)) : v)
-  for (const k of Object.keys(main)) main[k] = toPer100(main[k])
+  const toPer100 = (k: string, v: number) => (perServing ? servingToPer100(k, v, amount as number) : v)
+  for (const k of Object.keys(main)) main[k] = toPer100(k, main[k])
 
   // 别名：按分隔符拆开交给服务端规整（去重、去掉和名字一样的、上限 10 个各 16 字）
   const aliases = form.aliases
@@ -402,7 +454,7 @@ function buildPayload(): FoodPayload | null {
         uni.showToast({ title: `${fd.label}数字不正确`, icon: 'none' })
         return null
       }
-      payload[fd.key] = v == null ? null : toPer100(v)
+      payload[fd.key] = v == null ? null : toPer100(fd.key, v)
     }
   }
   return payload as unknown as FoodPayload
@@ -412,6 +464,16 @@ async function save() {
   if (saving.value) return
   const payload = buildPayload()
   if (!payload) return
+  // 兜底：每 100g 超过 900 kcal（纯油脂也就 900 上下）多半是把每 100 当成每份又换算了一次
+  if (payload.unit === 'g' && Number(payload.kcal) > KCAL_PER100G_MAX) {
+    const ok = await ask({
+      title: '热量看起来过高',
+      content: `每 100g ${payload.kcal} kcal，纯油脂也只有 900 左右。确认填对了吗？`,
+      confirmText: '仍然保存',
+      cancelText: '回去改'
+    })
+    if (!ok) return
+  }
   saving.value = true
   try {
     if (isEdit.value) {

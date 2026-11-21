@@ -18,6 +18,28 @@ export interface AskOptions {
   danger?: boolean
 }
 
+/**
+ * 带一个输入框的确认框：点确认得输入的文字（去掉首尾空白），取消 / 返回键 / 调用失败得 null。
+ * 只适合问一个简短的值（如份量）；要填多项就做成页面或弹层。
+ * ⚠️ 没有说明文字：可编辑时 content 是输入框的预填值，说明要写进 title。
+ */
+export function askInput(o: Omit<AskOptions, 'content' | 'danger'> & { placeholder?: string }): Promise<string | null> {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: o.title,
+      content: '',
+      editable: true,
+      placeholderText: o.placeholder ?? '',
+      confirmText: o.confirmText ?? '确定',
+      cancelText: o.cancelText ?? '取消',
+      confirmColor: PALETTE.ink,
+      cancelColor: PALETTE.inkMuted,
+      success: (r) => resolve(r.confirm ? String(r.content ?? '').trim() : null),
+      fail: () => resolve(null)
+    })
+  })
+}
+
 /** 点确认得 true，取消 / 返回键 / 调用失败都得 false */
 export function ask(o: AskOptions): Promise<boolean> {
   return new Promise((resolve) => {
