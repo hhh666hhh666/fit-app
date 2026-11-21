@@ -30,6 +30,7 @@ import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
 import { ask, askInput, TRASH_HINT } from '@/utils/confirm'
+import { byTime, defaultEntryTime, TIME_RE } from '@/utils/diet'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -80,6 +81,14 @@ interface Choice {
 }
 const selected = ref<Choice | null>(null)
 const grams = ref('')
+
+/** 这一次加进来的条目共用的时刻（ADR 0059）：今天默认现在的钟点，补记按餐次；顶部可改。 */
+const entryTime = ref(defaultEntryTime(props.date, props.meal))
+function onTimePick(e: { detail: { value: string } }) {
+  entryTime.value = e.detail.value
+}
+/** 本餐条目按时刻排（没有时刻的老条目在后）。 */
+const sortedItems = computed(() => [...items.value].sort(byTime))
 
 const pickKey = (p: MealPick) =>
   p.type === 'food' ? `f${p.food.id}` : `t${p.temp.name}|${p.temp.kcal}|${p.temp.protein}|${p.temp.fat}|${p.temp.carb}|${p.temp.sodium ?? ''}`
@@ -265,7 +274,7 @@ async function applyCombo(c: FoodComboVO) {
     return
   }
   try {
-    const added = await addMealsBatch({ date: props.date, meal: props.meal, items: payload })
+    const added = await addMealsBatch({ date: props.date, meal: props.meal, items: payload, time: entryTime.value })
     items.value.push(...added)
     lastBatch.value = added.map((a) => a.id)
     uni.showToast({ title: `已加入 ${added.length} 条`, icon: 'none' })
@@ -365,9 +374,10 @@ async function confirmAdd() {
           protein: t.protein,
           fat: t.fat,
           carb: t.carb,
-          sodium: t.sodium ?? null
+          sodium: t.sodium ?? null,
+          time: entryTime.value
         })
-      : await addMeal({ date: props.date, meal: props.meal, foodId: f.foodId as number, grams: g })
+      : await addMeal({ date: props.date, meal: props.meal, foodId: f.foodId as number, grams: g, time: entryTime.value })
     items.value.push(item)
     cancelSelect()
     keyword.value = ''
@@ -629,7 +639,8 @@ async function confirmTmp() {
       protein: per100.protein as number,
       fat: per100.fat as number,
       carb: per100.carb as number,
-      sodium: per100.sodium
+      sodium: per100.sodium,
+      time: entryTime.value
     })
     items.value.push(item)
     tmp.value = null
@@ -648,7 +659,7 @@ function onItemTap(it: MealItem) {
   // 正在改这一条的份量：点的是行里的输入框，别再弹一次菜单（菜单会被键盘顶上去、正好盖住数字）
   if (editingId.value === it.id) return
   // 临时条目多一项「改名」（scope #48）；从食物库记的条目名字是食物的快照，不能改
-  const actions = it.temporary ? ['修改份量', '改名', '删除'] : ['修改份量', '删除']
+  const actions = it.temporary ? ['修改份量', '修改时刻', '改名', '删除'] : ['修改份量', '修改时刻', '删除']
   uni.showActionSheet({
     itemList: actions,
     success: ({ tapIndex }) => {
@@ -656,6 +667,8 @@ function onItemTap(it: MealItem) {
       if (a === '修改份量') {
         editingId.value = it.id
         editGrams.value = String(it.grams)
+      } else if (a === '修改时刻') {
+        void retimeItem(it)
       } else if (a === '改名') {
         void renameItem(it)
       } else if (a === '删除') {
@@ -695,6 +708,24 @@ async function confirmEdit() {
     // request 层已统一提示
   } finally {
     saving.value = false
+  }
+}
+
+async function retimeItem(it: MealItem) {
+  const t = await askInput({ title: '几点吃的（时:分）', value: it.time ?? entryTime.value, placeholder: '如 12:30', confirmText: '保存' })
+  if (t == null || t === it.time) return
+  const v = t.replace('：', ':')
+  if (!TIME_RE.test(v)) {
+    uni.showToast({ title: '时刻写成 12:30 这样', icon: 'none' })
+    return
+  }
+  try {
+    const updated = await updateMeal(it.id, { time: v })
+    const idx = items.value.findIndex((x) => x.id === it.id)
+    if (idx >= 0) items.value[idx] = updated
+    emit('changed')
+  } catch {
+    // request 层已统一提示
   }
 }
 
@@ -757,6 +788,13 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
         </view>
         <text class="ms__title">{{ MEAL_LABEL[meal] }}</text>
         <text class="ms__date ft-num">{{ date }}</text>
+        <!-- 这一次加进来的条目记在哪个时刻（ADR 0059） -->
+        <picker mode="time" :value="entryTime" @change="onTimePick">
+          <view class="ms__time ft-num" role="button" aria-label="改时刻">
+            <FtIcon name="clock" :size="14" :stroke="2" />
+            <text>{{ entryTime }}</text>
+          </view>
+        </picker>
         <view class="ms__close" role="button" aria-label="关闭" @click="emit('close')">
           <FtIcon name="close" :size="18" :stroke="2" />
         </view>
@@ -939,7 +977,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
               <text class="list__sum ft-num">合计 {{ mealKcal }} 大卡</text>
             </view>
             <view v-if="items.length === 0" class="list__empty">还没有记录</view>
-            <view v-for="it in items" :key="it.id" class="irow" @click="onItemTap(it)">
+            <view v-for="it in sortedItems" :key="it.id" class="irow" @click="onItemTap(it)">
               <template v-if="editingId === it.id">
                 <text class="irow__name">{{ it.foodName }}</text>
                 <view class="irow__edit">
@@ -957,7 +995,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                     <text v-if="it.temporary" class="frow__badge">临时</text>
                   </view>
                   <text class="irow__sub ft-num">
-                    {{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
+                    {{ it.time ? it.time + ' · ' : '' }}{{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
                   </text>
                 </view>
                 <text class="irow__kcal ft-num">{{ Math.round(it.kcal) }} 大卡</text>
@@ -1090,6 +1128,18 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
 .ms__date {
   font-size: $text-sm;
   color: $app-ink-muted;
+}
+
+.ms__time {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  margin-left: 12rpx;
+  padding: 6rpx 16rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
 }
 
 .ms__close {

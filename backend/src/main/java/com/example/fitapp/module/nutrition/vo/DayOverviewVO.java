@@ -67,9 +67,13 @@ public class DayOverviewVO {
     @Data
     public static class Water {
 
+        /** 当天各笔之和。 */
         private Integer ml;
 
         private Integer target;
+
+        /** 当天每一笔（ADR 0059），按时刻排，没有时刻的（旧数据迁来的）在前。 */
+        private List<WaterDrinkVO> drinks;
     }
 
     @Data
@@ -77,6 +81,10 @@ public class DayOverviewVO {
 
         private String meal;
 
+        /** 这一餐最早的时刻 HH:mm（ADR 0059）；没有条目或都没有时刻时为 null。 */
+        private String firstTime;
+
+        /** 按时刻排（没有时刻的老条目在后），同一时刻按记录先后。 */
         private List<MealItemVO> items;
     }
 }

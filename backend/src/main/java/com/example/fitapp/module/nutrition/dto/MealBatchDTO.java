@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import com.example.fitapp.module.nutrition.service.EntryTime;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -25,4 +27,8 @@ public class MealBatchDTO {
     @NotEmpty(message = "至少需要一样食物")
     @Valid
     private List<FoodAmountDTO> items;
+
+    /** 时刻（HH:mm，ADR 0059）；不给按默认规则：记今天用现在的钟点，补记按餐次（见 EntryTime）。 */
+    @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
+    private String time;
 }

@@ -38,7 +38,7 @@ GET /api/agent/history?from=2026-01-01&to=2026-03-31
 `data` 的内容：
 
 - `workouts`：一次训练，含 `blocks`（动作）和 `sets`（组次）
-- `meals`：餐次条目；`per100` 是记录时的营养快照，`actual` 是按克数算出的实际摄入
+- `meals`：餐次条目；`time` 是几点几分吃的（`HH:mm`，北京时间；2026-11-21 之前补记的老条目为 null），`per100` 是记录时的营养快照，`actual` 是按克数算出的实际摄入
 - `body`：身体档案，每条记哪项填哪项，没量的项为 null
 - `water`：每日饮水
 - `photos`：餐照元数据和下载路径；一餐可以有多张，每张有自己的 `id`

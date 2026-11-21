@@ -14,6 +14,9 @@ public class MealItemVO {
 
     private String meal;
 
+    /** 时刻 HH:mm（ADR 0059）；老条目推断不出时为 null。 */
+    private String time;
+
     private Long foodId;
 
     private String foodName;

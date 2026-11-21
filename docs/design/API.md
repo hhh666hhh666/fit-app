@@ -81,6 +81,8 @@
 
 临时条目的改名与复用（scope #48，2026-11-21）：条目多带 `temporary`（＝`foodId` 为空，含来源食物已删的条目）。`PUT /api/diet/meals/{id}` 改成「给了哪项改哪项」：`grams`、`name` 都可选，`name` 只有临时条目能改，否则 400。`GET /api/diet/picks?q=&limit=` 是记一餐弹层的列表：每行是 `{type: food, food}` 或 `{type: temp, temp}`，`temp` 是近 30 天吃过的一种临时条目（名字和每 100 营养一样的合成一种，带上次份量 `grams`、次数 `count`、最近日期 `lastDate`），和食物按同一套规则排好（两档 → 收藏 → 近 30 天次数 → 自建，临时条目算自建、不能收藏）。再记一条走 `POST /api/diet/meals/custom`。
 
+时刻与饮水明细（[ADR 0059](../adr/0059-water-per-drink-and-entry-time.md)，2026-11-21）：加条目的三个接口（`/meals`、`/meals/custom`、`/meals/batch`）和 `PUT /meals/{id}` 都收可选的 `time`（`HH:mm`）；不给时服务端兜底——记今天用北京时间的当前钟点，补记按餐次（早 8、午 12、晚 18，加餐用当前钟点）。前端一律自己带上本机时刻。条目返回带 `time`，当日总览的每餐带 `firstTime`，`items` 按时刻排。饮水改成一笔一笔：`POST /api/diet/water/drinks`（`date`、`ml`、可选 `time`）、`PUT`／`DELETE /api/diet/water/drinks/{id}`；当日总览的 `water.drinks` 是当天每一笔。老接口 `POST /api/diet/water {date, delta}` 仍在（首页卡用）：正数＝记一笔，负数＝撤掉当天最后记的那一笔，返回当天合计。
+
 识别明细（[ADR 0053](../adr/0053-recognition-log-detail.md)）：`GET /api/food-recognition/logs` 分页列表不带 `rawOutput`、`requestJson`、`responseJson`；`GET /api/food-recognition/logs/{id}` 给一条的全部字段，外加 `price`（价格估算，只算 DeepSeek，按北京时间峰谷，[ADR 0054](../adr/0054-recognition-price-deepseek.md)），不是自己的返回 404。`GET /api/food-recognition/stats?range=all|month|week`（缺省或不认识的值按 `all`）给用量统计：合计（次数／成败、token 分项、估算金额及高峰／空闲拆分、未计价次数与 token）、平均每次、缓存命中率、`byModel`／`byKind` 分组、`daily` 逐日序列（没记录的天为 0）、放假表没覆盖的年份；金额按记录逐条估算后合计，时间按请求发出的时刻、北京时间划分。
 
 ## 管理端接口

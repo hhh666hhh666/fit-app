@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import com.example.fitapp.module.nutrition.service.EntryTime;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -60,4 +61,8 @@ public class MealCustomDTO {
     @DecimalMin(value = "0", message = "钠不能为负")
     @DecimalMax(value = "999999.99", message = "钠过大")
     private BigDecimal sodium;
+
+    /** 时刻（HH:mm，ADR 0059）；不给按默认规则：记今天用现在的钟点，补记按餐次（见 EntryTime）。 */
+    @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
+    private String time;
 }

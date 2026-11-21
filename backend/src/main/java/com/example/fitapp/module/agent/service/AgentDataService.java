@@ -16,6 +16,7 @@ import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.entity.MealLog;
 import com.example.fitapp.module.nutrition.entity.MealPhoto;
 import com.example.fitapp.module.nutrition.mapper.DietDailyMapper;
+import com.example.fitapp.module.nutrition.service.EntryTime;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
 import com.example.fitapp.module.nutrition.mapper.MealPhotoMapper;
@@ -369,7 +370,8 @@ public class AgentDataService {
                         DietService.actual(m.getCarbPer100(), m.getGrams()),
                         DietService.actual(m.getFatPer100(), m.getGrams()));
                 days.computeIfAbsent(m.getLogDate(), d -> new DayTotals()).addMeal(m.getMeal(), actual);
-                g.writeObject(new AgentHistoryRows.Meal(m.getId(), m.getLogDate(), m.getMeal(), m.getFoodId(),
+                g.writeObject(new AgentHistoryRows.Meal(m.getId(), m.getLogDate(), m.getMeal(),
+                        EntryTime.format(m.getEatenAt()), m.getFoodId(),
                         m.getFoodName(), m.getGrams(),
                         new AgentHistoryRows.Nutrients(m.getKcalPer100(), m.getProteinPer100(),
                                 m.getCarbPer100(), m.getFatPer100()),

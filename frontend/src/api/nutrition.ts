@@ -88,6 +88,8 @@ export type FoodPayload = Omit<FoodItem, 'id' | 'imageKey'> & { copyImageFrom?: 
 export interface MealItem {
   id: number
   meal: MealKey
+  /** 时刻 HH:mm（ADR 0059）；老条目推断不出时为 null。 */
+  time?: string | null
   foodId?: number | null
   foodName: string
   /** 临时条目：没挂食物库（AI 识别记的，或来源食物已删）；能改名，会出现在记一餐的列表里（scope #48）。 */
@@ -114,9 +116,13 @@ export interface DayOverview {
   date: string
   totals: { kcal: number; protein: number; carb: number; fat: number }
   targets: Targets
-  water: { ml: number; target?: number | null }
-  /** 固定四条（早/午/晚/加餐），无条目时 items 为空数组。 */
-  meals: { meal: MealKey; items: MealItem[] }[]
+  /** 饮水：ml＝当天各笔之和；drinks＝每一笔，按时刻排，没有时刻的（旧数据迁来的）在前（ADR 0059）。 */
+  water: { ml: number; target?: number | null; drinks: WaterDrink[] }
+  /**
+   * 固定四条（早/午/晚/加餐），无条目时 items 为空数组。items 按时刻排（没有时刻的在后）；
+   * firstTime＝这一餐最早的时刻。
+   */
+  meals: { meal: MealKey; firstTime?: string | null; items: MealItem[] }[]
   /** 有照片的餐次。 */
   photoMeals: MealKey[]
   /**
@@ -385,7 +391,16 @@ export function getDay(date: string) {
   return read<DayOverview>('/diet', { date }, 'diet')
 }
 
-export function addMeal(payload: { date: string; meal: MealKey; foodId: number; grams: number }) {
+/** 一笔饮水（ADR 0059）。 */
+export interface WaterDrink {
+  id: number
+  ml: number
+  /** HH:mm；旧的每日累计迁来的为 null。 */
+  time?: string | null
+}
+
+/** `time`（HH:mm）不给时服务端按默认规则补：记今天用现在的钟点，补记按餐次（ADR 0059）。 */
+export function addMeal(payload: { date: string; meal: MealKey; foodId: number; grams: number; time?: string }) {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals', payload)))
 }
 
@@ -403,12 +418,13 @@ export function addCustomMeal(payload: {
   fat: number
   carb: number
   sodium: number | null
+  time?: string
 }) {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals/custom', payload)))
 }
 
 /** 改一条条目：给了哪项改哪项；名称只有临时条目能改。 */
-export function updateMeal(id: number, patch: { grams?: number; name?: string }) {
+export function updateMeal(id: number, patch: { grams?: number; name?: string; time?: string }) {
   return mutating('diet', () => unwrap(request.put<MealItem>(`/diet/meals/${id}`, patch)))
 }
 
@@ -443,7 +459,22 @@ export function deleteMeal(id: number) {
   return mutating('diet', () => unwrap(request.delete<void>(`/diet/meals/${id}`)))
 }
 
-/** 饮水加减一笔，返回该日最新累计（ml）。 */
+/** 记一笔饮水；时刻不给就用现在的钟点（ADR 0059）。 */
+export function addDrink(payload: { date: string; ml: number; time?: string }) {
+  return mutating('diet', () => unwrap(request.post<WaterDrink>('/diet/water/drinks', payload)))
+}
+
+/** 改一笔饮水的毫升数或时刻。 */
+export function updateDrink(id: number, patch: { ml?: number; time?: string }) {
+  return mutating('diet', () => unwrap(request.put<WaterDrink>(`/diet/water/drinks/${id}`, patch)))
+}
+
+/** 删一笔饮水（不进回收站）。 */
+export function deleteDrink(id: number) {
+  return mutating('diet', () => unwrap(request.delete<void>(`/diet/water/drinks/${id}`)))
+}
+
+/** 饮水加减一笔（首页卡用）：正数＝按现在的钟点记一笔，负数＝撤掉当天最后记的那一笔；返回该日最新合计（ml）。 */
 export function addWater(date: string, delta: number) {
   return mutating('diet', () => unwrap(request.post<number>('/diet/water', { date, delta })))
 }
@@ -537,6 +568,7 @@ export function addMealsBatch(payload: {
   date: string
   meal: MealKey
   items: { foodId: number; grams: number }[]
+  time?: string
 }) {
   return mutating('diet', () => unwrap(request.post<MealItem[]>('/diet/meals/batch', payload)))
 }

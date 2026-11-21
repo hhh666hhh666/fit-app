@@ -40,7 +40,7 @@ public class AccountService {
      * ⚠️ 新建带 user_id 的表要加进来——AccountTablesCoverageTest 会扫迁移脚本兜底。
      */
     public static final List<String> USER_TABLES = List.of(
-            "food", "meal_log", "meal_photo", "diet_daily", "user_setting", "food_recognition",
+            "food", "meal_log", "meal_photo", "diet_daily", "water_log", "user_setting", "food_recognition",
             "exercise", "agent_token", "workout", "food_combo", "preset_hidden", "plan",
             "week_schedule", "user_profile", "trash_item", "diary_entry", "diary_photo", "body_record",
             "avatar");

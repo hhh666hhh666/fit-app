@@ -28,8 +28,9 @@ public final class AgentHistoryRows {
                       Integer durationSec) {
     }
 
-    public record Meal(Long id, LocalDate date, String meal, Long foodId, String foodName, BigDecimal grams,
-                       Nutrients per100, Nutrients actual) {
+    /** {@code time}：几点几分吃的（HH:mm，ADR 0059）；老条目推断不出时为 null。 */
+    public record Meal(Long id, LocalDate date, String meal, String time, Long foodId, String foodName,
+                       BigDecimal grams, Nutrients per100, Nutrients actual) {
     }
 
     public record Nutrients(BigDecimal kcal, BigDecimal proteinG, BigDecimal carbG, BigDecimal fatG) {

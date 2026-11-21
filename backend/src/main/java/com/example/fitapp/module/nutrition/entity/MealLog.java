@@ -8,6 +8,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * 某日某餐的一条食物记录。营养值按**当时快照**存「每 100 数值」——
@@ -26,6 +27,9 @@ public class MealLog {
 
     /** 餐次：breakfast/lunch/dinner/snack。 */
     private String meal;
+
+    /** 时刻（几点几分吃的，ADR 0059）；老条目推断不出时为 null。 */
+    private LocalTime eatenAt;
 
     /** 来源食物（弱引用；删除后置空，展示靠 name 快照）。 */
     private Long foodId;

@@ -2,7 +2,10 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import {
-  addWater,
+  addDrink,
+  deleteDrink,
+  updateDrink,
+  type WaterDrink,
   getDay,
   getTrend,
   type DayOverview,
@@ -17,8 +20,9 @@ import FtSheet from '@/components/FtSheet.vue'
 import FtTrendChart from '@/components/FtTrendChart.vue'
 import MealSheet from '@/components/MealSheet.vue'
 import { useDietStore } from '@/stores/diet'
-import { buildNutrientBars } from '@/utils/diet'
-import { formatThousands } from '@/utils/format'
+import { buildNutrientBars, TIME_RE } from '@/utils/diet'
+import { askInput } from '@/utils/confirm'
+import { formatThousands, nowTime } from '@/utils/format'
 import { activityLabel, gapText, sexLabel } from '@/utils/energy'
 import { ensureLogin } from '@/utils/guard'
 
@@ -172,6 +176,7 @@ const mealRows = computed(() =>
     const kcal = Math.round(items.reduce((s, i) => s + Number(i.kcal || 0), 0))
     return {
       ...m,
+      firstTime: overview.value?.meals.find((g) => g.meal === m.key)?.firstTime ?? null,
       count: items.length,
       kcal,
       hasPhoto: (overview.value?.photoMeals ?? []).includes(m.key)
@@ -212,16 +217,93 @@ async function saveStep() {
   }
 }
 
+// 饮水一笔一笔记（ADR 0059）：＋＝按现在的钟点记一笔，−＝撤掉最后记的那一笔；点「N 笔」展开逐笔改删
+const drinks = computed<WaterDrink[]>(() => overview.value?.water.drinks ?? [])
+const drinksOpen = ref(false)
+
+/** 换上新的逐笔列表并重算合计：没有时刻的（旧数据迁来的）在前，其余按时刻、同时刻按记录先后。 */
+function setDrinks(list: WaterDrink[]) {
+  if (!overview.value) return
+  const sorted = [...list].sort((a, b) => {
+    if (!a.time || !b.time) return a.time ? 1 : b.time ? -1 : a.id - b.id
+    return a.time < b.time ? -1 : a.time > b.time ? 1 : a.id - b.id
+  })
+  overview.value.water = { ...overview.value.water, drinks: sorted, ml: sorted.reduce((s, d) => s + d.ml, 0) }
+}
+
 async function bumpWater(direction: 1 | -1) {
   if (waterBusy.value) return
   waterBusy.value = true
   try {
-    const ml = await addWater(dateStr.value, direction * stepMl.value)
-    if (overview.value) overview.value.water = { ...overview.value.water, ml }
+    if (direction > 0) {
+      // 时刻用本机钟点，和记一餐弹层同一口径（服务端兜底用北京时间）
+      const d = await addDrink({ date: dateStr.value, ml: stepMl.value, time: nowTime() })
+      setDrinks([...drinks.value, d])
+    } else {
+      const last = drinks.value.reduce<WaterDrink | null>((m, d) => (m == null || d.id > m.id ? d : m), null)
+      if (!last) return
+      await deleteDrink(last.id)
+      setDrinks(drinks.value.filter((d) => d.id !== last.id))
+    }
   } catch {
     // request 层已统一提示
   } finally {
     waterBusy.value = false
+  }
+}
+
+function onDrinkTap(d: WaterDrink) {
+  uni.showActionSheet({
+    itemList: ['修改毫升', '修改时刻', '删除'],
+    success: ({ tapIndex }) => {
+      if (tapIndex === 0) void editDrinkMl(d)
+      else if (tapIndex === 1) void editDrinkTime(d)
+      else if (tapIndex === 2) void removeDrink(d)
+    }
+  })
+}
+
+async function editDrinkMl(d: WaterDrink) {
+  const t = await askInput({ title: '这一笔喝了多少 ml', value: String(d.ml), confirmText: '保存' })
+  if (t == null) return
+  const ml = Math.round(Number(t))
+  if (!Number.isFinite(ml) || ml < 1 || ml > 5000) {
+    uni.showToast({ title: '1–5000 ml', icon: 'none' })
+    return
+  }
+  if (ml === d.ml) return
+  try {
+    const u = await updateDrink(d.id, { ml })
+    setDrinks(drinks.value.map((x) => (x.id === d.id ? u : x)))
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+async function editDrinkTime(d: WaterDrink) {
+  const t = await askInput({ title: '几点喝的（时:分）', value: d.time ?? '', placeholder: '如 09:30', confirmText: '保存' })
+  if (t == null) return
+  const v = t.replace('：', ':')
+  if (!TIME_RE.test(v)) {
+    uni.showToast({ title: '时刻写成 09:30 这样', icon: 'none' })
+    return
+  }
+  if (v === d.time) return
+  try {
+    const u = await updateDrink(d.id, { time: v })
+    setDrinks(drinks.value.map((x) => (x.id === d.id ? u : x)))
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+async function removeDrink(d: WaterDrink) {
+  try {
+    await deleteDrink(d.id)
+    setDrinks(drinks.value.filter((x) => x.id !== d.id))
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch {
+    // request 层已统一提示
   }
 }
 
@@ -346,19 +428,31 @@ const fullHeight = computed(() => {
             <text class="meal__label">{{ r.label }}</text>
             <text v-if="r.hasPhoto" class="meal__photo">照片</text>
             <text class="meal__meta ft-num" :class="{ 'meal__meta--none': !r.count }">
-              {{ r.count ? `${r.count} 项 · ${r.kcal} 大卡` : '未记录' }}
+              {{ r.count ? `${r.firstTime ? r.firstTime + ' · ' : ''}${r.count} 项 · ${r.kcal} 大卡` : '未记录' }}
             </text>
             <FtIcon name="chevron-right" :size="18" tone="subtle" />
           </view>
         </view>
 
-        <!-- 饮水：点一下加／减一个步进；点步进数字就地改 -->
-        <view class="glass water">
+        <!-- 饮水：点一下加／减一个步进；点步进数字就地改；点「N 笔」展开逐笔（ADR 0059） -->
+        <view class="glass waterbox">
+        <view class="water">
           <view class="water__ico">
             <FtIcon name="water" :size="20" />
           </view>
           <view class="water__main">
-            <text class="water__label">饮水</text>
+            <view class="water__label-row">
+              <text class="water__label">饮水</text>
+              <text
+                v-if="drinks.length"
+                class="water__toggle ft-num"
+                role="button"
+                :aria-label="drinksOpen ? '收起饮水明细' : '展开饮水明细'"
+                @click="drinksOpen = !drinksOpen"
+              >
+                {{ drinks.length }} 笔 {{ drinksOpen ? '收起' : '›' }}
+              </text>
+            </view>
             <view class="water__num-row">
               <text class="water__num ft-num">{{ waterMl }}</text>
               <text class="water__target ft-num">/ {{ waterTarget == null ? '--' : waterTarget }} ml</text>
@@ -386,6 +480,13 @@ const fullHeight = computed(() => {
               <FtIcon name="plus" :size="22" :stroke="2.2" />
             </view>
           </view>
+        </view>
+        <view v-if="drinksOpen && drinks.length" class="drinks">
+          <view v-for="d in drinks" :key="d.id" class="drink" role="button" @click="onDrinkTap(d)">
+            <text class="drink__time ft-num">{{ d.time ?? '—' }}</text>
+            <text class="drink__ml ft-num">{{ d.ml }} ml</text>
+          </view>
+        </view>
         </view>
       </template>
 
@@ -756,6 +857,40 @@ const fullHeight = computed(() => {
 }
 
 /* ── 饮水 ── */
+.water__label-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.water__toggle {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.drinks {
+  margin-top: 20rpx;
+  border-top: 1rpx solid $app-line-soft;
+}
+
+.drink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 8rpx;
+  border-bottom: 1rpx solid $app-line-soft;
+  font-size: $text-sm;
+  color: $app-ink;
+}
+
+.drink:last-child {
+  border-bottom: none;
+}
+
+.drink__time {
+  color: $app-ink-muted;
+}
+
 .water {
   display: flex;
   align-items: center;

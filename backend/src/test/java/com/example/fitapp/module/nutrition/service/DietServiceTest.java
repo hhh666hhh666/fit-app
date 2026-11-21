@@ -8,6 +8,8 @@ import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.entity.DietDaily;
+import com.example.fitapp.module.nutrition.dto.WaterDrinkDTO;
+import com.example.fitapp.module.nutrition.entity.WaterLog;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.entity.MealLog;
 import com.example.fitapp.module.nutrition.entity.MealPhoto;
@@ -37,9 +39,11 @@ import com.example.fitapp.module.nutrition.storage.PhotoUploadPolicy;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -78,6 +82,9 @@ class DietServiceTest {
     private DietDailyMapper dietDailyMapper;
 
     @Mock
+    private com.example.fitapp.module.nutrition.mapper.WaterLogMapper waterLogMapper;
+
+    @Mock
     private FoodMapper foodMapper;
 
     @Mock
@@ -94,7 +101,7 @@ class DietServiceTest {
 
     /** 单测里 @Value 不生效：手动给一个够大的额度（容量拒绝另有用例）。 */
     private DietService service() {
-        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, waterLogMapper, foodMapper,
                 presetHiddenService, settingService, energyService, photoStorage, new PhotoUploadPolicy(50), diaryPhotoMapper, avatarMapper, trashItemMapper, mealPhotoTrash);
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 20L * 1024 * 1024 * 1024);
         return s;
@@ -320,7 +327,7 @@ class DietServiceTest {
 
     @Test
     void savePhoto_overQuota_throws() {
-        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
+        DietService s = new DietService(mealLogMapper, mealPhotoMapper, dietDailyMapper, waterLogMapper, foodMapper,
                 presetHiddenService, settingService, energyService, photoStorage, new PhotoUploadPolicy(50), diaryPhotoMapper, avatarMapper, trashItemMapper, mealPhotoTrash);
         // 额度只剩 2 字节，新图 3 字节 → 必须拒绝（ADR 0013）
         ReflectionTestUtils.setField(s, "photoQuotaBytes", 2L);
@@ -370,24 +377,8 @@ class DietServiceTest {
     }
 
     @Test
-    void addWater_clampsAtZero() {
-        DietDaily dd = new DietDaily();
-        dd.setId(1L);
-        dd.setUserId(7L);
-        dd.setWaterMl(100);
-        when(dietDailyMapper.selectOne(any())).thenReturn(dd);
-        WaterDTO dto = new WaterDTO();
-        dto.setDate("2026-10-12");
-        dto.setDelta(-500);
-
-        int now = service().addWater(7L, dto);
-
-        assertEquals(0, now);
-        verify(dietDailyMapper).updateById(dd);
-    }
-
-    @Test
-    void addWater_insertsWhenAbsent() {
+    void addWater_positiveAddsOneDrinkAndSyncsDailyTotal() {
+        when(waterLogMapper.sumOfDay(eq(7L), any())).thenReturn(250);
         when(dietDailyMapper.selectOne(any())).thenReturn(null);
         WaterDTO dto = new WaterDTO();
         dto.setDate("2026-10-12");
@@ -396,9 +387,108 @@ class DietServiceTest {
         int now = service().addWater(7L, dto);
 
         assertEquals(250, now);
-        ArgumentCaptor<DietDaily> captor = ArgumentCaptor.forClass(DietDaily.class);
-        verify(dietDailyMapper).insert(captor.capture());
-        assertEquals(250, captor.getValue().getWaterMl());
+        ArgumentCaptor<WaterLog> drink = ArgumentCaptor.forClass(WaterLog.class);
+        verify(waterLogMapper).insert(drink.capture());
+        assertEquals(250, drink.getValue().getMl());
+        assertNotNull(drink.getValue().getDrunkAt(), "饮水不给时刻就用现在的钟点");
+        ArgumentCaptor<DietDaily> daily = ArgumentCaptor.forClass(DietDaily.class);
+        verify(dietDailyMapper).insert(daily.capture());
+        assertEquals(250, daily.getValue().getWaterMl(), "diet_daily 只是当天各笔之和的缓存");
+    }
+
+    @Test
+    void addWater_negativeRemovesLastDrink() {
+        WaterLog last = new WaterLog();
+        last.setId(9L);
+        last.setUserId(7L);
+        last.setLogDate(LocalDate.of(2026, 10, 12));
+        last.setMl(300);
+        when(waterLogMapper.selectOne(any())).thenReturn(last);
+        when(waterLogMapper.selectById(9L)).thenReturn(last);
+        when(waterLogMapper.sumOfDay(eq(7L), any())).thenReturn(0);
+        DietDaily dd = new DietDaily();
+        dd.setWaterMl(300);
+        when(dietDailyMapper.selectOne(any())).thenReturn(dd);
+        WaterDTO dto = new WaterDTO();
+        dto.setDate("2026-10-12");
+        dto.setDelta(-250);
+
+        int now = service().addWater(7L, dto);
+
+        assertEquals(0, now);
+        verify(waterLogMapper).deleteById(9L);
+        assertEquals(0, dd.getWaterMl());
+    }
+
+    @Test
+    void updateDrink_notOwn_throws() {
+        WaterLog other = new WaterLog();
+        other.setUserId(99L);
+        when(waterLogMapper.selectById(9L)).thenReturn(other);
+        WaterDrinkDTO dto = new WaterDrinkDTO();
+        dto.setMl(100);
+
+        assertThrows(BusinessException.class, () -> service().updateDrink(7L, 9L, dto));
+    }
+
+    @Test
+    void addMeal_pastDayWithoutTimeUsesMealDefault() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("dinner");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("100"));
+
+        MealItemVO item = service().addMeal(7L, dto);
+
+        assertEquals("18:00", item.getTime(), "补记别的日子：晚餐默认 18:00");
+    }
+
+    @Test
+    void addMeal_explicitTimeWins() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("lunch");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("100"));
+        dto.setTime("13:05");
+
+        assertEquals("13:05", service().addMeal(7L, dto).getTime());
+    }
+
+    @Test
+    void day_sortsItemsByTimeAndDrinksWithoutTimeFirst() {
+        MealLog late = log("lunch", "米饭", "100", "116", "2.6", "25.9", "0.3");
+        late.setId(1L);
+        late.setEatenAt(LocalTime.of(12, 40));
+        MealLog early = log("lunch", "鸡蛋", "50", "139", "13.1", "2.4", "8.6");
+        early.setId(2L);
+        early.setEatenAt(LocalTime.of(12, 5));
+        MealLog old = log("lunch", "汤", "200", "20", "1", "1", "1");
+        old.setId(3L);
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(late, early, old));
+        WaterLog migrated = new WaterLog();
+        migrated.setId(1L);
+        migrated.setMl(1000);
+        WaterLog morning = new WaterLog();
+        morning.setId(2L);
+        morning.setMl(250);
+        morning.setDrunkAt(LocalTime.of(9, 0));
+        when(waterLogMapper.selectList(any())).thenReturn(List.of(morning, migrated));
+        when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of());
+        when(settingService.get(7L)).thenReturn(new SettingVO());
+
+        DayOverviewVO vo = service().day(7L, "2026-10-12");
+
+        DayOverviewVO.MealGroup lunch = vo.getMeals().get(1);
+        assertEquals(List.of("鸡蛋", "米饭", "汤"), lunch.getItems().stream().map(MealItemVO::getFoodName).toList(),
+                "按时刻排，没有时刻的老条目在后");
+        assertEquals("12:05", lunch.getFirstTime());
+        assertEquals(1250, vo.getWater().getMl());
+        assertNull(vo.getWater().getDrinks().get(0).getTime(), "旧数据迁来的那笔没有时刻，排在前面");
+        assertEquals("09:00", vo.getWater().getDrinks().get(1).getTime());
     }
 
     @Test
@@ -434,7 +524,6 @@ class DietServiceTest {
         MealLog breakfast = log("breakfast", "鸡蛋", "50", "139", "13.1", "2.4", "8.6");
         breakfast.setId(2L);
         when(mealLogMapper.selectList(any())).thenReturn(List.of(dinner, breakfast));
-        when(dietDailyMapper.selectOne(any())).thenReturn(null);
         when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of("breakfast"));
         SettingVO s = new SettingVO();
         s.setTargetKcal(new BigDecimal("2200"));
@@ -459,7 +548,6 @@ class DietServiceTest {
         MealLog breakfast = log("breakfast", "鸡蛋", "100", "100", "10", "1", "8");
         breakfast.setId(1L);
         when(mealLogMapper.selectList(any())).thenReturn(List.of(breakfast));
-        when(dietDailyMapper.selectOne(any())).thenReturn(null);
         when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of());
         when(settingService.get(7L)).thenReturn(new SettingVO());
         EnergyVO energy = new EnergyVO();
@@ -476,7 +564,6 @@ class DietServiceTest {
     @Test
     void day_gapIsNullWhenProfileIncomplete() {
         when(mealLogMapper.selectList(any())).thenReturn(List.of());
-        when(dietDailyMapper.selectOne(any())).thenReturn(null);
         when(mealPhotoMapper.selectMealsWithPhoto(eq(7L), any())).thenReturn(List.of());
         when(settingService.get(7L)).thenReturn(new SettingVO());
         EnergyVO energy = new EnergyVO();

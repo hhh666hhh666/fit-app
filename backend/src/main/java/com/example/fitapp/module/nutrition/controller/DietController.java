@@ -7,6 +7,7 @@ import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
+import com.example.fitapp.module.nutrition.dto.WaterDrinkDTO;
 import com.example.fitapp.module.nutrition.entity.MealPhoto;
 import com.example.fitapp.module.nutrition.service.DietService;
 import com.example.fitapp.module.nutrition.service.MealPickService;
@@ -15,6 +16,7 @@ import com.example.fitapp.module.nutrition.vo.DayOverviewVO;
 import com.example.fitapp.module.nutrition.vo.MealItemVO;
 import com.example.fitapp.module.nutrition.vo.StorageVO;
 import com.example.fitapp.module.nutrition.vo.TrendVO;
+import com.example.fitapp.module.nutrition.vo.WaterDrinkVO;
 import com.example.fitapp.security.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -138,6 +140,25 @@ public class DietController {
     }
 
     /** 饮水加减一笔，返回该日最新累计（ml）。 */
+    /** 记一笔饮水（ADR 0059）；时刻不给就用现在的钟点。 */
+    @PostMapping("/water/drinks")
+    public Result<WaterDrinkVO> addDrink(@Valid @RequestBody WaterDrinkDTO body) {
+        return Result.success(dietService.addDrink(UserContext.requireUserId(), body));
+    }
+
+    /** 改一笔饮水的毫升数或时刻。 */
+    @PutMapping("/water/drinks/{id}")
+    public Result<WaterDrinkVO> updateDrink(@PathVariable Long id, @Valid @RequestBody WaterDrinkDTO body) {
+        return Result.success(dietService.updateDrink(UserContext.requireUserId(), id, body));
+    }
+
+    /** 删一笔饮水（不进回收站）。 */
+    @DeleteMapping("/water/drinks/{id}")
+    public Result<Void> deleteDrink(@PathVariable Long id) {
+        dietService.deleteDrink(UserContext.requireUserId(), id);
+        return Result.success();
+    }
+
     @PostMapping("/water")
     public Result<Integer> water(@Valid @RequestBody WaterDTO body) {
         return Result.success(dietService.addWater(UserContext.requireUserId(), body));

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import com.example.fitapp.module.nutrition.service.EntryTime;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -22,4 +23,8 @@ public class MealUpdateDTO {
     @Size(max = 64, message = "名称不能超过 64 字")
     @Pattern(regexp = ".*\\S.*", message = "名称不能为空")
     private String name;
+
+    /** 时刻（HH:mm，ADR 0059）。 */
+    @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
+    private String time;
 }

@@ -44,6 +44,13 @@ import java.nio.file.Path;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import com.example.fitapp.module.nutrition.entity.WaterLog;
+import com.example.fitapp.module.nutrition.mapper.WaterLogMapper;
+import com.example.fitapp.module.nutrition.dto.WaterDrinkDTO;
+import com.example.fitapp.module.nutrition.vo.WaterDrinkVO;
+import java.time.LocalTime;
+import java.util.Comparator;
+import java.util.Objects;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -71,6 +78,7 @@ public class DietService {
     private final MealLogMapper mealLogMapper;
     private final MealPhotoMapper mealPhotoMapper;
     private final DietDailyMapper dietDailyMapper;
+    private final WaterLogMapper waterLogMapper;
     private final FoodMapper foodMapper;
     private final PresetHiddenService presetHiddenService;
     private final SettingService settingService;
@@ -103,6 +111,9 @@ public class DietService {
                 .eq(MealLog::getLogDate, date)
                 .orderByAsc(MealLog::getMeal)
                 .orderByAsc(MealLog::getId));
+        // 一餐里按时刻排，没有时刻的老条目在后，同一时刻按记录先后（ADR 0059）
+        logs = logs.stream().sorted(Comparator.comparing(MealLog::getEatenAt,
+                Comparator.nullsLast(Comparator.naturalOrder()))).toList();
 
         DayOverviewVO vo = new DayOverviewVO();
         vo.setDate(date.toString());
@@ -133,18 +144,19 @@ public class DietService {
             DayOverviewVO.MealGroup g = new DayOverviewVO.MealGroup();
             g.setMeal(m);
             g.setItems(byMeal.getOrDefault(m, List.of()));
+            g.setFirstTime(g.getItems().stream().map(MealItemVO::getTime).filter(Objects::nonNull)
+                    .min(Comparator.naturalOrder()).orElse(null));
             groups.add(g);
         }
         vo.setMeals(groups);
 
         // 饮水 + 目标（设置行不存在时给默认）
         SettingVO setting = settingService.get(userId);
-        DietDaily dd = dietDailyMapper.selectOne(Wrappers.<DietDaily>lambdaQuery()
-                .eq(DietDaily::getUserId, userId)
-                .eq(DietDaily::getLogDate, date));
+        List<WaterDrinkVO> drinks = drinks(userId, date);
         DayOverviewVO.Water water = new DayOverviewVO.Water();
-        water.setMl(dd == null ? 0 : dd.getWaterMl());
+        water.setMl(drinks.stream().mapToInt(WaterDrinkVO::getMl).sum());
         water.setTarget(setting.getTargetWater());
+        water.setDrinks(drinks);
         vo.setWater(water);
 
         DayOverviewVO.Targets targets = new DayOverviewVO.Targets();
@@ -171,7 +183,9 @@ public class DietService {
 
     public MealItemVO addMeal(Long userId, MealLogDTO dto) {
         Food food = requireOwnFood(userId, dto.getFoodId());
-        return insertMeal(userId, parseDate(dto.getDate()), dto.getMeal(), food, dto.getGrams());
+        LocalDate date = parseDate(dto.getDate());
+        return insertMeal(userId, date, dto.getMeal(), EntryTime.resolve(dto.getTime(), date, dto.getMeal()),
+                food, dto.getGrams());
     }
 
     /**
@@ -184,19 +198,23 @@ public class DietService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
         }
         List<MealItemVO> out = new ArrayList<>();
+        // 同一次加进来的条目共用一个时刻（ADR 0059）
+        LocalTime time = EntryTime.resolve(dto.getTime(), dto.getDate(), dto.getMeal());
         for (FoodAmountDTO it : dto.getItems()) {
             Food food = requireOwnFood(userId, it.getFoodId());
-            out.add(insertMeal(userId, dto.getDate(), dto.getMeal(), food, it.getGrams()));
+            out.add(insertMeal(userId, dto.getDate(), dto.getMeal(), time, food, it.getGrams()));
         }
         return out;
     }
 
     /** 落一条条目：每 100 数值按 food 现值快照，此后改库/删库不影响本条。 */
-    private MealItemVO insertMeal(Long userId, LocalDate date, String meal, Food food, BigDecimal grams) {
+    private MealItemVO insertMeal(Long userId, LocalDate date, String meal, LocalTime time, Food food,
+                                  BigDecimal grams) {
         MealLog log = new MealLog();
         log.setUserId(userId);
         log.setLogDate(date);
         log.setMeal(meal);
+        log.setEatenAt(time);
         log.setFoodId(food.getId());
         log.setFoodName(food.getName());
         log.setGrams(grams);
@@ -218,6 +236,7 @@ public class DietService {
         log.setUserId(userId);
         log.setLogDate(parseDate(dto.getDate()));
         log.setMeal(dto.getMeal());
+        log.setEatenAt(EntryTime.resolve(dto.getTime(), log.getLogDate(), dto.getMeal()));
         log.setFoodId(null);
         log.setFoodName(dto.getName().trim());
         log.setGrams(dto.getGrams());
@@ -232,7 +251,7 @@ public class DietService {
 
     public MealItemVO updateMeal(Long userId, Long id, MealUpdateDTO dto) {
         MealLog log = requireOwnMeal(userId, id);
-        if (dto.getGrams() == null && dto.getName() == null) {
+        if (dto.getGrams() == null && dto.getName() == null && dto.getTime() == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "没有要修改的内容");
         }
         if (dto.getName() != null) {
@@ -244,6 +263,9 @@ public class DietService {
         }
         if (dto.getGrams() != null) {
             log.setGrams(dto.getGrams());
+        }
+        if (dto.getTime() != null) {
+            log.setEatenAt(EntryTime.parse(dto.getTime()));
         }
         mealLogMapper.updateById(log);
         return toItem(log);
@@ -410,13 +432,102 @@ public class DietService {
 
     // ── 饮水 ──
 
-    /** 加减一笔（结果不小于 0），返回该日最新累计。 */
+    /**
+     * 老接口（饮水卡片的 ＋ / −）：正数＝按现在的钟点记一笔，负数＝撤掉当天最后记的那一笔（不管数值）。
+     * 返回当天最新合计。新界面走下面的一笔一笔接口（ADR 0059）。
+     */
     @Transactional
     public int addWater(Long userId, WaterDTO dto) {
         if (dto.getDelta() == 0) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "增减量不能为 0");
         }
         LocalDate date = parseDate(dto.getDate());
+        if (dto.getDelta() > 0) {
+            WaterDrinkDTO add = new WaterDrinkDTO();
+            add.setDate(dto.getDate());
+            add.setMl(dto.getDelta());
+            addDrink(userId, add);
+        } else {
+            WaterLog last = waterLogMapper.selectOne(Wrappers.<WaterLog>lambdaQuery()
+                    .eq(WaterLog::getUserId, userId)
+                    .eq(WaterLog::getLogDate, date)
+                    .orderByDesc(WaterLog::getId)
+                    .last("LIMIT 1"));
+            if (last != null) {
+                deleteDrink(userId, last.getId());
+            }
+        }
+        return waterLogMapper.sumOfDay(userId, date);
+    }
+
+    /** 当天每一笔：按时刻排，没有时刻的（旧数据迁来的）在前，同一时刻按记录先后。 */
+    public List<WaterDrinkVO> drinks(Long userId, LocalDate date) {
+        return waterLogMapper.selectList(Wrappers.<WaterLog>lambdaQuery()
+                        .eq(WaterLog::getUserId, userId)
+                        .eq(WaterLog::getLogDate, date)
+                        .orderByAsc(WaterLog::getId))
+                .stream()
+                .sorted(Comparator.comparing(WaterLog::getDrunkAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .map(DietService::toDrink)
+                .toList();
+    }
+
+    /** 记一笔饮水；时刻不给就用现在的钟点。 */
+    @Transactional
+    public WaterDrinkVO addDrink(Long userId, WaterDrinkDTO dto) {
+        if (dto.getDate() == null || dto.getMl() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "日期和饮水量不能为空");
+        }
+        WaterLog w = new WaterLog();
+        w.setUserId(userId);
+        w.setLogDate(parseDate(dto.getDate()));
+        w.setMl(dto.getMl());
+        w.setDrunkAt(EntryTime.resolve(dto.getTime(), w.getLogDate(), null));
+        waterLogMapper.insert(w);
+        syncWaterTotal(userId, w.getLogDate());
+        return toDrink(w);
+    }
+
+    /** 改一笔：给了哪项改哪项（日期不能改）。 */
+    @Transactional
+    public WaterDrinkVO updateDrink(Long userId, Long id, WaterDrinkDTO dto) {
+        WaterLog w = requireOwnDrink(userId, id);
+        if (dto.getMl() == null && dto.getTime() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "没有要修改的内容");
+        }
+        if (dto.getMl() != null) {
+            w.setMl(dto.getMl());
+        }
+        if (dto.getTime() != null) {
+            w.setDrunkAt(EntryTime.parse(dto.getTime()));
+        }
+        waterLogMapper.updateById(w);
+        syncWaterTotal(userId, w.getLogDate());
+        return toDrink(w);
+    }
+
+    /** 删一笔：直接删，不进回收站（ADR 0059）。 */
+    @Transactional
+    public void deleteDrink(Long userId, Long id) {
+        WaterLog w = requireOwnDrink(userId, id);
+        waterLogMapper.deleteById(id);
+        syncWaterTotal(userId, w.getLogDate());
+    }
+
+    private WaterLog requireOwnDrink(Long userId, Long id) {
+        WaterLog w = waterLogMapper.selectById(id);
+        if (w == null || !userId.equals(w.getUserId())) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "这笔饮水不存在");
+        }
+        return w;
+    }
+
+    /**
+     * 把当天各笔之和写回 diet_daily.water_ml——它只是缓存，真相在 water_log（V45）。
+     * 趋势、外部 agent、「最早有数据的一天」都还读它，所以每次增删改一笔都要在同一事务里重算。
+     */
+    private void syncWaterTotal(Long userId, LocalDate date) {
+        int sum = waterLogMapper.sumOfDay(userId, date);
         DietDaily dd = dietDailyMapper.selectOne(Wrappers.<DietDaily>lambdaQuery()
                 .eq(DietDaily::getUserId, userId)
                 .eq(DietDaily::getLogDate, date));
@@ -424,13 +535,20 @@ public class DietService {
             dd = new DietDaily();
             dd.setUserId(userId);
             dd.setLogDate(date);
-            dd.setWaterMl(Math.max(0, dto.getDelta()));
+            dd.setWaterMl(sum);
             dietDailyMapper.insert(dd);
         } else {
-            dd.setWaterMl(Math.max(0, dd.getWaterMl() + dto.getDelta()));
+            dd.setWaterMl(sum);
             dietDailyMapper.updateById(dd);
         }
-        return dd.getWaterMl();
+    }
+
+    private static WaterDrinkVO toDrink(WaterLog w) {
+        WaterDrinkVO v = new WaterDrinkVO();
+        v.setId(w.getId());
+        v.setMl(w.getMl());
+        v.setTime(EntryTime.format(w.getDrunkAt()));
+        return v;
     }
 
     // ── 趋势 ──
@@ -501,6 +619,7 @@ public class DietService {
         MealItemVO i = new MealItemVO();
         i.setId(l.getId());
         i.setMeal(l.getMeal());
+        i.setTime(EntryTime.format(l.getEatenAt()));
         i.setFoodId(l.getFoodId());
         i.setFoodName(l.getFoodName());
         i.setTemporary(l.getFoodId() == null);
