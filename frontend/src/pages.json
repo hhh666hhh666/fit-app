@@ -36,6 +36,10 @@
       "style": { "navigationBarTitleText": "身体档案" }
     },
     {
+      "path": "pages/bowel/index",
+      "style": { "navigationBarTitleText": "排便记录" }
+    },
+    {
       "path": "pages/library/index",
       "style": { "navigationBarTitleText": "动作库" }
     },

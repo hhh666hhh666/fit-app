@@ -104,6 +104,11 @@ $meal-water-bg: #e2f2f0;
 $meal-water-fg: #2f8178;
 $meal-weight-bg: #e6f4e1;
 $meal-weight-fg: #3d8b37;
+// 排便记录（ADR 0061）：大便借早餐的赭色、小便借午餐的琥珀色，只在排便页的统计图里用
+$bowel-stool: $meal-breakfast-fg;
+$bowel-stool-bg: $meal-breakfast-bg;
+$bowel-urine: $meal-lunch-fg;
+$bowel-urine-bg: $meal-lunch-bg;
 
 // ── 形状 ──
 $radius-xs: 16rpx; // 8px，小 tag

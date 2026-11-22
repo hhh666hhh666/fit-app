@@ -73,6 +73,7 @@ class AgentDataServiceTest {
 
     @Mock private UserProfileMapper userProfileMapper;
     @Mock private BodyRecordMapper bodyRecordMapper;
+    @Mock private com.example.fitapp.module.bowel.mapper.BowelRecordMapper bowelRecordMapper;
     @Mock private WorkoutMapper workoutMapper;
     @Mock private WorkoutBlockMapper blockMapper;
     @Mock private WorkoutSetMapper setMapper;
@@ -97,7 +98,7 @@ class AgentDataServiceTest {
         // lambda 条件构造器要靠这份元数据把方法引用翻成列名
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
         for (Class<?> c : List.of(Workout.class, WorkoutBlock.class, WorkoutSet.class, MealLog.class,
-                BodyRecord.class, DietDaily.class, MealPhoto.class, Exercise.class, Food.class)) {
+                BodyRecord.class, com.example.fitapp.module.bowel.entity.BowelRecord.class, DietDaily.class, MealPhoto.class, Exercise.class, Food.class)) {
             TableInfoHelper.initTableInfo(assistant, c);
         }
     }
@@ -108,7 +109,7 @@ class AgentDataServiceTest {
         EnergyService energy = new EnergyService(userProfileMapper, bodyRecordMapper, workoutMapper);
         service = new AgentDataService(json, userProfileMapper, bodyRecordMapper, workoutMapper, blockMapper,
                 setMapper, exerciseMapper, mealLogMapper, mealPhotoMapper, dietDailyMapper, foodMapper,
-                foodService, settingService, planService, scheduleService, energy);
+                foodService, settingService, planService, scheduleService, energy, bowelRecordMapper);
     }
 
     private JsonNode history(String from, String to) throws IOException {

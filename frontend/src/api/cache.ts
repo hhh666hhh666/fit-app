@@ -10,7 +10,7 @@ import { clearPhotoCache } from '@/utils/photo-cache'
 import { currentUserId } from '@/utils/current-user'
 
 /** 域内任一处改动 → 域内全部重取（粗，但漏不掉）。 */
-export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food' | 'diary' | 'account'
+export type CacheDomain = 'workout' | 'plan' | 'diet' | 'body' | 'food' | 'diary' | 'account' | 'bowel'
 
 interface Entry {
   /** 存 Promise：同一 URL 的并发调用自动合并成一次请求。 */

@@ -8,6 +8,8 @@ import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.module.agent.vo.AgentCurrentVO;
 import com.example.fitapp.module.agent.vo.AgentHistoryRows;
 import com.example.fitapp.module.body.entity.BodyRecord;
+import com.example.fitapp.module.bowel.entity.BowelRecord;
+import com.example.fitapp.module.bowel.mapper.BowelRecordMapper;
 import com.example.fitapp.module.body.mapper.BodyRecordMapper;
 import com.example.fitapp.module.exercise.entity.Exercise;
 import com.example.fitapp.module.exercise.mapper.ExerciseMapper;
@@ -125,6 +127,7 @@ public class AgentDataService {
     private final PlanService planService;
     private final ScheduleService scheduleService;
     private final EnergyService energyService;
+    private final BowelRecordMapper bowelRecordMapper;
 
     public AgentDataService(ObjectMapper objectMapper,
                             UserProfileMapper userProfileMapper,
@@ -141,7 +144,8 @@ public class AgentDataService {
                             SettingService settingService,
                             PlanService planService,
                             ScheduleService scheduleService,
-                            EnergyService energyService) {
+                            EnergyService energyService,
+                            BowelRecordMapper bowelRecordMapper) {
         // 全局配置是 non_null：这里要把 null 明确写出来——「爬楼组的重量是 null」和「字段不存在」对 agent 是两回事。
         // 每写一行都 flush 会让流式输出的系统调用翻很多倍，由批次末尾统一 flush。
         this.mapper = objectMapper.copy()
@@ -162,6 +166,7 @@ public class AgentDataService {
         this.planService = planService;
         this.scheduleService = scheduleService;
         this.energyService = energyService;
+        this.bowelRecordMapper = bowelRecordMapper;
     }
 
     // ── 当前状态 ──
@@ -245,6 +250,7 @@ public class AgentDataService {
         writeMeals(g, userId, from, to, days, usedFoodIds);
         writeBody(g, userId, from, to);
         writeWater(g, userId, from, to, days);
+        writeBowel(g, userId, from, to);
         writePhotos(g, userId, from, to);
         writeDays(g, userId, days);
         writeExercises(g, userId, exercises, usedExerciseIds);
@@ -383,6 +389,40 @@ public class AgentDataService {
             }
             MealLog last = page.get(page.size() - 1);
             lastDate = last.getLogDate();
+            lastId = last.getId();
+        }
+        g.writeEndArray();
+    }
+
+    private void writeBowel(JsonGenerator g, Long userId, LocalDate from, LocalDate to) throws IOException {
+        g.writeArrayFieldStart("bowel");
+        LocalDateTime lastAt = null;
+        Long lastId = null;
+        while (true) {
+            LocalDateTime afterAt = lastAt;
+            Long afterId = lastId;
+            List<BowelRecord> page = bowelRecordMapper.selectList(Wrappers.<BowelRecord>lambdaQuery()
+                    .eq(BowelRecord::getUserId, userId)
+                    .ge(from != null, BowelRecord::getOccurredAt, from == null ? null : from.atStartOfDay())
+                    .lt(to != null, BowelRecord::getOccurredAt, to == null ? null : to.plusDays(1).atStartOfDay())
+                    .and(afterAt != null, w -> w.gt(BowelRecord::getOccurredAt, afterAt)
+                            .or(x -> x.eq(BowelRecord::getOccurredAt, afterAt).gt(BowelRecord::getId, afterId)))
+                    .orderByAsc(BowelRecord::getOccurredAt)
+                    .orderByAsc(BowelRecord::getId)
+                    .last("LIMIT " + ROW_BATCH));
+            if (page.isEmpty()) {
+                break;
+            }
+            for (BowelRecord r : page) {
+                g.writeObject(new AgentHistoryRows.Bowel(r.getId(), r.getOccurredAt(), r.getKind(), r.getBristol(),
+                        r.getNote()));
+            }
+            g.flush();
+            if (page.size() < ROW_BATCH) {
+                break;
+            }
+            BowelRecord last = page.get(page.size() - 1);
+            lastAt = last.getOccurredAt();
             lastId = last.getId();
         }
         g.writeEndArray();

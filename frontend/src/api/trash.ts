@@ -12,6 +12,8 @@ export type TrashType =
   | 'meal_photo'
   | 'diary_photo'
   | 'body'
+  /** 排便记录（ADR 0061）。 */
+  | 'bowel'
   | 'plan'
   | 'exercise'
   | 'food'

@@ -96,6 +96,11 @@ onLoad((query) => {
   pendingRecord.value = q.record === '1'
 })
 
+/** 排便记录（ADR 0061）：入口在本页最底部。 */
+function goBowel() {
+  uni.navigateTo({ url: '/pages/bowel/index' })
+}
+
 onShow(() => {
   if (!ensureLogin()) return
   weightUnit.value = getWeightUnit()
@@ -698,6 +703,12 @@ function fatText(v: number | null | undefined): string {
           <view v-if="loadingMore" class="mlist__more">加载中…</view>
           <view v-else-if="!hasMore && records.length > 0" class="mlist__more ft-num">共 {{ records.length }} 条</view>
         </view>
+
+        <!-- 排便记录：主人要它放在最后、不显眼（ADR 0061），所以只是一行小字，不做卡片 -->
+        <view v-if="!selectMode" class="bowel-link" role="button" @click="goBowel">
+          <text>排便记录</text>
+          <FtIcon name="chevron-right" :size="14" tone="subtle" />
+        </view>
       </template>
     </view>
 
@@ -922,6 +933,16 @@ function fatText(v: number | null | undefined): string {
 </template>
 
 <style lang="scss" scoped>
+.bowel-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 8rpx 0;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
 .bodypg__body {
   display: flex;
   flex-direction: column;

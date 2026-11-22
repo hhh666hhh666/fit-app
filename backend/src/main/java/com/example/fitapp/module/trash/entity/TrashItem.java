@@ -17,6 +17,8 @@ public class TrashItem {
     public static final String MEAL_PHOTO = "meal_photo";
     public static final String DIARY_PHOTO = "diary_photo";
     public static final String BODY = "body";
+    /** 排便记录（ADR 0061）。 */
+    public static final String BOWEL = "bowel";
     public static final String PLAN = "plan";
     public static final String EXERCISE = "exercise";
     public static final String FOOD = "food";

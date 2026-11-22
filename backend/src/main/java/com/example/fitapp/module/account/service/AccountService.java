@@ -43,7 +43,7 @@ public class AccountService {
             "food", "meal_log", "meal_photo", "diet_daily", "water_log", "user_setting", "food_recognition",
             "exercise", "agent_token", "workout", "food_combo", "preset_hidden", "plan",
             "week_schedule", "user_profile", "trash_item", "diary_entry", "diary_photo", "body_record",
-            "avatar");
+            "avatar", "bowel_record");
 
     private final UserMapper userMapper;
     private final AccountDeletionMapper deletionMapper;
