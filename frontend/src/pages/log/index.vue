@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onHide, onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteWorkouts, getMonthSummary, listWorkouts } from '@/api/workout'
 import { clearAll } from '@/api/cache'
 import type { MonthSummary, WorkoutListItem } from '@/api/workout'
@@ -12,6 +12,7 @@ import { useTabPage } from '@/utils/tab-page'
 import FtIcon from '@/components/FtIcon.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import { ask, TRASH_HINT } from '@/utils/confirm'
+import { useBackWhile } from '@/utils/backStack'
 
 // 切页入场与底栏接线（ADR 0038／0040）：onShow 里登录守卫之后调 tab.enter()
 const tab = useTabPage('log')
@@ -192,6 +193,11 @@ function exitSelect() {
   selected.value = new Set()
 }
 
+// 返回键先退出多选，而不是退出页面；切到别的 tab（页面只是藏起来）也一并退出，
+// 不然藏着的这页还挂着一层，会吞掉别的页的一次返回键
+useBackWhile(selectMode, exitSelect)
+onHide(exitSelect)
+
 /** 全选＝当前**已加载**的这些（当月条目多于 50 条时，未加载的下一页不在其中）。 */
 function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))
@@ -223,42 +229,40 @@ function doDelete() {
 <template>
   <FtTabPage :page="tab" class="log">
     <view class="log__body">
-      <!-- 页头：常规＝标题＋月份胶囊；多选态＝取消＋已选＋全选/删除 -->
-      <view class="log__head">
-        <template v-if="!selectMode">
-          <text class="log__title">训练日志</text>
-          <!-- 月份胶囊：左右翻月，当月封顶不再往后 -->
-          <view class="monthbar">
-            <view class="monthbar__arrow" role="button" aria-label="上个月" @click="shiftMonth(-1)">
-              <FtIcon name="chevron-left" :size="18" :stroke="2" />
-            </view>
-            <text class="monthbar__label ft-num">{{ monthLabel }}</text>
-            <view
-              class="monthbar__arrow"
-              :class="{ 'monthbar__arrow--off': !canNext }"
-              role="button"
-              aria-label="下个月"
-              @click="shiftMonth(1)"
-            >
-              <FtIcon name="chevron-right" :size="18" :stroke="2" />
-            </view>
+      <!-- 页头：标题＋月份胶囊。多选态把它藏起来（占位不动，免得正文跳），换成下面悬浮的操作条 -->
+      <view class="log__head" :class="{ 'is-hidden': selectMode }">
+        <text class="log__title">训练日志</text>
+        <!-- 月份胶囊：左右翻月，当月封顶不再往后 -->
+        <view class="monthbar">
+          <view class="monthbar__arrow" role="button" aria-label="上个月" @click="shiftMonth(-1)">
+            <FtIcon name="chevron-left" :size="18" :stroke="2" />
           </view>
-        </template>
-        <template v-else>
-          <view class="pill" role="button" @click="exitSelect">取消</view>
-          <text class="log__sel ft-num">已选 {{ selectedCount }} 项</text>
-          <view class="log__acts">
-            <text class="log__all" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
-            <view
-              class="pill pill--danger"
-              :class="{ 'pill--off': selectedCount === 0 }"
-              role="button"
-              @click="doDelete"
-            >
-              删除
-            </view>
+          <text class="monthbar__label ft-num">{{ monthLabel }}</text>
+          <view
+            class="monthbar__arrow"
+            :class="{ 'monthbar__arrow--off': !canNext }"
+            role="button"
+            aria-label="下个月"
+            @click="shiftMonth(1)"
+          >
+            <FtIcon name="chevron-right" :size="18" :stroke="2" />
           </view>
-        </template>
+        </view>
+      </view>
+
+      <!-- 多选态：悬浮在顶部的操作条（position: fixed，往下滑也在），取消在最右边 -->
+      <view v-if="selectMode" class="selhead">
+        <text class="selhead__count ft-num">已选 {{ selectedCount }} 项</text>
+        <text class="selhead__all" role="button" @click="toggleAll">{{ allSelected ? '取消全选' : '全选' }}</text>
+        <view
+          class="selhead__del"
+          :class="{ 'is-off': selectedCount === 0 }"
+          role="button"
+          @click="doDelete"
+        >
+          删除
+        </view>
+        <view class="selhead__cancel" role="button" @click="exitSelect">取消</view>
       </view>
 
       <!-- 月概览：数字按当月算，环比要给基准（ADR 0023） -->
@@ -382,34 +386,64 @@ function doDelete() {
   color: $app-ink;
 }
 
-/* ── 多选态页头 ── */
-.pill {
-  @include glass-pill(14rpx 28rpx);
+.log__head.is-hidden {
+  visibility: hidden;
 }
 
-.pill--danger {
-  color: $app-danger;
-}
-
-.pill--off {
-  opacity: 0.4;
-}
-
-.log__sel {
-  font-size: $text-base;
-  font-weight: $weight-bold;
-  color: $app-ink;
-}
-
-.log__acts {
+/* ── 多选态：悬浮操作条，盖在藏起来的页头那一格上 ── */
+.selhead {
+  @include glass($glass-bg-strong);
+  position: fixed;
+  top: calc(40rpx + env(safe-area-inset-top));
+  left: 40rpx;
+  right: 40rpx;
+  /* 压住正文和切页克隆层（10），低于底栏（20）和弹层 */
+  z-index: 18;
   display: flex;
   align-items: center;
-  gap: 24rpx;
-}
+  gap: 8rpx;
+  height: 92rpx;
+  padding: 0 8rpx 0 32rpx;
+  box-sizing: border-box;
+  border: 1rpx solid $glass-edge;
+  border-radius: $radius-pill;
+  box-shadow: $glass-shadow-float;
 
-.log__all {
-  font-size: $text-base;
-  color: $app-ink-muted;
+  &__count {
+    flex: 1;
+    font-size: $text-base;
+    font-weight: $weight-bold;
+    color: $app-ink;
+  }
+
+  &__all,
+  &__del,
+  &__cancel {
+    padding: 14rpx 20rpx;
+    border-radius: $radius-pill;
+    font-size: $text-base;
+    @include press(fill);
+  }
+
+  &__all {
+    color: $app-ink-muted;
+  }
+
+  &__del {
+    font-weight: $weight-bold;
+    color: $app-danger;
+
+    &.is-off {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+  }
+
+  &__cancel {
+    font-weight: $weight-bold;
+    color: $app-ink-2;
+    background: $app-surface-2;
+  }
 }
 
 /* ── 月概览 ── */

@@ -102,6 +102,7 @@ public class BodyService {
         List<BodyRecord> weights = all.stream().filter(r -> r.getWeight() != null).toList();
 
         BodyOverviewVO vo = new BodyOverviewVO();
+        vo.setRecordCount(all.size());
         vo.setIsLowest(false);
         vo.setWeightSeries(new ArrayList<>());
         vo.setGirthSeries(new ArrayList<>());

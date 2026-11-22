@@ -4,8 +4,9 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import FtSelectCancel from '@/components/FtSelectCancel.vue'
 import { computed, ref } from 'vue'
-import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow } from '@dcloudio/uni-app'
 import {
   batchDeleteBodyRecords,
   createBodyRecord,
@@ -38,33 +39,56 @@ import {
   type WeightUnit
 } from '@/utils/weight'
 import { ask, TRASH_HINT } from '@/utils/confirm'
+import { useBackWhile } from '@/utils/backStack'
 
 // ── 身体档案：一条记录＝一次测定，体重与四围同一行（ADR 0017）──
 
 const PAGE_SIZE = 20
 
 const overview = ref<BodyOverview | null>(null)
+/** 当前这一页的记录（「全部记录」翻页，一页 PAGE_SIZE 条）。 */
 const records = ref<BodyRecordRow[]>([])
+/** 第一页（最新的那些）：新增时预填「上次」的数值要用它，不管现在翻到第几页。 */
+const latestRows = ref<BodyRecordRow[]>([])
+/** 当前页码，从 0 起；离开页面再回来停在原页。 */
+const page = ref(0)
+const pageLoading = ref(false)
 /** 个人档案（身高／性别／生日／活动档）＋ 今日消耗拆解（ADR 0029／0030）。 */
 const profile = ref<ProfileInfo | null>(null)
 const loading = ref(true)
-const hasMore = ref(false)
-const loadingMore = ref(false)
 const weightUnit = ref<WeightUnit>('jin')
 
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil((overview.value?.recordCount ?? records.value.length) / PAGE_SIZE))
+)
+
+/** 取第 p 页；页码越界（删光了最后一页）就退回最后一页。 */
+async function fetchPage(p: number): Promise<BodyRecordRow[]> {
+  const rows = await getBodyRecords(PAGE_SIZE, p * PAGE_SIZE)
+  if (p > 0 && rows.length === 0) {
+    const last = Math.max(0, totalPages.value - 1)
+    if (last < p) {
+      page.value = last
+      return fetchPage(last)
+    }
+  }
+  return rows
+}
+
 async function load() {
-  loading.value = true
+  loading.value = records.value.length === 0 && overview.value == null
   try {
-    const [ov, rows, pf] = await Promise.all([
+    const [ov, first, pf] = await Promise.all([
       getBodyOverview(),
       getBodyRecords(PAGE_SIZE, 0),
       // 档案拿不到不该让整页空着——身体数据才是主角
       getProfile().catch(() => null)
     ])
     overview.value = ov
-    records.value = rows
+    latestRows.value = first
     profile.value = pf
-    hasMore.value = rows.length >= PAGE_SIZE
+    if (page.value >= totalPages.value) page.value = totalPages.value - 1
+    records.value = page.value === 0 ? first : await fetchPage(page.value)
   } catch {
     // request 层已统一提示
   } finally {
@@ -72,21 +96,20 @@ async function load() {
   }
 }
 
-async function loadMore() {
-  if (loadingMore.value || !hasMore.value) return
-  loadingMore.value = true
+/** 翻页：换完页把列表顶部滚进视野，不然停在页尾看到的是下一页的末尾。 */
+async function goPage(p: number) {
+  if (pageLoading.value || p < 0 || p >= totalPages.value || p === page.value) return
+  pageLoading.value = true
   try {
-    const rows = await getBodyRecords(PAGE_SIZE, records.value.length)
-    records.value = [...records.value, ...rows]
-    hasMore.value = rows.length >= PAGE_SIZE
+    records.value = await fetchPage(p)
+    page.value = p
+    uni.pageScrollTo({ selector: '.mlist', duration: 200 })
   } catch {
     // request 层已统一提示
   } finally {
-    loadingMore.value = false
+    pageLoading.value = false
   }
 }
-
-onReachBottom(loadMore)
 
 /** 从饮食卡「记体重」带参进入（?record=1）：加载后自动打开录入弹层。 */
 const pendingRecord = ref(false)
@@ -95,11 +118,6 @@ onLoad((query) => {
   const q = (query || {}) as Record<string, string | undefined>
   pendingRecord.value = q.record === '1'
 })
-
-/** 排便记录（ADR 0061）：入口在本页最底部。 */
-function goBowel() {
-  uni.navigateTo({ url: '/pages/bowel/index' })
-}
 
 onShow(() => {
   if (!ensureLogin()) return
@@ -186,8 +204,9 @@ const girthRange = computed(() => {
 const selectMode = ref(false)
 const selected = ref<Set<number>>(new Set())
 const selectedCount = computed(() => selected.value.size)
+/** 全选只管当前这一页；翻页时已勾的保留，「已选 N 项」是跨页的总数。 */
 const allSelected = computed(
-  () => records.value.length > 0 && selected.value.size === records.value.length
+  () => records.value.length > 0 && records.value.every((r) => selected.value.has(r.id))
 )
 
 /**
@@ -221,8 +240,18 @@ function exitSelect() {
   selected.value = new Set()
 }
 
+// 返回键先退出多选，而不是退出页面；离开页面（进了别的页）也一并退出
+useBackWhile(selectMode, exitSelect)
+onHide(exitSelect)
+
 function toggleAll() {
-  selected.value = allSelected.value ? new Set() : new Set(records.value.map((r) => r.id))
+  const s = new Set(selected.value)
+  const off = allSelected.value
+  for (const r of records.value) {
+    if (off) s.delete(r.id)
+    else s.add(r.id)
+  }
+  selected.value = s
 }
 
 function doDelete() {
@@ -307,7 +336,7 @@ function weightInputStep(): string {
 
 /** 新增：日期时间取「现在」，体重与四围预填上次数值（省敲键盘）。 */
 function openSheet() {
-  const last = records.value.find((r) => r.weight != null) ?? null
+  const last = latestRows.value.find((r) => r.weight != null) ?? null
   sheet.value = {
     show: true,
     editId: null,
@@ -514,11 +543,8 @@ function fatText(v: number | null | undefined): string {
 <template>
   <view class="bodypg">
     <view class="bodypg__body">
-      <FtPageHeader title="身体档案" back>
-        <template v-if="selectMode" #right>
-          <view class="pill" role="button" @click="exitSelect">取消</view>
-        </template>
-      </FtPageHeader>
+      <FtPageHeader title="身体档案" back />
+      <FtSelectCancel v-if="selectMode" @click="exitSelect" />
 
       <view v-if="loading" class="hint">加载中…</view>
 
@@ -700,14 +726,31 @@ function fatText(v: number | null | undefined): string {
               </view>
             </view>
           </view>
-          <view v-if="loadingMore" class="mlist__more">加载中…</view>
-          <view v-else-if="!hasMore && records.length > 0" class="mlist__more ft-num">共 {{ records.length }} 条</view>
-        </view>
-
-        <!-- 排便记录：主人要它放在最后、不显眼（ADR 0061），所以只是一行小字，不做卡片 -->
-        <view v-if="!selectMode" class="bowel-link" role="button" @click="goBowel">
-          <text>排便记录</text>
-          <FtIcon name="chevron-right" :size="14" tone="subtle" />
+          <!-- 翻页：一页 PAGE_SIZE 条；只有一页时只报总数 -->
+          <view v-if="totalPages > 1" class="pager" :class="{ 'is-busy': pageLoading }">
+            <view
+              class="pager__btn"
+              :class="{ 'is-off': page === 0 }"
+              role="button"
+              aria-label="上一页"
+              @click="goPage(page - 1)"
+            >
+              <FtIcon name="chevron-left" :size="16" :stroke="2" />
+              <text>上一页</text>
+            </view>
+            <text class="pager__at ft-num">{{ page + 1 }} / {{ totalPages }}</text>
+            <view
+              class="pager__btn"
+              :class="{ 'is-off': page >= totalPages - 1 }"
+              role="button"
+              aria-label="下一页"
+              @click="goPage(page + 1)"
+            >
+              <text>下一页</text>
+              <FtIcon name="chevron-right" :size="16" :stroke="2" />
+            </view>
+          </view>
+          <view v-else-if="records.length > 0" class="mlist__more ft-num">共 {{ records.length }} 条</view>
         </view>
       </template>
     </view>
@@ -933,16 +976,6 @@ function fatText(v: number | null | undefined): string {
 </template>
 
 <style lang="scss" scoped>
-.bowel-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4rpx;
-  padding: 8rpx 0;
-  font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
 .bodypg__body {
   display: flex;
   flex-direction: column;
@@ -973,15 +1006,6 @@ function fatText(v: number | null | undefined): string {
   font-size: $text-sm;
   font-weight: $weight-bold;
   color: $app-ink-muted;
-}
-
-/* 页头右侧的胶囊按钮 */
-.pill {
-  @include glass-pill;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  @include press(dim);
 }
 
 /* ── 卡头：标题 ＋ 右侧小字或小胶囊 ── */
@@ -1279,6 +1303,40 @@ function fatText(v: number | null | undefined): string {
   text-align: center;
   font-size: $text-sm;
   color: $app-ink-muted;
+}
+
+/* 翻页条：两头是按钮、中间是页码；到头的那颗变淡、点了不动 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0 4rpx;
+  border-top: 1rpx solid $app-line-soft;
+
+  &.is-busy {
+    opacity: 0.6;
+  }
+
+  &__btn {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    padding: 16rpx 20rpx;
+    border-radius: $radius-pill;
+    font-size: $text-base;
+    color: $app-ink-2;
+    @include press(fill);
+
+    &.is-off {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+  }
+
+  &__at {
+    font-size: $text-base;
+    color: $app-ink-muted;
+  }
 }
 
 /* 勾选圈（多选、活动量单选共用；与动作库同一个） */

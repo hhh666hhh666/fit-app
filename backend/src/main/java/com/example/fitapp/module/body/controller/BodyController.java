@@ -37,7 +37,7 @@ public class BodyController {
         return Result.success(bodyService.overview(UserContext.requireUserId()));
     }
 
-    /** 记录明细（最新在前）；offset 用于前端触底分页。 */
+    /** 记录明细（最新在前）；前端按页取：offset ＝ 页码 × limit。 */
     @GetMapping("/records")
     public Result<List<BodyRecordVO>> records(
             @RequestParam(defaultValue = "20") int limit,

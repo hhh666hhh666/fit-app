@@ -212,7 +212,7 @@ components:
 ### Secondary
 
 - **营养四色**（protein 杏橙、carb 雾蓝、fat 玫粉、water 青绿）：营养素进度条，首页与饮食页共用；每色另有一条极浅的轨道色（见 `uni.scss` 的 `$ring-*-track`）。kcal 进度条是一条从浅橙到深橙的横向渐变（`$ring-kcal`）。
-- **餐次六组**（breakfast 晨橙、lunch 麦黄、dinner 暮紫、snack 饼干红、water 湖青、weight 草绿，各一对 bg／fg）：餐次入口图标块、相册照片的餐次角标。每组都是「浅色底 ＋ 同色系深字」，六个入口各占一个色相。
+- **餐次六组**（breakfast 晨橙、lunch 麦黄、dinner 暮紫、snack 饼干红、water 湖青、weight 草绿，各一对 bg／fg）：餐次入口图标块、相册照片的餐次角标。每组都是「浅色底 ＋ 同色系深字」，六个入口各占一个色相。首页入口第二页的排便另有一组 `$meal-bowel-*`（暖灰褐，ADR 0061 修订）。
 
 ### Tertiary
 

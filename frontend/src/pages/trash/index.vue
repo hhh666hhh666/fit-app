@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onHide, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { clearTrash, listTrash, purgeTrash, restoreTrash, type TrashItem, type TrashType } from '@/api/trash'
 import { flushAbandoned, restoreAbandoned } from '@/utils/abandoned-session'
 import { ask } from '@/utils/confirm'
+import { useBackWhile } from '@/utils/backStack'
 import { ensureLogin } from '@/utils/guard'
 import { fetchTrashThumb } from '@/utils/photo'
 import { loadSession } from '@/utils/session'
@@ -151,6 +152,10 @@ function exitSelect() {
   selectMode.value = false
   selected.value = new Set()
 }
+
+// 返回键先退出多选，而不是退出页面；离开页面也一并退出
+useBackWhile(selectMode, exitSelect)
+onHide(exitSelect)
 
 function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))

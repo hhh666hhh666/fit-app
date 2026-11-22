@@ -14,6 +14,9 @@ import java.util.List;
 @Data
 public class BodyOverviewVO {
 
+    /** 记录总条数（体重与围度同一条时间线）：「全部记录」翻页算总页数用。 */
+    private Integer recordCount;
+
     /** 最近一条体重记录（体重卡主数据）。 */
     private Latest latest;
 

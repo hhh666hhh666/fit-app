@@ -28,15 +28,25 @@ const todayWeek = `周${['日', '一', '二', '三', '四', '五', '六'][new Da
 // 饮食记录（真数据：今日概览 → 大卡/四环/快捷；数字区点开「饮食」页）
 const dietStore = useDietStore()
 const dietDay = ref<DayOverview | null>(null)
-// 六个入口各占一个色相：浅色底 ＋ 同色系图标（$meal-* token，ADR 0041）
-const dietShortcuts: { key: string; label: string; icon: FtIconName }[] = [
-  {key: 'breakfast', label: '早餐', icon: 'breakfast'},
-  {key: 'lunch', label: '午餐', icon: 'lunch'},
-  {key: 'dinner', label: '晚餐', icon: 'dinner'},
-  {key: 'snack', label: '加餐', icon: 'snack'},
-  {key: 'water', label: '饮水', icon: 'water'},
-  {key: 'weight', label: '记体重', icon: 'weight'}
+// 入口各占一个色相：浅色底 ＋ 同色系图标（$meal-* token，ADR 0041）。
+// 一页六格、左右滑动换页（ADR 0061 修订）：第一页是三餐／加餐／饮水／体重，排便在第二页
+type Shortcut = { key: string; label: string; icon: FtIconName }
+const shortcutPages: Shortcut[][] = [
+  [
+    {key: 'breakfast', label: '早餐', icon: 'breakfast'},
+    {key: 'lunch', label: '午餐', icon: 'lunch'},
+    {key: 'dinner', label: '晚餐', icon: 'dinner'},
+    {key: 'snack', label: '加餐', icon: 'snack'},
+    {key: 'water', label: '饮水', icon: 'water'},
+    {key: 'weight', label: '记体重', icon: 'weight'}
+  ],
+  [{key: 'bowel', label: '排便', icon: 'bowel'}]
 ]
+const shortcutPage = ref(0)
+
+function onShortcutSwipe(e: { detail: { current: number } }) {
+  shortcutPage.value = e.detail.current
+}
 const sheetMeal = ref<MealKey | null>(null)
 const todayKey = (() => {
   const d = new Date()
@@ -78,6 +88,8 @@ function onDietShortcut(key: string) {
     void bumpWater()
   } else if (key === 'weight') {
     uni.navigateTo({url: '/pages/body/index?record=1'})
+  } else if (key === 'bowel') {
+    uni.navigateTo({url: '/pages/bowel/index'})
   } else {
     sheetMeal.value = key as MealKey
   }
@@ -226,7 +238,7 @@ function goDiary() {
         <view class="home__pill" role="button" @click="goDiary">日记</view>
       </view>
 
-      <!-- 今天吃了：数字区与条形点开「饮食」页，六个入口直接记 -->
+      <!-- 今天吃了：数字区与条形点开「饮食」页，下面的入口直接记（左右滑换页） -->
       <view class="glass diet">
         <view class="diet__tap" @click="goDiet">
           <view class="diet__head">
@@ -246,17 +258,39 @@ function goDiary() {
         </view>
 
         <view class="diet__shortcuts">
-          <view
-            v-for="s in dietShortcuts"
-            :key="s.key"
-            class="diet__shortcut"
-            role="button"
-            @click="onDietShortcut(s.key)"
+          <swiper
+            class="diet__swiper"
+            :current="shortcutPage"
+            @change="onShortcutSwipe"
           >
-            <view class="diet__ico" :class="'diet__ico--' + s.key">
-              <FtIcon :name="s.icon" :size="22" />
-            </view>
-            <text class="diet__shortcut-label">{{ s.label }}</text>
+            <swiper-item v-for="(pg, i) in shortcutPages" :key="i">
+              <view class="diet__grid">
+                <view
+                  v-for="s in pg"
+                  :key="s.key"
+                  class="diet__shortcut"
+                  role="button"
+                  @click="onDietShortcut(s.key)"
+                >
+                  <view class="diet__ico" :class="'diet__ico--' + s.key">
+                    <FtIcon :name="s.icon" :size="22" />
+                  </view>
+                  <text class="diet__shortcut-label">{{ s.label }}</text>
+                </view>
+              </view>
+            </swiper-item>
+          </swiper>
+          <!-- 页码点：告诉人「还能往左滑」；点一下也能换页 -->
+          <view class="diet__dots">
+            <view
+              v-for="(_, i) in shortcutPages"
+              :key="i"
+              class="diet__dot"
+              :class="{ 'is-on': i === shortcutPage }"
+              role="button"
+              :aria-label="`第 ${i + 1} 页入口`"
+              @click="shortcutPage = i"
+            />
           </view>
         </view>
       </view>
@@ -421,11 +455,39 @@ function goDiary() {
 }
 
 .diet__shortcuts {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-top: 28rpx;
   padding-top: 24rpx;
   border-top: 1rpx solid $app-line-soft;
+}
+
+/* swiper 要写死高度：一格＝图标块 88 ＋ 间距 12 ＋ 一行小字 */
+.diet__swiper {
+  height: 148rpx;
+}
+
+.diet__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.diet__dots {
+  display: flex;
+  justify-content: center;
+  gap: 12rpx;
+  padding-top: 12rpx;
+}
+
+.diet__dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: $radius-pill;
+  background: $app-line;
+  transition: width $dur-fast $ease-out, background-color $dur-fast $ease-out;
+
+  &.is-on {
+    width: 28rpx;
+    background: $app-ink-muted;
+  }
 }
 
 .diet__shortcut {
@@ -479,6 +541,11 @@ function goDiary() {
 .diet__ico--weight {
   background: $meal-weight-bg;
   color: $meal-weight-fg;
+}
+
+.diet__ico--bowel {
+  background: $meal-bowel-bg;
+  color: $meal-bowel-fg;
 }
 
 .diet__shortcut-label {

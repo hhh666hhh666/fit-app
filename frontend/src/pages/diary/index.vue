@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onHide, onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteDiary, listDiary, type DiaryListItem } from '@/api/diary'
 import { clearAll } from '@/api/cache'
 import { formatTimeLabel } from '@/utils/format'
 import { ensureLogin } from '@/utils/guard'
 import { TRASH_HINT } from '@/utils/confirm'
+import { useBackWhile } from '@/utils/backStack'
 import { plainPreview } from '@/utils/markdown-lite'
 import { loadDraft } from '@/utils/diary-draft'
 import FtButton from '@/components/FtButton.vue'
@@ -161,6 +162,10 @@ function exitSelect() {
   selectMode.value = false
   selected.value = new Set()
 }
+
+// 返回键先退出多选，而不是退出页面；离开页面也一并退出
+useBackWhile(selectMode, exitSelect)
+onHide(exitSelect)
 
 function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(items.value.map((i) => i.id))

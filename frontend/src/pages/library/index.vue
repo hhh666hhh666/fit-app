@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
+import { onHide, onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { batchDeleteExercises, createExercise, listExercises, type ExerciseItem } from '@/api/exercise'
 import { usePickStore } from '@/stores/pick'
 import { muscleLabel } from '@/utils/format'
@@ -10,6 +10,8 @@ import FtEmpty from '@/components/FtEmpty.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import FtSelectCancel from '@/components/FtSelectCancel.vue'
+import { useBackWhile } from '@/utils/backStack'
 import { ask, TRASH_HINT } from '@/utils/confirm'
 
 // ── 动作库（晴窗，ADR 0041）──
@@ -138,6 +140,10 @@ function exitSelect() {
   selected.value = new Set()
 }
 
+// 返回键先退出多选，而不是退出页面；离开页面（进了别的页）也一并退出
+useBackWhile(selectMode, exitSelect)
+onHide(exitSelect)
+
 function toggleAll() {
   selected.value = allSelected.value
     ? new Set([...selected.value].filter((id) => !deletable.value.some((e) => e.id === id)))
@@ -241,14 +247,14 @@ async function confirmCreate() {
   <view class="lib">
     <view class="lib__body" :class="{ 'is-selecting': selectMode }">
       <FtPageHeader :title="picking ? '添加动作' : '动作库'" back>
-        <template #right>
-          <view v-if="selectMode" class="pill" role="button" @click="exitSelect">取消</view>
-          <view v-else class="pill" role="button" @click="openCreate">
+        <template v-if="!selectMode" #right>
+          <view class="pill" role="button" @click="openCreate">
             <FtIcon name="plus" :size="16" :stroke="2" />
             <text>新增</text>
           </view>
         </template>
       </FtPageHeader>
+      <FtSelectCancel v-if="selectMode" @click="exitSelect" />
 
       <!-- 搜索 -->
       <view class="search">

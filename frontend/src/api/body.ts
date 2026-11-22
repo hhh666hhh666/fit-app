@@ -32,6 +32,8 @@ export interface BodyGirth {
 }
 
 export interface BodyOverview {
+  /** 记录总条数：「全部记录」翻页算总页数。 */
+  recordCount?: number
   latest: BodyLatest | null
   /** 较上周（kg，负＝降）；无从比为 null。 */
   weekDiff: number | null
@@ -87,6 +89,7 @@ export function getBodyOverview() {
 }
 
 /** 明细只缓存首屏（`offset = 0`）：续页不缓存，免得被删改后与前面的页对不齐。 */
+/** 按页取明细：offset ＝ 页码 × limit。第一页走缓存（新增时预填要用），其余页现取。 */
 export function getBodyRecords(limit = 20, offset = 0) {
   return read<BodyRecordRow[]>('/body/records', { limit, offset }, 'body', offset === 0)
 }

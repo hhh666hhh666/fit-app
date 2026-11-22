@@ -8,7 +8,7 @@
 //
 // 弹层自己在挂载时 push 一个「关我」的回调、卸载时撤掉（FtSheet、MealSheet 等都是 v-if 挂载），
 // 组件里写一行 useBackClose(关闭函数) 即可。
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 
 type Closer = () => void
 
@@ -28,6 +28,22 @@ export function useBackClose(close: Closer): void {
   let off: (() => void) | null = null
   onMounted(() => {
     off = pushBack(close)
+  })
+  onBeforeUnmount(() => off?.())
+}
+
+/**
+ * 页面里的「状态」也算一层：flag 为 true 时返回键先调 close（如长按进的多选态，返回键＝退出多选，
+ * 不是退出页面）；flag 变回 false 或页面卸载时撤掉。
+ */
+export function useBackWhile(flag: Ref<boolean>, close: Closer): void {
+  let off: (() => void) | null = null
+  watch(flag, (on) => {
+    if (on && !off) off = pushBack(close)
+    else if (!on && off) {
+      off()
+      off = null
+    }
   })
   onBeforeUnmount(() => off?.())
 }
