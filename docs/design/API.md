@@ -83,6 +83,8 @@
 
 时刻与饮水明细（[ADR 0059](../adr/0059-water-per-drink-and-entry-time.md)，2026-11-21）：加条目的三个接口（`/meals`、`/meals/custom`、`/meals/batch`）和 `PUT /meals/{id}` 都收可选的 `time`（`HH:mm`）；不给时服务端兜底——记今天用北京时间的当前钟点，补记按餐次（早 8、午 12、晚 18，加餐用当前钟点）。前端一律自己带上本机时刻。条目返回带 `time`，当日总览的每餐带 `firstTime`，`items` 按时刻排。饮水改成一笔一笔：`POST /api/diet/water/drinks`（`date`、`ml`、可选 `time`）、`PUT`／`DELETE /api/diet/water/drinks/{id}`；当日总览的 `water.drinks` 是当天每一笔。老接口 `POST /api/diet/water {date, delta}` 仍在（首页卡用）：正数＝记一笔，负数＝撤掉当天最后记的那一笔，返回当天合计。
 
+识别前的提示词与多轮纠正（[ADR 0060](../adr/0060-meal-recognition-hint-and-follow-up.md)，2026-11-21）：`POST /api/food-recognition` 与 `/meal` 都多收一个可选的 `hint`（拍照前的提示词，最多 500 字，接在 prompt 后面）。`/meal` 还收 `history`（JSON 串：前面的对话 `[{role, content}]`，`assistant` 是模型上一轮的原样输出、`user` 是主人的回复，交替、由 `assistant` 开头）和 `reply`（这一轮的回复）；有 `history` 就必须有 `reply`。照片每轮都重新上传，服务端不存照片也不存对话。草稿多带 `questions`（AI 拿不准的大白话问题，最多 5 条）、`output`（这一轮的原样输出，前端下一轮放进 `history`）与 `round`。每一轮单独记一条用量流水，带 `round` 与 `note`。
+
 识别明细（[ADR 0053](../adr/0053-recognition-log-detail.md)）：`GET /api/food-recognition/logs` 分页列表不带 `rawOutput`、`requestJson`、`responseJson`；`GET /api/food-recognition/logs/{id}` 给一条的全部字段，外加 `price`（价格估算，只算 DeepSeek，按北京时间峰谷，[ADR 0054](../adr/0054-recognition-price-deepseek.md)），不是自己的返回 404。`GET /api/food-recognition/stats?range=all|month|week`（缺省或不认识的值按 `all`）给用量统计：合计（次数／成败、token 分项、估算金额及高峰／空闲拆分、未计价次数与 token）、平均每次、缓存命中率、`byModel`／`byKind` 分组、`daily` 逐日序列（没记录的天为 0）、放假表没覆盖的年份；金额按记录逐条估算后合计，时间按请求发出的时刻、北京时间划分。
 
 ## 管理端接口

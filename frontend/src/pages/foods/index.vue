@@ -24,6 +24,7 @@ import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
+import RecognizeHint from '@/components/RecognizeHint.vue'
 import { ask } from '@/utils/confirm'
 import { formatThousands } from '@/utils/format'
 
@@ -166,9 +167,12 @@ function perText(f: FoodItem): string {
 
 const recognition = useRecognitionStore()
 const recognizing = ref(false)
+/** 识别前的提示词弹层（ADR 0060）。 */
+const hintSheet = ref(false)
 
-async function startRecognize() {
+async function startRecognize(hint: string | null) {
   if (recognizing.value) return
+  hintSheet.value = false
   const picked = await choosePhoto()
   if (picked.cancelled || !picked.path) {
     // 真失败才提示；用户取消静默（与 photo.ts 的口径一致）
@@ -182,7 +186,7 @@ async function startRecognize() {
   try {
     const original = await (await fetch(picked.path)).blob()
     const blob = await compress(original, 0.85)
-    const draft = await recognizeFood(blob)
+    const draft = await recognizeFood(blob, hint)
     recognition.set(draft)
     uni.navigateTo({ url: '/pages/food-edit/index?recognized=1' })
   } catch (e) {
@@ -292,7 +296,7 @@ function copyExport() {
         </view>
 
         <view class="ops">
-          <view class="ops__btn" role="button" @click="startRecognize">拍照识别</view>
+          <view class="ops__btn" role="button" @click="hintSheet = true">拍照识别</view>
           <view class="ops__btn" role="button" @click="openImport">导入 JSON</view>
           <view class="ops__btn" role="button" @click="doExport">导出 JSON</view>
         </view>
@@ -381,6 +385,18 @@ function copyExport() {
         <FtButton variant="primary" block :disabled="importSheet.busy" class="fs__btn" @click="doImport">
           导入
         </FtButton>
+      </FtSheet>
+    </Transition>
+
+    <!-- 拍照识别前的提示词（选填，ADR 0060） -->
+    <Transition name="ft-sheet">
+      <FtSheet v-if="hintSheet" title="拍营养成分表" sub="拍包装上的营养成分表，识别后在确认页核对" @close="hintSheet = false">
+        <RecognizeHint
+          :busy="recognizing"
+          placeholder="如：表是按每份印的，一份 30g；这是无糖版"
+          @start="startRecognize"
+          @cancel="hintSheet = false"
+        />
       </FtSheet>
     </Transition>
 

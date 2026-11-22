@@ -1,6 +1,9 @@
 package com.example.fitapp.module.nutrition.controller;
 
+import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.Result;
+import com.example.fitapp.common.ResultCode;
+import com.example.fitapp.module.nutrition.dto.RecognitionTurn;
 import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.service.FoodRecognitionService;
 import com.example.fitapp.module.nutrition.vo.FoodDraftVO;
@@ -9,6 +12,8 @@ import com.example.fitapp.module.nutrition.vo.RecognitionLogDetailVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionStatsVO;
 import com.example.fitapp.module.nutrition.vo.RecognitionUsageVO;
 import com.example.fitapp.security.UserContext;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,11 +35,13 @@ import java.util.List;
 public class FoodRecognitionController {
 
     private final FoodRecognitionService service;
+    private final ObjectMapper objectMapper;
 
     /** 识别：返回草稿（不落库）；保存由 POST /api/foods 完成。 */
     @PostMapping
-    public Result<FoodDraftVO> recognize(@RequestParam("file") MultipartFile file) {
-        return Result.success(service.recognize(UserContext.requireUserId(), file));
+    public Result<FoodDraftVO> recognize(@RequestParam("file") MultipartFile file,
+                                         @RequestParam(required = false) String hint) {
+        return Result.success(service.recognize(UserContext.requireUserId(), file, hint));
     }
 
     /**
@@ -42,8 +49,27 @@ public class FoodRecognitionController {
      * 用户核对后由 POST /api/diet/meals/custom 记成临时条目。
      */
     @PostMapping("/meal")
-    public Result<MealDraftVO> recognizeMeal(@RequestParam("file") MultipartFile file) {
-        return Result.success(service.recognizeMeal(UserContext.requireUserId(), file));
+    public Result<MealDraftVO> recognizeMeal(@RequestParam("file") MultipartFile file,
+                                             @RequestParam(required = false) String hint,
+                                             @RequestParam(required = false) String history,
+                                             @RequestParam(required = false) String reply) {
+        return Result.success(service.recognizeMeal(UserContext.requireUserId(), file, hint,
+                parseHistory(history), reply));
+    }
+
+    /**
+     * 多轮纠正时前面的对话（ADR 0060）：multipart 里一个 JSON 字段，[{role, content}, ...]。
+     * 形状（交替、长度）由服务层检查。
+     */
+    private List<RecognitionTurn> parseHistory(String history) {
+        if (history == null || history.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(history, new TypeReference<List<RecognitionTurn>>() { });
+        } catch (Exception e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "对话记录不完整，请关掉重新识别");
+        }
     }
 
     /** 用量汇总：累计 token ＋ 请求次数（「我的」页外卡两值；不显示费用）。 */

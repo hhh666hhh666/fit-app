@@ -112,6 +112,7 @@ function durationText(ms: number): string {
           <view class="rrow__line">
             <text class="rrow__time ft-num">{{ formatDateTimeLabel(r.createdAt) }}</text>
             <text v-if="!r.success" class="badge badge--fail">失败</text>
+            <text v-if="r.round && r.round > 1" class="badge">第 {{ r.round }} 轮</text>
             <text class="rrow__dur ft-num">{{ durationText(r.durationMs) }}</text>
           </view>
           <view class="rrow__line">

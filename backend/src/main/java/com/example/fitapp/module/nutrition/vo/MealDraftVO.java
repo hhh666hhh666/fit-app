@@ -47,4 +47,15 @@ public class MealDraftVO {
 
     /** 没能给出的营养字段 key（kcal / protein / fat / carb / sodium），值为空，前端标「待补」。 */
     private List<String> missing = new ArrayList<>();
+
+    /** AI 拿不准、想问主人的地方，大白话（ADR 0060）；没有就是空列表。 */
+    private List<String> questions = new ArrayList<>();
+
+    /**
+     * 模型这一轮的原样输出：主人回复时，前端把它作为一段 assistant 对话连同照片一起发回来（服务端不存对话）。
+     */
+    private String output;
+
+    /** 这是第几轮。 */
+    private int round = 1;
 }

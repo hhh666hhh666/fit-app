@@ -177,6 +177,14 @@ function copy(text: string | null | undefined, what: string) {
             <text class="kv__k">入口</text>
             <text class="kv__v">{{ kindText }}</text>
           </view>
+          <view v-if="rec.round && rec.round > 1" class="kv">
+            <text class="kv__k">轮次</text>
+            <text class="kv__v ft-num">第 {{ rec.round }} 轮</text>
+          </view>
+          <view v-if="rec.note" class="kv">
+            <text class="kv__k">{{ rec.round && rec.round > 1 ? '主人的回复' : '提示词' }}</text>
+            <text class="kv__v">{{ rec.note }}</text>
+          </view>
           <text v-if="legacy" class="card__note">这是 11 月 9 日更新前的记录，当时只存了 token、模型、耗时和成败，其余显示「未记录」。</text>
         </view>
 

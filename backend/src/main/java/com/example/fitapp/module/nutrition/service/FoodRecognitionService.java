@@ -6,6 +6,7 @@ import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.common.ResultCode;
 import com.example.fitapp.config.RecognitionProperties;
 import com.example.fitapp.module.nutrition.dto.FoodSaveDTO;
+import com.example.fitapp.module.nutrition.dto.RecognitionTurn;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
@@ -122,11 +123,27 @@ public class FoodRecognitionService {
             5. name 取包装上的食品名称；unit：饮品或按毫升计量的填 "ml"，其余填 "g"。
             6. 看不清的字段名加进 uncertain，数值仍给最佳辨认结果。
 
+            两种都要做：把你拿不准、需要主人确认才能估得更准的地方，写成 1–3 个简短的大白话问题放进 questions
+            （如「这碗米饭是平碗还是冒尖？」「肉是瘦肉还是五花？」），问题要具体到主人一句话就能答；没有就给 []。
+
             照片里既不是食物也没有营养成分表时，只输出 {"error":"not_food"}。
 
             只输出 JSON，不要任何解释文字。格式：
-            {"kind":"photo","name":"","unit":"g","kj":null,"kcal":null,"serving_grams":null,"nutrients":{"protein":null,"fat":null,"carb":null,"sodium":null},"uncertain":[]}
+            {"kind":"photo","name":"","unit":"g","kj":null,"kcal":null,"serving_grams":null,"nutrients":{"protein":null,"fat":null,"carb":null,"sodium":null},"uncertain":[],"questions":[]}
             """;
+
+    /** 拍照前的提示词接在 prompt 后面（ADR 0060）。 */
+    static final String HINT_PREFIX = "\n\n主人拍照前补充的说明（以它为准，和照片矛盾时按它来）：\n";
+
+    /** 主人回复的那一轮，跟在回复后面的要求（ADR 0060）。 */
+    static final String FOLLOW_UP = "\n\n请结合主人的回复重新估算，输出完整的 JSON（格式同上）；questions 里只留还没弄清的问题。";
+
+    /** 提示词、单条回复的长度上限（和用量流水的 note 列一致）。 */
+    public static final int NOTE_MAX = 500;
+    /** 对话最多多少段：轮数不限（ADR 0060），这里只防一次请求大得离谱。 */
+    static final int TURNS_MAX = 200;
+    /** 一段对话的长度上限（模型一轮的输出通常几百字）。 */
+    static final int TURN_CONTENT_MAX = 16000;
 
     /** 餐次识别：照片判断不了整份重量时的兜底（按 100 当这一份，标「待核对」让用户改）。 */
     private static final BigDecimal FALLBACK_PORTION = new BigDecimal("100");
@@ -177,6 +194,8 @@ public class FoodRecognitionService {
         String responseJson;
         String resultName;
         String errorMessage;
+        Integer round;
+        String note;
         Integer imageBytes;
         String imageMime;
         boolean success;
@@ -186,7 +205,14 @@ public class FoodRecognitionService {
      * 识别一张照片 → 草稿（不落库）。无论成败都记一条用量流水。
      */
     public FoodDraftVO recognize(Long userId, MultipartFile file) {
-        return run(userId, file, "label", PROMPT, "识别失败，请重试或手动录入", (content, trace) -> {
+        return recognize(userId, file, null);
+    }
+
+    /** 同上，带拍照前的提示词（ADR 0060）；标签识别只有一轮。 */
+    public FoodDraftVO recognize(Long userId, MultipartFile file, String hint) {
+        String h = cleanNote(hint);
+        return run(userId, file, "label", withHint(PROMPT, h), List.of(), 1, h,
+                "识别失败，请重试或手动录入", (content, trace) -> {
             LabelDraftParser.Draft draft = LabelDraftParser.parse(content);
             // 名字或 4+1 某项没认出时照常出草稿（用户回确认页补）——校验只拦「有值但不合法」，
             // 空值放过；保存时前端与 POST /api/foods 还有双重非空闸。
@@ -213,11 +239,67 @@ public class FoodRecognitionService {
      * 与入库识别共用模型、配置与用量流水；无论成败都记一条。
      */
     public MealDraftVO recognizeMeal(Long userId, MultipartFile file) {
-        return run(userId, file, "meal", MEAL_PROMPT, "识别失败，请重试或手动记录", (content, trace) -> {
+        return recognizeMeal(userId, file, null, List.of(), null);
+    }
+
+    /**
+     * 多轮版（ADR 0060）：第 1 轮可带拍照前的提示词；之后每一轮，前端把前面的对话（模型原样输出与主人的回复交替）
+     * 和这一轮的回复连同照片一起发回来，服务端不存照片也不存对话。每一轮单独记一条用量。
+     */
+    public MealDraftVO recognizeMeal(Long userId, MultipartFile file, String hint, List<RecognitionTurn> history,
+                                     String reply) {
+        String h = cleanNote(hint);
+        List<RecognitionTurn> turns = conversation(history, reply);
+        int round = 1 + (int) turns.stream().filter(t -> "assistant".equals(t.role())).count();
+        String note = round == 1 ? h : cleanNote(reply);
+        return run(userId, file, "meal", withHint(MEAL_PROMPT, h), turns, round, note,
+                "识别失败，请重试或手动记录", (content, trace) -> {
             MealDraftVO vo = toMealDraft(content);
+            vo.setOutput(content);
+            vo.setRound(round);
             trace.resultName = vo.getName();
             return vo;
         });
+    }
+
+    /** 提示词接在 prompt 后面；没给就是原 prompt。 */
+    static String withHint(String prompt, String hint) {
+        return hint == null ? prompt : prompt + HINT_PREFIX + hint;
+    }
+
+    /** 去掉首尾空白，空串当没给；超长截断（和流水的 note 列一致）。 */
+    private static String cleanNote(String s) {
+        if (s == null || s.isBlank()) return null;
+        String t = s.strip();
+        return t.length() <= NOTE_MAX ? t : t.substring(0, NOTE_MAX);
+    }
+
+    /**
+     * 前面的对话 ＋ 这一轮的回复，检查形状：模型输出与主人回复交替、由模型输出开头、以主人回复结尾。
+     * 没有对话也没有回复就是第 1 轮（空列表）。
+     */
+    static List<RecognitionTurn> conversation(List<RecognitionTurn> history, String reply) {
+        List<RecognitionTurn> turns = new ArrayList<>(history == null ? List.of() : history);
+        String r = cleanNote(reply);
+        if (turns.isEmpty() && r == null) {
+            return List.of();
+        }
+        if (r == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "回复不能为空");
+        }
+        turns.add(new RecognitionTurn("user", r));
+        if (turns.size() > TURNS_MAX) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "对话太长了，请关掉重新识别");
+        }
+        for (int i = 0; i < turns.size(); i++) {
+            RecognitionTurn t = turns.get(i);
+            String want = i % 2 == 0 ? "assistant" : "user";
+            if (t == null || !want.equals(t.role()) || t.content() == null || t.content().isBlank()
+                    || t.content().length() > TURN_CONTENT_MAX) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "对话记录不完整，请关掉重新识别");
+            }
+        }
+        return turns;
     }
 
     /** 把模型输出变成草稿；可以顺手往 trace 里填识别出的名称。 */
@@ -230,8 +312,8 @@ public class FoodRecognitionService {
      * 两个识别入口共用的骨架：没 Key 先降级（不记账）→ 调模型 → 解析 → 无论成败都记一条流水。
      * 业务性失败（没标签、脏数据、服务不可用）原样抛给前端，其余异常换成一句通用提示。
      */
-    private <T> T run(Long userId, MultipartFile file, String kind, String prompt, String genericError,
-                      DraftMaker<T> maker) {
+    private <T> T run(Long userId, MultipartFile file, String kind, String prompt, List<RecognitionTurn> turns,
+                      int round, String note, String genericError, DraftMaker<T> maker) {
         if (!StringUtils.hasText(props.getApiKey())) {
             // 没配 Key：明确降级（不记账——根本没花 token）
             throw new BusinessException(ResultCode.BUSINESS_ERROR,
@@ -240,10 +322,13 @@ public class FoodRecognitionService {
         long t0 = System.currentTimeMillis();
         Trace trace = new Trace();
         trace.kind = kind;
+        trace.round = round;
+        trace.note = note;
         trace.imageBytes = file.getSize() > 0 ? (int) Math.min(file.getSize(), Integer.MAX_VALUE) : null;
         trace.imageMime = file.getContentType();
         try {
-            DashScopeResponse resp = "label".equals(kind) ? callVision(file) : callVision(file, prompt);
+            DashScopeResponse resp = !turns.isEmpty() ? callVision(file, prompt, turns)
+                    : "label".equals(kind) && PROMPT.equals(prompt) ? callVision(file) : callVision(file, prompt);
             trace.resp = resp;
             trace.rawOutput = resp.content();
             trace.requestJson = resp.requestJson();
@@ -330,6 +415,16 @@ public class FoodRecognitionService {
         }
         vo.setUncertain(uncertain);
         vo.setMissing(new ArrayList<>(draft.missing()));
+        // AI 拿不准、想问主人的地方（ADR 0060）：最多 5 条，每条最多 100 字
+        JsonNode qs = root.path("questions");
+        if (qs.isArray()) {
+            for (JsonNode q : qs) {
+                String text = q.asText("").strip();
+                if (!text.isEmpty() && vo.getQuestions().size() < 5) {
+                    vo.getQuestions().add(text.length() <= 100 ? text : text.substring(0, 100));
+                }
+            }
+        }
         return vo;
     }
 
@@ -419,6 +514,11 @@ public class FoodRecognitionService {
 
     /** 同上，prompt 由调用方给（餐次识别用 {@link #MEAL_PROMPT}）。 */
     DashScopeResponse callVision(MultipartFile file, String prompt) {
+        return callVision(file, prompt, List.of());
+    }
+
+    /** 同上，带前面几轮的对话（ADR 0060）：照片和 prompt 永远是第一段，之后模型输出与主人回复交替。 */
+    DashScopeResponse callVision(MultipartFile file, String prompt, List<RecognitionTurn> turns) {
         byte[] bytes;
         try {
             bytes = file.getBytes();
@@ -435,7 +535,7 @@ public class FoodRecognitionService {
         String dataUri = "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(bytes);
         // 留给识别明细的请求体：与实发完全一样，只把图片的 base64 换成占位（几 MB 的图不进库）
         String requestJson = toJson(buildRequestBody(
-                "data:" + mime + ";base64,<图片已省略：" + bytes.length + " 字节>", prompt));
+                "data:" + mime + ";base64,<图片已省略：" + bytes.length + " 字节>", prompt, turns));
 
         JsonNode resp;
         try {
@@ -443,7 +543,7 @@ public class FoodRecognitionService {
                     .uri("/chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + props.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(buildRequestBody(dataUri, prompt))
+                    .body(buildRequestBody(dataUri, prompt, turns))
                     .retrieve()
                     .body(JsonNode.class);
         } catch (RestClientResponseException e) {
@@ -493,12 +593,22 @@ public class FoodRecognitionService {
     }
 
     Map<String, Object> buildRequestBody(String dataUri, String prompt) {
+        return buildRequestBody(dataUri, prompt, List.of());
+    }
+
+    Map<String, Object> buildRequestBody(String dataUri, String prompt, List<RecognitionTurn> turns) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", props.getModel());
-        body.put("messages", List.of(Map.<String, Object>of("role", "user",
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.<String, Object>of("role", "user",
                 "content", List.of(
                         Map.<String, Object>of("type", "image_url", "image_url", Map.of("url", dataUri)),
-                        Map.<String, Object>of("type", "text", "text", prompt)))));
+                        Map.<String, Object>of("type", "text", "text", prompt))));
+        for (RecognitionTurn t : turns) {
+            messages.add(Map.<String, Object>of("role", t.role(),
+                    "content", "user".equals(t.role()) ? "主人的回复：" + t.content() + FOLLOW_UP : t.content()));
+        }
+        body.put("messages", messages);
         String mode = StringUtils.hasText(props.getThinkingMode())
                 ? props.getThinkingMode().trim() : "disabled";
         if ("enabled".equals(mode) || "disabled".equals(mode)) {
@@ -553,6 +663,8 @@ public class FoodRecognitionService {
         FoodRecognition row = new FoodRecognition();
         row.setUserId(userId);
         row.setKind(t.kind);
+        row.setRound(t.round);
+        row.setNote(clip(t.note, NOTE_MAX));
         row.setModel(props.getModel());
         row.setEndpoint(props.getEndpoint());
         row.setThinkingMode(StringUtils.hasText(props.getThinkingMode()) ? props.getThinkingMode().trim() : "disabled");

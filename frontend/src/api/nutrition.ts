@@ -243,10 +243,11 @@ export interface FoodDraft {
  * 识别一张照片（multipart）。走裸 fetch——与餐照同套路：request 封装只处理 JSON，
  * multipart 与鉴权参照 utils/photo.ts。失败抛 Error（message 即后端给的降级原因）。
  */
-export async function recognizeFood(blob: Blob): Promise<FoodDraft> {
+export async function recognizeFood(blob: Blob, hint?: string | null): Promise<FoodDraft> {
   const token = (uni.getStorageSync('fitapp_token') as string) || ''
   const fd = new FormData()
   fd.append('file', blob, blob.type === 'image/png' ? 'label.png' : 'label.jpg')
+  if (hint) fd.append('hint', hint)
   const res = await fetch(`${API_BASE}/food-recognition`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -284,13 +285,34 @@ export interface MealDraft {
   uncertain: MealDraftKey[]
   /** 没给出的营养字段（标「待补」）。 */
   missing: MealDraftKey[]
+  /** AI 拿不准、想问主人的地方，大白话（ADR 0060）。 */
+  questions: string[]
+  /** 模型这一轮的原样输出：主人回复时作为一段 assistant 对话发回去（服务端不存对话）。 */
+  output: string
+  /** 第几轮。 */
+  round: number
 }
 
-/** 识别一张照片为临时食物草稿（multipart，裸 fetch，同 recognizeFood）。失败抛 Error。 */
-export async function recognizeMeal(blob: Blob): Promise<MealDraft> {
+/** 识别的一段对话：assistant＝模型上一轮的原样输出，user＝主人的回复（ADR 0060）。 */
+export interface RecognitionTurn {
+  role: 'assistant' | 'user'
+  content: string
+}
+
+/**
+ * 识别一张照片为临时食物草稿（multipart，裸 fetch，同 recognizeFood）。失败抛 Error。
+ * 第 1 轮可带拍照前的提示词；主人回复时带上前面的对话和这一轮的回复，照片每轮都重新发（ADR 0060）。
+ */
+export async function recognizeMeal(
+  blob: Blob,
+  opts?: { hint?: string | null; history?: RecognitionTurn[]; reply?: string }
+): Promise<MealDraft> {
   const token = (uni.getStorageSync('fitapp_token') as string) || ''
   const fd = new FormData()
   fd.append('file', blob, blob.type === 'image/png' ? 'meal.png' : 'meal.jpg')
+  if (opts?.hint) fd.append('hint', opts.hint)
+  if (opts?.history?.length) fd.append('history', JSON.stringify(opts.history))
+  if (opts?.reply) fd.append('reply', opts.reply)
   const res = await fetch(`${API_BASE}/food-recognition/meal`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -331,6 +353,10 @@ export interface RecognitionLogItem {
   /** 以下为 V40 起多记的（ADR 0053），老记录为 null；列表不带 rawOutput。 */
   /** label＝食物库营养成分表入库；meal＝记一餐 AI 识别。 */
   kind?: 'label' | 'meal' | null
+  /** 第几轮（ADR 0060）：记一餐识别里主人每回复一次多一轮；老记录为 null，即第 1 轮。 */
+  round?: number | null
+  /** 这一轮主人说的话：第 1 轮是提示词，之后是回复。 */
+  note?: string | null
   endpoint?: string | null
   thinkingMode?: string | null
   reasoningEffort?: string | null

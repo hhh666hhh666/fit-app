@@ -19,6 +19,7 @@ import {
   type MealItem,
   type MealKey,
   type MealPick,
+  type RecognitionTurn,
   type TempPick
 } from '@/api/nutrition'
 import { choosePhoto, compress, deletePhoto, fetchMealPhoto, pickAndUploadPhotos } from '@/utils/photo'
@@ -26,6 +27,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
 import FoodThumb from '@/components/FoodThumb.vue'
+import RecognizeHint from '@/components/RecognizeHint.vue'
 import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
@@ -435,6 +437,32 @@ interface TmpFood {
 const recognizing = ref(false)
 const tmp = ref<TmpFood | null>(null)
 
+// ── 提示词与多轮纠正（ADR 0060）──
+// 照片只留在这里（压缩后的 Blob），每一轮连同前面的对话重新发给 AI；弹层关掉、取消或记下就丢。
+/** 识别前的提示词面板开着。 */
+const hintOpen = ref(false)
+let recogImage: Blob | null = null
+let recogHint: string | null = null
+/** 前面的对话：模型原样输出与主人回复交替，由模型输出开头。 */
+let recogTurns: RecognitionTurn[] = []
+/** AI 这一轮拿不准、想问的地方。 */
+const questions = ref<string[]>([])
+const recogRound = ref(1)
+const reply = ref('')
+/** 这一轮被 AI 改了的格子：闪一下提示。 */
+const flash = ref<MealDraftKey[]>([])
+let flashTimer: ReturnType<typeof setTimeout> | undefined
+
+function resetRecognition() {
+  recogImage = null
+  recogHint = null
+  recogTurns = []
+  questions.value = []
+  recogRound.value = 1
+  reply.value = ''
+  flash.value = []
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** 解析一个份量 / 营养输入：正数（份量）或非负数（营养）才算；空或非法为 null。 */
@@ -511,7 +539,7 @@ function onTmpVal(key: NutriKey, v: string) {
   t.core[key] = n == null ? null : convert(n, t.basis, t.anchor, g ?? 100)
 }
 
-async function startRecognize() {
+async function startRecognize(hint: string | null) {
   if (recognizing.value) return
   const picked = await choosePhoto()
   if (picked.cancelled || !picked.path) {
@@ -523,7 +551,15 @@ async function startRecognize() {
   try {
     const original = await (await fetch(picked.path)).blob()
     // 长边 1600、0.85：与标签识别同口径（营养成分表字小，别压糊）
-    const draft = await recognizeMeal(await compress(original, 0.85))
+    const image = await compress(original, 0.85)
+    const draft = await recognizeMeal(image, { hint })
+    resetRecognition()
+    recogImage = image
+    recogHint = hint
+    recogTurns = [{ role: 'assistant', content: draft.output }]
+    questions.value = draft.questions ?? []
+    recogRound.value = draft.round ?? 1
+    hintOpen.value = false
     openTmp(draft)
   } catch (e) {
     uni.showToast({ title: (e as Error)?.message || '识别失败', icon: 'none' })
@@ -562,6 +598,88 @@ function openTmp(d: MealDraft) {
   }
 }
 
+/** 回复 AI，让它结合回复再估一次（ADR 0060）：照片和前面的对话一起重发，主人改过的格子不被覆盖。 */
+async function sendReply() {
+  const r = reply.value.trim()
+  if (!r || recognizing.value || !recogImage) {
+    if (!r) uni.showToast({ title: '先写点什么告诉 AI', icon: 'none' })
+    return
+  }
+  recognizing.value = true
+  uni.showLoading({ title: '重新估算…', mask: true })
+  try {
+    const draft = await recognizeMeal(recogImage, { hint: recogHint, history: recogTurns, reply: r })
+    recogTurns = [...recogTurns, { role: 'user', content: r }, { role: 'assistant', content: draft.output }]
+    questions.value = draft.questions ?? []
+    recogRound.value = draft.round ?? recogRound.value + 1
+    reply.value = ''
+    mergeDraft(draft)
+  } catch (e) {
+    uni.showToast({ title: (e as Error)?.message || '识别失败', icon: 'none' })
+  } finally {
+    recognizing.value = false
+    uni.hideLoading()
+  }
+}
+
+/** 当前某一格换算成每 100 的数（核对用）。 */
+function per100Of(t: TmpFood, key: NutriKey): number | null {
+  syncTmp(t)
+  const c = t.core[key]
+  if (c == null) return null
+  return convert(c, t.anchor, 'per100', tmpGrams() ?? 100)
+}
+
+const sameNum = (a: number | null | undefined, b: number | null | undefined) =>
+  a == null || b == null ? a == b : Math.abs(a - b) < 0.005
+
+/**
+ * 新一轮的草稿并进表单：主人亲手改过的格子保持不动，其余换成 AI 的新数；变了的格子闪一下。
+ * 照片没估出重量（gramsGuessed）而主人填了份量时，AI 给的其实是整份总量，按主人的份量换成每 100。
+ */
+function mergeDraft(d: MealDraft) {
+  const old = tmp.value
+  if (!old) {
+    openTmp(d)
+    return
+  }
+  const keep = [...old.touched]
+  const oldG = parseNum(old.grams, true)
+  const merged: MealDraft = { ...d }
+  const changed: MealDraftKey[] = []
+  if (keep.includes('name')) merged.name = old.name
+  else if ((d.name ?? '') !== old.name) changed.push('name')
+  const keepGrams = keep.includes('grams') && oldG != null
+  if (keepGrams) {
+    merged.grams = oldG
+    merged.gramsGuessed = false
+  } else if (!sameNum(d.grams, oldG)) changed.push('grams')
+  for (const n of NUTRI) {
+    const before = per100Of(old, n.key)
+    if (keep.includes(n.key)) {
+      merged[n.key] = before
+      continue
+    }
+    const v = d[n.key]
+    merged[n.key] = keepGrams && d.gramsGuessed && v != null ? (v * 100) / (oldG as number) : v
+    if (!sameNum(before, merged[n.key])) changed.push(n.key)
+  }
+  // 主人亲手核对过的不再标「待核对」「待补」
+  merged.uncertain = (d.uncertain ?? []).filter((k) => !keep.includes(k))
+  merged.missing = (d.missing ?? []).filter((k) => !keep.includes(k))
+  const basis = old.basis
+  const unit = old.unit
+  openTmp(merged)
+  const t = tmp.value as TmpFood | null
+  if (!t) return
+  t.touched = keep
+  t.unit = unit
+  if (t.basis !== basis && tmpGrams() != null) setTmpBasis(basis)
+  clearTimeout(flashTimer)
+  flash.value = changed
+  flashTimer = setTimeout(() => (flash.value = []), 1600)
+}
+
 /** 切换「这一份 / 每 100」：没有份量就没法换算，先让主人填份量。 */
 function setTmpBasis(next: Basis) {
   const t = tmp.value
@@ -594,6 +712,7 @@ function tmpTag(key: MealDraftKey): string {
 
 function cancelTmp() {
   tmp.value = null
+  resetRecognition()
 }
 
 async function confirmTmp() {
@@ -644,6 +763,7 @@ async function confirmTmp() {
     })
     items.value.push(item)
     tmp.value = null
+    resetRecognition()
     uni.showToast({ title: '已记录', icon: 'none' })
     emit('changed')
   } catch {
@@ -844,11 +964,33 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
               <text class="tmp__hint">
                 {{ tmp.kind === 'photo' ? 'AI 估算仅供参考，核对一下；估不出的留空了，补上再记。' : '按表上的数换算；表上没印的留空了，补上再记。' }}只记进这一餐，不进食物库。
               </text>
-              <view class="tmp__fld">
+              <!-- AI 拿不准的地方 ＋ 回复它再估一次（ADR 0060）；主人改过的格子不会被覆盖 -->
+              <view class="tmp__ask">
+                <text class="tmp__ask-title">
+                  AI 拿不准的地方<text class="tmp__round ft-num"> · 第 {{ recogRound }} 轮</text>
+                </text>
+                <text v-for="(q, i) in questions" :key="i" class="tmp__q">{{ q }}</text>
+                <text v-if="!questions.length" class="tmp__q tmp__q--none">AI 没有要问的；哪里不对可以直接告诉它</text>
+                <view class="tmp__reply">
+                  <input
+                    v-model="reply"
+                    class="tmp__reply-input"
+                    placeholder="回复 AI，如：五花肉，米饭一平碗"
+                    placeholder-class="asearch__ph"
+                    maxlength="500"
+                    confirm-type="send"
+                    @confirm="sendReply"
+                  />
+                  <view class="tmp__reply-btn" :class="{ 'tmp__reply-btn--busy': recognizing }" role="button" @click="sendReply">
+                    发送
+                  </view>
+                </view>
+              </view>
+              <view class="tmp__fld" :class="{ 'tmp__fld--flash': flash.includes('name') }">
                 <text class="tmp__label">名称<text v-if="tmpTag('name')" class="tmp__tag"> {{ tmpTag('name') }}</text></text>
                 <input :value="tmp.name" class="tmp__input" @input="onTmpName(inputText($event))" placeholder="如：番茄炒蛋盖饭" placeholder-class="asearch__ph" maxlength="64" />
               </view>
-              <view class="tmp__fld">
+              <view class="tmp__fld" :class="{ 'tmp__fld--flash': flash.includes('grams') }">
                 <text class="tmp__label">这一份<text v-if="tmpTag('grams')" class="tmp__tag"> {{ tmpTag('grams') }}</text></text>
                 <input :value="tmp.grams" type="digit" @input="onTmpGrams(inputText($event))" class="tmp__input ft-num" placeholder="–" placeholder-class="asearch__ph" />
                 <view class="tmp__seg">
@@ -863,7 +1005,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                   <text class="tmp__seg-opt" :class="{ 'tmp__seg-opt--on': tmp.basis === 'per100' }" @click="setTmpBasis('per100')">每 100{{ tmp.unit }}</text>
                 </view>
               </view>
-              <view v-for="n in NUTRI" :key="n.key" class="tmp__fld">
+              <view v-for="n in NUTRI" :key="n.key" class="tmp__fld" :class="{ 'tmp__fld--flash': flash.includes(n.key) }">
                 <text class="tmp__label">
                   {{ n.label }}（{{ n.unit }}）<text v-if="!n.required" class="tmp__opt">选填</text><text v-if="tmpTag(n.key)" class="tmp__tag"> {{ tmpTag(n.key) }}</text>
                 </text>
@@ -875,7 +1017,15 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
             </view>
 
             <template v-else>
-            <view v-if="!selected" class="arow">
+            <!-- 识别前先给提示词（选填，ADR 0060） -->
+            <RecognizeHint
+              v-if="hintOpen && !selected"
+              :busy="recognizing"
+              placeholder="如：这是半份；用的橄榄油；米饭只吃了一半"
+              @start="startRecognize"
+              @cancel="hintOpen = false"
+            />
+            <view v-if="!selected && !hintOpen" class="arow">
             <view class="asearch">
               <FtIcon name="search" :size="16" tone="subtle" />
               <input
@@ -890,7 +1040,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
               </view>
             </view>
             <!-- AI 识别：拍饭菜估算，或拍营养成分表换算（ADR 0052） -->
-            <view class="aibtn" :class="{ 'aibtn--busy': recognizing }" role="button" aria-label="拍照让 AI 识别" @click="startRecognize">
+            <view class="aibtn" :class="{ 'aibtn--busy': recognizing }" role="button" aria-label="拍照让 AI 识别" @click="hintOpen = true">
               AI 识别
             </view>
             </view>
@@ -928,7 +1078,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
             </view>
 
             <!-- 食物列表 -->
-            <view v-else class="foods">
+            <view v-else-if="!hintOpen" class="foods">
               <view v-for="p in shownFoods" :key="pickKey(p)" class="frow" @click="selectPick(p)">
                 <template v-if="p.type === 'food'">
                   <FoodThumb
@@ -1391,6 +1541,85 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-surface-2;
   color: $app-ink;
   font-weight: $weight-bold;
+}
+
+.tmp__ask {
+  margin: 16rpx 0 8rpx;
+  padding: 20rpx 24rpx;
+  border-radius: $radius-sm;
+  background: $app-surface-2;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.tmp__ask-title {
+  font-size: $text-sm;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.tmp__round {
+  font-weight: normal;
+  color: $app-ink-muted;
+}
+
+.tmp__q {
+  font-size: $text-sm;
+  line-height: 1.6;
+  color: $app-ink-2;
+}
+
+.tmp__q--none {
+  color: $app-ink-muted;
+}
+
+.tmp__reply {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 8rpx;
+}
+
+.tmp__reply-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
+.tmp__reply-btn {
+  flex-shrink: 0;
+  padding: 0 28rpx;
+  line-height: 72rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+  box-shadow: $shadow-sm;
+  font-size: $text-md;
+  font-weight: $weight-bold;
+  color: $app-ink;
+}
+
+.tmp__reply-btn--busy {
+  opacity: 0.5;
+}
+
+/* 这一轮被 AI 改了的格子闪一下（主人改过的格子不会被改） */
+.tmp__fld--flash {
+  animation: tmp-flash 1.6s $ease-out;
+}
+
+@keyframes tmp-flash {
+  0%,
+  30% {
+    background: $app-highlight;
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 .tmp__foot {

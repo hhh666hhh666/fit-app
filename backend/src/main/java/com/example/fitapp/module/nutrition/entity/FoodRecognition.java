@@ -25,6 +25,12 @@ public class FoodRecognition {
     /** 识别入口：label＝食物库营养成分表入库，meal＝记一餐 AI 识别（V40 起；老记录为空）。 */
     private String kind;
 
+    /** 第几轮（ADR 0060）：记一餐识别里主人每回复一次就多一轮；老记录为 null，即第 1 轮。 */
+    private Integer round;
+
+    /** 这一轮主人说的话：第 1 轮是拍照前的提示词，之后是主人的回复（ADR 0060）。 */
+    private String note;
+
     /** 模型档（如 qwen3-vl-8b-instruct）。 */
     private String model;
 

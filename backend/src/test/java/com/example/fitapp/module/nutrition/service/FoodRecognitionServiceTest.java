@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.example.fitapp.common.BusinessException;
 import com.example.fitapp.config.RecognitionProperties;
 import com.example.fitapp.module.nutrition.entity.Food;
+import com.example.fitapp.module.nutrition.dto.RecognitionTurn;
 import com.example.fitapp.module.nutrition.entity.FoodRecognition;
 import com.example.fitapp.module.nutrition.mapper.FoodMapper;
 import com.example.fitapp.module.nutrition.mapper.FoodRecognitionMapper;
@@ -176,6 +177,88 @@ class FoodRecognitionServiceTest {
         verify(recognitionMapper).insert(captor.capture());
         assertEquals(2000, captor.getValue().getTokensIn());
         assertFalse(captor.getValue().getSuccess());
+    }
+
+    // ── 提示词与多轮纠正（ADR 0060）──
+
+    private static final String MEAL_JSON = """
+            {"kind":"photo","name":"红烧肉","unit":"g","kcal":600,"serving_grams":200,
+             "nutrients":{"protein":20,"fat":50,"carb":10,"sodium":800},"uncertain":[],
+             "questions":["肉是瘦肉还是五花？","米饭有多少？"]}
+            """;
+
+    @Test
+    void recognizeMeal_returnsQuestionsOutputAndLogsRoundOneWithHint() {
+        FoodRecognitionService s = spy(service(props()));
+        String prompt = FoodRecognitionService.withHint(FoodRecognitionService.MEAL_PROMPT, "这是半份");
+        doReturn(new FoodRecognitionService.DashScopeResponse(MEAL_JSON, 2000, 200, 0))
+                .when(s).callVision(any(), eq(prompt));
+
+        MealDraftVO vo = s.recognizeMeal(7L, mock(MultipartFile.class), "  这是半份 ", List.of(), null);
+
+        assertEquals(List.of("肉是瘦肉还是五花？", "米饭有多少？"), vo.getQuestions());
+        assertEquals(MEAL_JSON, vo.getOutput(), "原样输出要还给前端，下一轮当 assistant 发回来");
+        assertEquals(1, vo.getRound());
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getRound());
+        assertEquals("这是半份", captor.getValue().getNote());
+    }
+
+    @Test
+    void recognizeMeal_followUpSendsConversationAndLogsRoundTwoWithReply() {
+        FoodRecognitionService s = spy(service(props()));
+        doReturn(new FoodRecognitionService.DashScopeResponse(MEAL_JSON, 2500, 200, 0))
+                .when(s).callVision(any(), eq(FoodRecognitionService.MEAL_PROMPT), any());
+        List<RecognitionTurn> history = List.of(new RecognitionTurn("assistant", MEAL_JSON));
+
+        MealDraftVO vo = s.recognizeMeal(7L, mock(MultipartFile.class), null, history, "五花肉，米饭一平碗");
+
+        assertEquals(2, vo.getRound());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<RecognitionTurn>> turns = ArgumentCaptor.forClass(List.class);
+        verify(s).callVision(any(), eq(FoodRecognitionService.MEAL_PROMPT), turns.capture());
+        assertEquals(List.of(new RecognitionTurn("assistant", MEAL_JSON), new RecognitionTurn("user", "五花肉，米饭一平碗")),
+                turns.getValue());
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertEquals(2, captor.getValue().getRound());
+        assertEquals("五花肉，米饭一平碗", captor.getValue().getNote());
+    }
+
+    @Test
+    void conversation_rejectsBrokenShape() {
+        // 对话必须由模型输出开头、和主人回复交替；有对话就必须带这一轮的回复
+        assertThrows(BusinessException.class, () -> FoodRecognitionService.conversation(
+                List.of(new RecognitionTurn("user", "x")), "y"));
+        assertThrows(BusinessException.class, () -> FoodRecognitionService.conversation(
+                List.of(new RecognitionTurn("assistant", "x")), "  "));
+        assertTrue(FoodRecognitionService.conversation(List.of(), null).isEmpty());
+    }
+
+    @Test
+    void requestBody_appendsTurnsAfterPhotoAndPrompt() {
+        Map<String, Object> body = service(props()).buildRequestBody("data:x", FoodRecognitionService.MEAL_PROMPT,
+                List.of(new RecognitionTurn("assistant", "{}"), new RecognitionTurn("user", "五花肉")));
+
+        List<?> messages = (List<?>) body.get("messages");
+        assertEquals(3, messages.size());
+        assertEquals("assistant", ((Map<?, ?>) messages.get(1)).get("role"));
+        String reply = (String) ((Map<?, ?>) messages.get(2)).get("content");
+        assertTrue(reply.startsWith("主人的回复：五花肉") && reply.contains("重新估算"), reply);
+    }
+
+    @Test
+    void labelRecognize_hintAppendedToPrompt() {
+        FoodRecognitionService s = spy(service(props()));
+        doReturn(new FoodRecognitionService.DashScopeResponse(LABEL_JSON, 1000, 100, 0))
+                .when(s).callVision(any(), eq(FoodRecognitionService.withHint(FoodRecognitionService.PROMPT, "每份 30g")));
+
+        s.recognize(7L, mock(MultipartFile.class), "每份 30g");
+
+        ArgumentCaptor<FoodRecognition> captor = ArgumentCaptor.forClass(FoodRecognition.class);
+        verify(recognitionMapper).insert(captor.capture());
+        assertEquals("每份 30g", captor.getValue().getNote());
     }
 
     @Test
