@@ -8,11 +8,13 @@ import android.webkit.JavascriptInterface;
 /**
  * 给 H5 用的壳能力，挂在 {@code window.FitShell}（0.1.6 起）。
  *
- * <p>目前只有震动：会话页完成一组时轻震一下（{@code frontend/src/utils/haptics.ts}）。
+ * <p>震动：会话页完成一组时轻震一下（{@code frontend/src/utils/haptics.ts}）。
+ * 状态栏（0.1.9 起）：告诉 H5 状态栏多高、让黑底层把状态栏图标换白（{@code frontend/src/utils/statusBar.ts}）。
  * 不直接靠 H5 的 {@code navigator.vibrate}：它在 WebView 里能不能震取决于系统版本与厂商，
  * 自己调 {@link Vibrator} 才可靠；H5 那边先找这个桥，找不到（旧壳、浏览器）才退回 navigator.vibrate。</p>
  *
- * <p>⚠️ 这里的方法任何加载进来的页面都能调，所以只放无害的能力（震一下），别往里加读写数据的口子。</p>
+ * <p>⚠️ 这里的方法任何加载进来的页面都能调，所以只放无害的能力（震一下、读状态栏高度、换图标深浅），
+ * 别往里加读写数据的口子。</p>
  */
 public class ShellBridge {
 
@@ -20,9 +22,23 @@ public class ShellBridge {
     private static final long MAX_MS = 200;
 
     private final Vibrator vibrator;
+    private final MainActivity activity;
 
-    ShellBridge(Context context) {
-        vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+    ShellBridge(MainActivity activity) {
+        this.activity = activity;
+        vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+    }
+
+    /** 状态栏高度，CSS px；H5 用它给页面顶部留白。 */
+    @JavascriptInterface
+    public float statusBarHeight() {
+        return activity.statusBarHeightCss();
+    }
+
+    /** true ＝ 状态栏图标换白色（黑底层开着），false ＝ 换回深色。 */
+    @JavascriptInterface
+    public void setStatusBarIconsLight(boolean light) {
+        activity.setStatusBarIconsLight(light);
     }
 
     /**

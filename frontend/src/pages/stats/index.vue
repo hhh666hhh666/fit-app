@@ -179,7 +179,7 @@ function barHeight(count: number): string {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
-  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
+  padding: calc(40rpx + #{$safe-top}) 40rpx 0;
 }
 
 .glass {

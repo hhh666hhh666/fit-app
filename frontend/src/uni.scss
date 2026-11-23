@@ -366,6 +366,15 @@ $text-title: 30rpx; // 15px —— 卡片标题（晴窗）
 $text-hero: 60rpx; // 30px —— 页头大标题（晴窗）
 $text-display: 80rpx; // 40px —— 首页大卡这类主数字（晴窗）
 
+// ── 顶部安全区（透明状态栏，utils/statusBar.ts）──
+// 安卓壳 0.1.9 起页面画到状态栏底下，壳把状态栏高度写进 --ft-top；旧壳 / 浏览器没有这个变量，回落 env()。
+// 各页顶部留白一律用它，**别再直接写 env(safe-area-inset-top)**——安卓 WebView 上那个值是 0，内容会钻进时钟底下。
+$safe-top: var(--ft-top, env(safe-area-inset-top, 0px));
+// 顶部渐隐带在状态栏下沿再往下淡出的长度
+$statusbar-fade: 16px;
+// mask-image 只看不透明度、不看颜色：渐隐遮罩里「留下来」的那一端用它（上次训练卡片、顶部渐隐带）
+$mask-keep: #000;
+
 // ── 底栏（FtTabBar）几何：改这里要同步组件里的凹口路径 ──
 $tabbar-h: 62px; // 用 px 不用 rpx：凹口路径按 px 算，rpx 会随屏宽缩放
 $tabbar-gap: 14px; // 距屏幕底（再加安全区）

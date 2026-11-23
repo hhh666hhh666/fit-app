@@ -86,6 +86,8 @@ export JAVA_HOME=E:/jdk21
 `MainActivity` 用 `addJavascriptInterface` 挂了一个 `ShellBridge`，H5 里是 `window.FitShell`（0.1.6 起）：
 
 - `vibrate("12")` / `vibrate("12,80,28")`：按「震、停、震…」的毫秒序列震动，单段最长 200ms。会话页完成一组时用（`frontend/src/utils/haptics.ts`）。清单里因此多了 `VIBRATE` 权限（普通权限，安装即授予）。
+- `statusBarHeight()`（0.1.9 起）：状态栏（含挖孔）高度，CSS px。H5 启动时读它给页面顶部留白（`frontend/src/utils/statusBar.ts`）；高度变了壳再主动调 `window.__ftSetTopInset(px)`。
+- `setStatusBarIconsLight(true|false)`（0.1.9 起）：状态栏图标换白 / 换回深色。全屏看图、头像裁剪这类黑底层开着时用。
 
 不直接靠 H5 的 `navigator.vibrate`：它在 WebView 里能不能震看系统版本与厂商。H5 那边先找这个桥，找不到（旧壳、浏览器）才退回 `navigator.vibrate`，再没有就不震。
 
@@ -97,10 +99,14 @@ export JAVA_HOME=E:/jdk21
 不设的话，不少机型（MIUI、ColorOS 这类「智能刷新率」）会把没表态的应用锁在 60Hz，WebView 里动效只动合成层也只有 60 帧。
 代价是 App 在前台时屏幕一直跑高刷，多耗一点电。个别厂商另有白名单，要了也不一定给，那就在系统设置里手动给本应用开高刷。
 
-## 系统栏：染成页面底色
+## 系统栏：状态栏透明，导航栏染成页面底色
 
-`MainActivity.tintSystemBars()`（0.1.8 起）把状态栏、导航栏分别染成页面渐变的上下两端（`frontend/src/uni.scss` 的 `$app-canvas-top` / `$app-canvas-bottom`），图标改深色。
-不染的话主题默认是深灰状态栏 ＋ 纯黑导航栏，夹在浅色页面上下很突兀。**改了那两个颜色 token，要回来同步这里并重打 apk。**
+`MainActivity.setupSystemBars()` 与 `wrapWithInsets()`（0.1.9 起，[ADR 0065](../docs/adr/0065-transparent-status-bar.md)）：
+
+- **状态栏透明**、图标深色，页面画到状态栏底下，页面渐变一直铺到屏幕顶。状态栏那一截的留白由 H5 自己给（`frontend/src/uni.scss` 的 `$safe-top`），高度经上面的 `statusBarHeight()` 拿。
+- **导航栏**仍染成页面渐变底端（`$app-canvas-bottom`），WebView 外面包的那层容器在左右、底部让出导航栏；键盘弹起时让出键盘（清单里显式 `adjustResize`）。**改了 `$app-canvas-bottom`，要回来同步 `NAV_BAR_COLOR` 并重打 apk。**
+
+0.1.8 是把状态栏染成 `$app-canvas-top` 的纯色，和页面右上角的光晕接不上，看着像顶上多一条色带，所以改成透明。
 
 ## 图标
 

@@ -81,7 +81,7 @@ function trim(n: number): string {
     <view class="frw__right">
       <text class="frw__kcal ft-num">{{ kcal }} 大卡</text>
       <view v-if="addable" class="frw__add" role="button" :aria-label="`记一份${view.name}`" @click.stop="emit('add')">
-        <FtIcon name="plus" :size="16" :stroke="2.2" />
+        <FtIcon name="plus" :size="20" :stroke="2.2" />
       </view>
     </view>
   </view>
@@ -232,6 +232,7 @@ function trim(n: number): string {
   color: $app-ink-2;
 }
 
+/* 只有一个橙色「+」，不带圈（2026-11-23 主人要求）；点击区仍是 52rpx 见方 */
 .frw__add {
   width: 52rpx;
   height: 52rpx;
@@ -239,7 +240,6 @@ function trim(n: number): string {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 3rpx solid $accent;
   color: $accent;
   @include press(shrink);
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {computed, ref} from 'vue'
-import {onPullDownRefresh, onShow} from '@dcloudio/uni-app'
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {onHide, onPullDownRefresh, onShow} from '@dcloudio/uni-app'
 import FtIcon, { type FtIconName } from '@/components/FtIcon.vue'
 import FtNutrientBars from '@/components/FtNutrientBars.vue'
 import MealSheet from '@/components/MealSheet.vue'
@@ -172,6 +172,76 @@ async function refreshLastWorkout() {
   }
 }
 
+// ── 上次训练卡片的折叠（2026-11-23）──
+// 动作一多卡片就很长，把本周 / 本月那一排挤出一屏。按这台手机的实际高度量：
+// 收起时只留放得下的几行（最少 2 行），让整页不用滚、本周 / 本月整排露在底栏上面；
+// 最后一行渐隐、正中压一个向下箭头。点卡片原地展开全部，再点收起；不记住——离开首页就恢复收起。
+// 本来就放得下的不截、不渐隐，点了也没反应。
+const MIN_ROWS = 2
+const bodyRef = ref<unknown>(null)
+const lastRowsRef = ref<unknown>(null)
+/** 收起时动作区的高度（px）；null ＝ 不用收（放得下，或正在量） */
+const lastCutH = ref<number | null>(null)
+/** 展开后动作区的完整高度（px），给高度过渡一个终点 */
+const lastFullH = ref<number | null>(null)
+const lastExpanded = ref(false)
+const lastCollapsible = computed(() => lastCutH.value != null)
+
+function elOf(r: unknown): HTMLElement | null {
+  const raw = r as { $el?: HTMLElement } | HTMLElement | null
+  return ((raw as { $el?: HTMLElement } | null)?.$el ?? raw) as HTMLElement | null
+}
+
+/** 先把全部行摆出来，量「整页超出一屏多少」，再从动作区里扣掉这么多 */
+async function measureLastRows() {
+  if (lastExpanded.value || !lastWorkout.value) return
+  lastCutH.value = null
+  await nextTick()
+  const rowsEl = elOf(lastRowsRef.value)
+  const pageEl = elOf(bodyRef.value)?.parentElement ?? null
+  if (!rowsEl || !pageEl || typeof window === 'undefined') return
+  const rowsRect = rowsEl.getBoundingClientRect()
+  // 页面藏着（切到别的 tab）时量不到，等下次 onShow 再量
+  if (rowsRect.height === 0) return
+  const overflow = pageEl.getBoundingClientRect().bottom - window.innerHeight
+  if (overflow <= 0.5) return
+  const rows = Array.from(rowsEl.children) as HTMLElement[]
+  const room = rowsRect.height - overflow
+  let fit = 0
+  for (const row of rows) {
+    if (row.getBoundingClientRect().bottom - rowsRect.top <= room + 0.5) fit += 1
+    else break
+  }
+  const keep = Math.max(MIN_ROWS, fit)
+  if (keep >= rows.length) return
+  lastCutH.value = rows[keep - 1].getBoundingClientRect().bottom - rowsRect.top
+  lastFullH.value = rowsRect.height
+}
+
+function toggleLast() {
+  if (!lastCollapsible.value) return
+  if (!lastExpanded.value) {
+    const rowsEl = elOf(lastRowsRef.value)
+    if (rowsEl) lastFullH.value = rowsEl.scrollHeight
+  }
+  lastExpanded.value = !lastExpanded.value
+}
+
+const lastRowsStyle = computed(() => {
+  if (lastCutH.value == null) return {}
+  const h = lastExpanded.value ? lastFullH.value : lastCutH.value
+  return h == null ? {} : { maxHeight: `${h}px` }
+})
+
+// 数据回来、「今天吃了」变高变矮，都会改变放得下几行：DOM 更新之后重量
+watch([lastWorkout, dietDay], () => void measureLastRows(), { flush: 'post' })
+
+function onResize() {
+  void measureLastRows()
+}
+onMounted(() => window.addEventListener('resize', onResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+
 // ── 统计条（真数据：本周 / 本月训练次数）──
 const weekCount = ref(0)
 const monthCount = ref(0)
@@ -196,6 +266,7 @@ const schedule = useScheduleStore()
 onShow(() => {
   if (!ensureLogin()) return
   tab.enter()
+  void measureLastRows()
   schedule.load()
   refreshLastWorkout()
   refreshCounts()
@@ -215,6 +286,11 @@ onPullDownRefresh(async () => {
   uni.stopPullDownRefresh()
 })
 
+// 离开首页（切 tab、进二级页）就恢复收起，展开不记住
+onHide(() => {
+  lastExpanded.value = false
+})
+
 const todayHint = computed(() => {
   if (schedule.todayPlan) return `今天 · ${schedule.todayPlan.name}`
   if (schedule.isRest) return '今天休息'
@@ -228,7 +304,7 @@ function goDiary() {
 
 <template>
   <FtTabPage :page="tab" class="home">
-    <view class="home__body">
+    <view ref="bodyRef" class="home__body">
       <!-- 页头：上标＝周几 · 今天的安排，大标题＝日期；右侧胶囊进日记 -->
       <view class="home__head">
         <view class="home__head-main">
@@ -296,15 +372,38 @@ function goDiary() {
       </view>
 
       <!-- 上次训练 -->
-      <view v-if="lastWorkout" class="glass last">
+      <!-- 动作多时收起到一屏放得下（最后一行渐隐 ＋ 居中箭头），点卡片原地展开／收起 -->
+      <view
+        v-if="lastWorkout"
+        class="glass last"
+        :class="{ 'is-collapsible': lastCollapsible }"
+        :role="lastCollapsible ? 'button' : undefined"
+        :aria-expanded="lastCollapsible ? lastExpanded : undefined"
+        @click="toggleLast"
+      >
         <view class="last__head">
           <text class="card-title">{{ lastWorkout.title }}</text>
           <text class="last__date ft-num">{{ lastWorkout.date }}</text>
         </view>
-        <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
-          <text class="last__name">{{ row.name }}</text>
-          <text v-if="row.pr" class="last__pr">PR</text>
-          <text class="last__value ft-num">{{ row.value }}</text>
+        <view class="last__rows-wrap">
+          <view
+            ref="lastRowsRef"
+            class="last__rows"
+            :class="{ 'is-cut': lastCollapsible && !lastExpanded }"
+            :style="lastRowsStyle"
+          >
+            <view v-for="(row, i) in lastWorkout.rows" :key="i" class="last__row">
+              <text class="last__name">{{ row.name }}</text>
+              <text v-if="row.pr" class="last__pr">PR</text>
+              <text class="last__value ft-num">{{ row.value }}</text>
+            </view>
+          </view>
+          <view v-if="lastCollapsible && !lastExpanded" class="last__more" aria-hidden="true">
+            <FtIcon name="chevron-down" :size="18" :stroke="2" />
+          </view>
+        </view>
+        <view v-if="lastCollapsible && lastExpanded" class="last__less" aria-hidden="true">
+          <FtIcon name="chevron-up" :size="18" :stroke="2" />
         </view>
         <view class="last__foot ft-num">{{ lastWorkout.footer }}</view>
       </view>
@@ -347,7 +446,7 @@ function goDiary() {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
-  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
+  padding: calc(40rpx + #{$safe-top}) 40rpx 0;
 }
 
 .glass {
@@ -603,6 +702,48 @@ function goDiary() {
 .last__value {
   font-size: $text-md;
   color: $app-ink;
+}
+
+/* 动作区：收起时限高 ＋ 底部渐隐，展开时把高度过渡到完整高度 */
+.last__rows-wrap {
+  position: relative;
+}
+
+.last__rows {
+  overflow: hidden;
+  transition: max-height $dur-slide $ease-out;
+}
+
+/* 最后一行往下淡到透明：卡片的玻璃底和圆角不动，看得出「下面还有」 */
+.last__rows.is-cut {
+  -webkit-mask-image: linear-gradient(180deg, $mask-keep calc(100% - 72rpx), transparent);
+  mask-image: linear-gradient(180deg, $mask-keep calc(100% - 72rpx), transparent);
+}
+
+/* 居中箭头压在渐隐的那一行上，不额外占高度 */
+.last__more {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4rpx;
+  display: flex;
+  justify-content: center;
+  color: $app-ink-muted;
+  pointer-events: none;
+}
+
+.last__less {
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 4rpx;
+  border-top: 1rpx solid $app-line-soft;
+  color: $app-ink-muted;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .last__rows {
+    transition: none;
+  }
 }
 
 .last__foot {

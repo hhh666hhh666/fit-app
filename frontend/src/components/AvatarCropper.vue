@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
+import { holdLightStatusIcons } from '@/utils/statusBar'
 import type { CropBox } from '@/utils/photo'
 
 const props = defineProps<{
@@ -171,14 +172,19 @@ function onResize() {
   reset()
 }
 
+// 黑底：开着的时候状态栏图标换白色（同全屏看图）
+let releaseIcons: () => void = () => {}
+
 onMounted(() => {
   reset()
+  releaseIcons = holdLightStatusIcons()
   // 滚轮要能 preventDefault，只能自己挂非 passive 的监听
   rootEl()?.addEventListener('wheel', onWheel, { passive: false })
   window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
+  releaseIcons()
   rootEl()?.removeEventListener('wheel', onWheel)
   window.removeEventListener('resize', onResize)
   onMouseUp()
@@ -303,7 +309,7 @@ function confirm() {
   left: 0;
   right: 0;
   top: 0;
-  padding: calc(24rpx + env(safe-area-inset-top)) 32rpx 0;
+  padding: calc(24rpx + #{$safe-top}) 32rpx 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

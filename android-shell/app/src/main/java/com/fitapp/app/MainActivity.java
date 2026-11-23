@@ -4,7 +4,9 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -19,8 +21,14 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import java.io.File;
@@ -87,12 +95,18 @@ public class MainActivity extends Activity {
     /** 走「拍照」时的输出地址；相册结果不经过它（用于区分二者判断）。 */
     private Uri cameraOutputUri;
 
+    /**
+     * 状态栏（含挖孔）高度，单位是 CSS px（物理像素 ÷ density）。H5 经
+     * {@link ShellBridge#statusBarHeight()} 读它；JS 桥在后台线程上调，所以 volatile。
+     */
+    private volatile float topInsetCss;
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         preferHighestRefreshRate();
-        tintSystemBars();
+        setupSystemBars();
         updater = new WebUpdater(this);
         // 必须在任何页面加载之前：切换靠 rename，此时还没人读 filesDir/web
         updater.applyPending();
@@ -156,7 +170,7 @@ public class MainActivity extends Activity {
         } else {
             webView.restoreState(savedInstanceState);
         }
-        setContentView(webView);
+        setContentView(wrapWithInsets(webView));
     }
 
     /**
@@ -168,26 +182,77 @@ public class MainActivity extends Activity {
      * 个别厂商还有自己的白名单，这里要了也不一定给，那就只能在系统设置里手动给本应用开高刷。
      */
     /**
-     * 状态栏 / 导航栏染成页面底色、图标改深色（0.1.8 起）。
+     * 透明状态栏（0.1.9 起）：页面画到状态栏底下，页面渐变一直铺到屏幕顶；导航栏仍是页面底色。
      *
-     * 主题 {@code Theme.Material.Light.NoActionBar} 默认给深灰状态栏、纯黑导航栏，
-     * 夹在晴窗的浅蓝灰底上下像两块补丁（2026-11-07 真机走查）。
-     * 颜色取 {@code frontend/src/uni.scss} 的 {@code $app-canvas-top} / {@code $app-canvas-bottom}——
-     * 页面渐变的上下两端，改那两个值要回来同步这里。
-     * 浅色导航栏图标（{@code SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR}）要 API 26，正好是 minSdk。
+     * 0.1.8 曾把状态栏染成 {@code $app-canvas-top}（{@code #E4ECF5}），但页面渐变右上角有一团光晕，
+     * 纯色状态栏和它接不上，看着像顶上多了一条色带（2026-11-23 主人反馈）。
+     *
+     * 做法：{@link WindowCompat#setDecorFitsSystemWindows} 关掉系统自动避让，由
+     * {@link #wrapWithInsets} 自己给 WebView 让出导航栏与键盘（顶部不让）；状态栏高度经 JS 桥交给 H5，
+     * H5 用它给各页顶部留白（{@code frontend/src/utils/statusBar.ts}）。
+     * 导航栏颜色取 {@code frontend/src/uni.scss} 的 {@code $app-canvas-bottom}，改那个值要回来同步这里。
      */
-    @SuppressWarnings("deprecation")
-    private void tintSystemBars() {
+    private void setupSystemBars() {
         Window w = getWindow();
         w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
                 | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        w.setStatusBarColor(0xFFE4ECF5);
-        w.setNavigationBarColor(0xFFF6F9FC);
-        View decor = w.getDecorView();
-        decor.setSystemUiVisibility(decor.getSystemUiVisibility()
-                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        WindowCompat.setDecorFitsSystemWindows(w, false);
+        w.setStatusBarColor(Color.TRANSPARENT);
+        w.setNavigationBarColor(NAV_BAR_COLOR);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 别让系统在透明状态栏后面自己垫一层半透明遮罩
+            w.setStatusBarContrastEnforced(false);
+        }
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(w, w.getDecorView());
+        bars.setAppearanceLightStatusBars(true);
+        bars.setAppearanceLightNavigationBars(true);
+        // 第一次分发 insets 之前 H5 可能就来问了：先用系统资源里的状态栏高度垫上
+        int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resId > 0) {
+            topInsetCss = getResources().getDimensionPixelSize(resId) / getResources().getDisplayMetrics().density;
+        }
+    }
+
+    /** 页面底色（{@code $app-canvas-bottom}）：导航栏与它后面让出来的那一截都用它。 */
+    private static final int NAV_BAR_COLOR = 0xFFF6F9FC;
+
+    /**
+     * 包一层容器自己处理系统栏：左右与底部让出导航栏（键盘弹起时让出键盘），**顶部不让**——
+     * 状态栏那一截由 H5 自己留白。状态栏高度变了（分屏、横竖屏）就推给 H5 的 {@code window.__ftSetTopInset}。
+     */
+    private View wrapWithInsets(WebView view) {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(NAV_BAR_COLOR);
+        root.addView(view, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets sys = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(sys.left, 0, sys.right, Math.max(sys.bottom, ime.bottom));
+            float top = sys.top / getResources().getDisplayMetrics().density;
+            if (top > 0 && Math.abs(top - topInsetCss) > 0.5f) {
+                topInsetCss = top;
+                webView.evaluateJavascript(
+                        "window.__ftSetTopInset&&window.__ftSetTopInset(" + top + ")", null);
+            }
+            return WindowInsetsCompat.CONSUMED;
+        });
+        return root;
+    }
+
+    /** 给 JS 桥：状态栏高度（CSS px）。 */
+    float statusBarHeightCss() {
+        return topInsetCss;
+    }
+
+    /** 给 JS 桥：黑底层（全屏看图、头像裁剪）开着时把状态栏图标换成白色，关掉换回深色。 */
+    void setStatusBarIconsLight(boolean light) {
+        runOnUiThread(() -> {
+            Window w = getWindow();
+            WindowCompat.getInsetsController(w, w.getDecorView()).setAppearanceLightStatusBars(!light);
+        });
     }
 
     private void preferHighestRefreshRate() {

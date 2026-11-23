@@ -101,7 +101,7 @@ async function submit() {
 .login {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: calc(240rpx + env(safe-area-inset-top)) 40rpx calc(64rpx + env(safe-area-inset-bottom));
+  padding: calc(240rpx + #{$safe-top}) 40rpx calc(64rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 64rpx;

@@ -35,7 +35,7 @@ function goBack() {
   display: flex;
   align-items: flex-end;
   gap: 16rpx;
-  padding: calc(12rpx + env(safe-area-inset-top)) 8rpx 4rpx;
+  padding: calc(12rpx + #{$safe-top}) 8rpx 4rpx;
 }
 
 .ft-head__back {

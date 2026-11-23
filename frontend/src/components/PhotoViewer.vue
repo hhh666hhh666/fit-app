@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import FtIcon from '@/components/FtIcon.vue'
 import { useBackClose } from '@/utils/backStack'
+import { holdLightStatusIcons } from '@/utils/statusBar'
 
 // ── 全屏看图浮层（ADR 0014）：记录弹层与相册共用 ──
 //    手势分工：单指左右滑＝翻页、单指上下滑＝关闭、双指捏合＝缩放、双击＝放大/还原。
@@ -20,6 +21,11 @@ const emit = defineEmits<{ (e: 'close'): void; (e: 'change', index: number): voi
 
 // 安卓返回键 / Esc 先关看图
 useBackClose(() => emit('close'))
+
+// 黑底：开着的时候状态栏图标换白色，不然时钟在黑底上看不见（透明状态栏，utils/statusBar.ts）
+let releaseIcons: () => void = () => {}
+onMounted(() => (releaseIcons = holdLightStatusIcons()))
+onBeforeUnmount(() => releaseIcons())
 
 const MIN_SCALE = 1
 const MAX_SCALE = 4
@@ -217,7 +223,7 @@ function onTap() {
 .pv__close {
   position: absolute;
   right: 32rpx;
-  top: calc(24rpx + env(safe-area-inset-top));
+  top: calc(24rpx + #{$safe-top});
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;

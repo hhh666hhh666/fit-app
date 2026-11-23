@@ -19,6 +19,8 @@ const ICONS = {
   close: { paths: p('M6 6l12 12M18 6 6 18') },
   'chevron-right': { paths: p('m9.5 6 6 6-6 6') },
   'chevron-left': { paths: p('m14.5 6-6 6 6 6') },
+  'chevron-down': { paths: p('m6 9.5 6 6 6-6') },
+  'chevron-up': { paths: p('m6 14.5 6-6 6 6') },
   clock: { paths: p('M20 12a8 8 0 1 1-16 0 8 8 0 1 1 16 0z', 'M12 7.5V12l3 2') },
   sliders: {
     paths: p('M4 7h9M17 7h3M4 17h3M11 17h9', 'M17 7a2 2 0 1 1-4 0 2 2 0 1 1 4 0z', 'M11 17a2 2 0 1 1-4 0 2 2 0 1 1 4 0z')

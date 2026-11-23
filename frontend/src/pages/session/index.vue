@@ -953,7 +953,7 @@ function comingSoon(tip: string) {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  padding: calc(36rpx + env(safe-area-inset-top)) 40rpx calc(220rpx + env(safe-area-inset-bottom));
+  padding: calc(36rpx + #{$safe-top}) 40rpx calc(220rpx + env(safe-area-inset-bottom));
 }
 
 /* 暂停中：录入区整体压暗（点击另有代码层拦截，这里只是让「已暂停」看得见） */

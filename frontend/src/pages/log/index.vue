@@ -330,7 +330,7 @@ function doDelete() {
   display: flex;
   flex-direction: column;
   gap: 28rpx;
-  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 0;
+  padding: calc(40rpx + #{$safe-top}) 40rpx 0;
 }
 
 .glass {
@@ -394,7 +394,7 @@ function doDelete() {
 .selhead {
   @include glass($glass-bg-strong);
   position: fixed;
-  top: calc(40rpx + env(safe-area-inset-top));
+  top: calc(40rpx + #{$safe-top});
   left: 40rpx;
   right: 40rpx;
   /* 压住正文和切页克隆层（10），低于底栏（20）和弹层 */

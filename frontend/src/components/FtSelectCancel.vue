@@ -16,7 +16,7 @@ defineEmits<{ (e: 'click'): void }>()
   @include glass-pill;
   position: fixed;
   /* 和页头右侧胶囊同一格：页面顶部留白 28rpx ＋ 页头上内边距 12rpx */
-  top: calc(40rpx + env(safe-area-inset-top));
+  top: calc(40rpx + #{$safe-top});
   right: 48rpx;
   /* 压住正文和切页克隆层（10），低于底栏（20）和弹层 */
   z-index: 18;

@@ -88,6 +88,7 @@ Status: accepted
 - [ADR 0062](./0062-main-meal-single-time-and-clearable-time.md)：早午晚三餐一餐一个时刻、整餐共用，加餐按条记且可多选批量改；饮水、条目、整餐的时刻都能清除；修订 ADR 0059 决策 1。
 - [ADR 0063](./0063-food-per100-truth-cook-state-and-list-row.md)：食物以每 100 为唯一准数（每份只读，推翻按份录入）；加「生重／熟重」；列表行显示三大营养素，自定义用缩略图角标、预置不标；记一餐点「+」才记录、点行看详情，份量可按份填。
 - [ADR 0064](./0064-food-order-by-last-used.md)：食物列表的「常用」改看最后一次记进餐里的时间（不限 30 天）；修订 ADR 0056、0058 的档内顺序。
+- [ADR 0065](./0065-transparent-status-bar.md)：透明状态栏——页面画到状态栏底下，壳经 `FitShell` 把状态栏高度交给 H5，各页顶部留白统一用 `$safe-top`，顶部垫渐隐带；黑底层把状态栏图标换白。
 
 ## 与其他文档的分工
 

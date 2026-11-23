@@ -4,6 +4,8 @@ import { hydrateCache } from '@/api/cache'
 import { installBackHandler } from '@/utils/backStack'
 import { installPagePush } from '@/utils/pagePush'
 import { flushAbandoned } from '@/utils/abandoned-session'
+import { installOverlayEnterOnce } from '@/utils/overlayEnter'
+import { installStatusBar } from '@/utils/statusBar'
 
 // 启动时不做跳转：登录态由各页 onShow（或 onLoad）首行的 ensureLogin() 兜底，
 // 见 utils/guard.ts；因为 onLaunch 里做 reLaunch 有时序问题。
@@ -18,6 +20,12 @@ onLaunch(() => {
 
   // 二级页（navigateTo / redirectTo）从右侧推入；返回与主 tab 切换不经过这里
   installPagePush()
+
+  // 弹层进场只播一次：跳到别的页面再回来，开着的弹层不再从底下升上来一遍
+  installOverlayEnterOnce()
+
+  // 透明状态栏：问壳要顶部高度写进 --ft-top，再垫一条渐隐带（见 utils/statusBar.ts）
+  installStatusBar()
 
   // 主 tab 的页面 chunk 按页懒加载（各页产物 `pages-*-index.js`）。页面虽然保活了
   // （`switchTab`，ADR 0038），但**第一次**切过去仍要现拉 chunk，那一拍里页面还挂不上，
@@ -327,6 +335,22 @@ uni-toast .uni-toast .uni-toast__content {
   pointer-events: none;
 }
 
+/* ── 顶部渐隐带（透明状态栏，utils/statusBar.ts 只在壳给了状态栏高度时才插进 body）──
+   和 page::before 是同一层、同样钉满视口的渐变，所以状态栏那一段的底色和页面分毫不差；
+   用遮罩只留顶部：状态栏高度内全不透明，再往下 $statusbar-fade 淡到透明。
+   内容滚上去时在这里淡掉，不和时钟、信号图标叠在一起；底栏下面那条渐隐带（$tabbar-scrim）是它的另一半。
+   层级 30：压住页面里的 fixed 件（切页克隆层 10、底栏 20），低于弹层（90）——弹层遮罩照样盖到屏幕顶。
+   不是整屏重绘：它钉在视口上不随滚动动，遮罩一次算好。 */
+.ft-statusbar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: $app-canvas-bg;
+  -webkit-mask-image: linear-gradient(180deg, $mask-keep var(--ft-top, 0px), transparent calc(var(--ft-top, 0px) + #{$statusbar-fade}));
+  mask-image: linear-gradient(180deg, $mask-keep var(--ft-top, 0px), transparent calc(var(--ft-top, 0px) + #{$statusbar-fade}));
+}
+
 /* ── 弹层进出：FtSheet、MealSheet、ComboEditSheet、PhotoViewer 共用 ──
    结构约定：组件的**根**是一个透明的全屏容器（类 `ft-overlay`），里面两层：
    `ft-overlay__hit`（遮罩的颜色 ＋ 点它关闭）和 `ft-overlay__panel`（面板，fixed 盖在它上面）。
@@ -403,6 +427,15 @@ uni-toast .uni-toast .uni-toast__content {
   from {
     opacity: 0;
   }
+}
+
+/* 进场播过一次就关掉（utils/overlayEnter.ts 挂 data-entered）：H5 跳页时旧页被 display:none，
+   回来时 keyframes 会从头重播，表现为「返回后弹层又从底下升上来」。放在减少动态效果那段前面，
+   那段里同优先级的 animation 规则不会盖过它（属性选择器让它更具体） */
+.ft-overlay__hit[data-entered],
+.ft-overlay__panel[data-entered],
+.ft-overlay[data-entered] {
+  animation: none;
 }
 
 /* 减少动态效果：整层（遮罩连面板）只淡 opacity，不位移 */

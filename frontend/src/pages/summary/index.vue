@@ -164,7 +164,7 @@ async function close() {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  padding: calc(36rpx + env(safe-area-inset-top)) 40rpx calc(200rpx + env(safe-area-inset-bottom));
+  padding: calc(36rpx + #{$safe-top}) 40rpx calc(200rpx + env(safe-area-inset-bottom));
 }
 
 .glass {

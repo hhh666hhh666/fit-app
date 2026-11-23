@@ -339,7 +339,7 @@ function goAgent() {
   flex-direction: column;
   gap: 28rpx;
   /* 底部多让一截：底栏中间圆钮比胶囊高出半个圆钮，免得滚到底时压住最后一张卡 */
-  padding: calc(40rpx + env(safe-area-inset-top)) 40rpx 96rpx;
+  padding: calc(40rpx + #{$safe-top}) 40rpx 96rpx;
 }
 
 .glass {

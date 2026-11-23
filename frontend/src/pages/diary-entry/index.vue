@@ -487,7 +487,7 @@ const TOOLS: { key: string; label: string; run: () => void }[] = [
 .dock {
   @include glass($glass-bg-strong);
   position: sticky;
-  top: calc(12rpx + env(safe-area-inset-top));
+  top: calc(12rpx + #{$safe-top});
   z-index: 5;
   display: flex;
   flex-direction: column;

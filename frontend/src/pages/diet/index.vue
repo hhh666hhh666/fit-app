@@ -1053,7 +1053,7 @@ const fullHeight = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  padding: calc(32rpx + env(safe-area-inset-top)) 40rpx calc(32rpx + env(safe-area-inset-bottom));
+  padding: calc(32rpx + #{$safe-top}) 40rpx calc(32rpx + env(safe-area-inset-bottom));
   background: $app-canvas-bg;
   background-color: $app-canvas;
 }
