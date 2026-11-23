@@ -21,7 +21,7 @@ const NUM_KEYS = [...MAIN_FIELDS.map((f) => f.key), ...OPTIONAL_GROUPS.flatMap((
 
 const formRef = ref<FormInstance>()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 表单字段由字段表动态生成
-const form = reactive<Record<string, any>>({ name: '', aliases: '', unit: 'g', category: '', portionLabel: '', portionGrams: null })
+const form = reactive<Record<string, any>>({ name: '', aliases: '', unit: 'g', category: '', portionLabel: '', portionGrams: null, cookState: '' })
 for (const k of NUM_KEYS) form[k] = null
 const archived = ref(false)
 const updatedAt = ref<string | undefined>()
@@ -49,6 +49,7 @@ onMounted(async () => {
     form.category = f.category ?? ''
     form.portionLabel = f.portionLabel ?? ''
     form.portionGrams = f.portionGrams ?? null
+    form.cookState = f.cookState ?? ''
     for (const k of NUM_KEYS) form[k] = f[k] == null ? null : Number(f[k])
     archived.value = f.archived === true
     updatedAt.value = f.updatedAt
@@ -158,6 +159,8 @@ function payload() {
   // 常用份成对：只填了一半就当没填
   body.portionLabel = label && grams != null ? label : null
   body.portionGrams = label && grams != null ? grams : null
+  // 生重／熟重（ADR 0063）：空＝不标（也是取消标记的办法）
+  body.cookState = form.cookState === 'raw' || form.cookState === 'cooked' ? form.cookState : null
   return body
 }
 
@@ -262,6 +265,14 @@ const unitText = computed(() => (form.unit === 'ml' ? '100ml' : '100g'))
           <el-radio-button value="g">每 100g</el-radio-button>
           <el-radio-button value="ml">每 100ml</el-radio-button>
         </el-radio-group>
+      </el-form-item>
+      <el-form-item label="生熟">
+        <el-radio-group v-model="form.cookState">
+          <el-radio-button value="">不标</el-radio-button>
+          <el-radio-button value="raw">生重</el-radio-button>
+          <el-radio-button value="cooked">熟重</el-radio-button>
+        </el-radio-group>
+        <span class="form__tip form__tip--inline">营养数按生的还是熟的重量测的；不标就不在 App 里显示</span>
       </el-form-item>
       <el-form-item label="分类" prop="category">
         <el-select

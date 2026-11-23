@@ -5,6 +5,7 @@ import com.example.fitapp.common.Result;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
+import com.example.fitapp.module.nutrition.dto.MealTimeDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDrinkDTO;
@@ -81,6 +82,12 @@ public class DietController {
     @PutMapping("/meals/{id}")
     public Result<MealItemVO> updateMeal(@PathVariable Long id, @Valid @RequestBody MealUpdateDTO body) {
         return Result.success(dietService.updateMeal(UserContext.requireUserId(), id, body));
+    }
+
+    /** 改时刻（ADR 0062）：三餐整餐一起改，加餐按选中的条目改；time 为空＝清除。 */
+    @PutMapping("/meals/time")
+    public Result<List<MealItemVO>> retime(@Valid @RequestBody MealTimeDTO body) {
+        return Result.success(dietService.retime(UserContext.requireUserId(), body));
     }
 
     @DeleteMapping("/meals/{id}")

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ── 排便记录（ADR 0061）：入口在身体页最底部，不显眼 ──
-//    顶部两个按钮一点就按现在记一笔，记完弹出编辑层可改时刻、补形态和备注；
+//    顶部两个按钮一点就按现在记一笔，记完弹出编辑层可改时刻、补形态（大便）或颜色（小便）和备注；
 //    中间是统计（每天几次、平均间隔、钟点分布、大便形态分布），下面是历史，点一条改，删了进回收站。
 import { computed, reactive, ref } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
@@ -26,7 +26,9 @@ import { ensureLogin } from '@/utils/guard'
 const PAGE = 30
 const KIND_LABEL: Record<BowelKind, string> = { stool: '大便', urine: '小便' }
 /** 布里斯托形态的大白话（1 最硬、7 最稀，3–4 型最理想）。 */
-const BRISTOL: string[] = ['硬块', '结块的香肠状', '有裂纹的香肠状', '光滑的香肠状', '软团块', '糊状', '水样']
+const BRISTOL: string[] = ['一颗颗的硬球', '结块的香肠状', '有裂纹的香肠状', '光滑的香肠状', '边缘清楚的软团', '糊状', '水样']
+/** 小便颜色七档（ADR 0061 修订）：仿常见尿色卡；不选就是未知。色块颜色在 uni.scss 的 $urine-1…7。 */
+const URINE_COLORS: string[] = ['无色透明', '浅黄', '黄', '深黄', '琥珀', '茶褐', '红／粉']
 
 const RANGES = [
   { days: 7, label: '7 天' },
@@ -129,6 +131,13 @@ const bristolRows = computed(() => {
 })
 const bristolTotal = computed(() => (stats.value?.bristol ?? []).reduce((s, v) => s + v, 0))
 
+const colorRows = computed(() => {
+  const c = stats.value?.color ?? []
+  const max = Math.max(1, ...c)
+  return URINE_COLORS.map((label, i) => ({ n: i + 1, label, count: c[i] ?? 0, pct: ((c[i] ?? 0) / max) * 100 }))
+})
+const colorTotal = computed(() => (stats.value?.color ?? []).reduce((s, v) => s + v, 0))
+
 function intervalText(h: number | null): string {
   if (h == null) return '—'
   if (h < 1) return `${Math.round(h * 60)} 分钟`
@@ -141,6 +150,7 @@ function intervalText(h: number | null): string {
 function rowSub(r: BowelRecord): string {
   const parts: string[] = []
   if (r.bristol) parts.push(`${r.bristol} 型 · ${BRISTOL[r.bristol - 1]}`)
+  if (r.color) parts.push(URINE_COLORS[r.color - 1])
   if (r.note) parts.push(r.note)
   return parts.join(' · ')
 }
@@ -153,6 +163,7 @@ const sheet = reactive({
   date: '',
   time: '',
   bristol: null as number | null,
+  color: null as number | null,
   note: '',
   saving: false
 })
@@ -167,6 +178,7 @@ function openSheet(r: BowelRecord, fresh = false) {
     date: at.slice(0, 10),
     time: at.slice(11, 16),
     bristol: r.bristol ?? null,
+    color: r.color ?? null,
     note: r.note ?? '',
     saving: false
   })
@@ -184,6 +196,10 @@ function pickBristol(n: number) {
   sheet.bristol = sheet.bristol === n ? null : n
 }
 
+function pickColor(n: number) {
+  sheet.color = sheet.color === n ? null : n
+}
+
 async function saveSheet() {
   if (sheet.saving) return
   sheet.saving = true
@@ -192,6 +208,7 @@ async function saveSheet() {
       kind: sheet.kind,
       occurredAt: toIsoMinute(sheet.date, sheet.time),
       bristol: sheet.kind === 'stool' ? sheet.bristol : null,
+      color: sheet.kind === 'urine' ? sheet.color : null,
       note: sheet.note.trim() || null
     })
     sheet.show = false
@@ -306,6 +323,17 @@ async function removeSheet() {
             </view>
             <text class="bri__n ft-num">{{ b.count }}</text>
           </view>
+
+          <text class="sub">小便颜色<text class="sub__aside">（浅黄到黄最常见；持续偏深多喝水）</text></text>
+          <view v-if="colorTotal === 0" class="muted">还没填过颜色</view>
+          <view v-for="c in colorRows" v-else :key="c.n" class="bri">
+            <view class="swatch" :class="'swatch--' + c.n" />
+            <text class="bri__label">{{ c.label }}</text>
+            <view class="bri__track">
+              <view class="bri__fill bri__fill--urine" :style="{ width: c.pct + '%' }" />
+            </view>
+            <text class="bri__n ft-num">{{ c.count }}</text>
+          </view>
         </view>
 
         <!-- 历史 -->
@@ -331,7 +359,7 @@ async function removeSheet() {
       <FtSheet
         v-if="sheet.show"
         :title="sheet.fresh ? `已记一次${KIND_LABEL[sheet.kind]}` : '编辑记录'"
-        :sub="sheet.fresh ? '可以改时刻、补形态和备注；不用改就直接关掉' : undefined"
+        :sub="sheet.fresh ? (sheet.kind === 'urine' ? '可以改时刻、补颜色和备注；不用改就直接关掉' : '可以改时刻、补形态和备注；不用改就直接关掉') : undefined"
         @close="sheet.show = false"
       >
         <scroll-view scroll-y class="sh__scroll" :class="{ 'is-bare': !sheet.fresh }">
@@ -370,6 +398,25 @@ async function removeSheet() {
                 @click="pickBristol(i + 1)"
               >
                 <text class="chip__n ft-num">{{ i + 1 }}</text>
+                <text class="chip__t">{{ label }}</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- 小便颜色（选填，ADR 0061 修订）：每一档旁边一个色块 -->
+          <view v-if="sheet.kind === 'urine'" class="group">
+            <text class="group__k">颜色（选填，再点一下取消）</text>
+            <view class="chips">
+              <view
+                v-for="(label, i) in URINE_COLORS"
+                :key="i"
+                class="chip chip--urine"
+                :class="{ 'chip--on': sheet.color === i + 1 }"
+                role="radio"
+                :aria-checked="sheet.color === i + 1"
+                @click="pickColor(i + 1)"
+              >
+                <view class="swatch" :class="'swatch--' + (i + 1)" />
                 <text class="chip__t">{{ label }}</text>
               </view>
             </view>
@@ -618,6 +665,40 @@ async function removeSheet() {
   background: $bowel-stool;
 }
 
+.bri__fill--urine {
+  background: $bowel-urine;
+}
+
+/* 小便颜色色块：浅色块靠描边在白底上显形 */
+.swatch {
+  flex-shrink: 0;
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2rpx $urine-swatch-ring;
+}
+
+.bri > .swatch {
+  margin: 0 22rpx;
+}
+
+@for $i from 1 through 7 {
+  .swatch--#{$i} {
+    background: map-get(
+      (
+        1: $urine-1,
+        2: $urine-2,
+        3: $urine-3,
+        4: $urine-4,
+        5: $urine-5,
+        6: $urine-6,
+        7: $urine-7
+      ),
+      $i
+    );
+  }
+}
+
 .bri__n {
   flex-shrink: 0;
   width: 48rpx;
@@ -776,6 +857,12 @@ async function removeSheet() {
   background: $bowel-stool-bg;
   color: $bowel-stool;
   box-shadow: inset 0 0 0 2rpx $bowel-stool;
+}
+
+.chip--urine.chip--on {
+  background: $bowel-urine-bg;
+  color: $bowel-urine;
+  box-shadow: inset 0 0 0 2rpx $bowel-urine;
 }
 
 .chip__n {

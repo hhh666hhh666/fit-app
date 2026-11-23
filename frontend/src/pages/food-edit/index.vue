@@ -16,7 +16,7 @@ import AvatarCropper from '@/components/AvatarCropper.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
-import { ask, askInput } from '@/utils/confirm'
+import { ask } from '@/utils/confirm'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
@@ -55,26 +55,16 @@ const form = reactive<Record<string, string>>({
   gi: '',
   portionLabel: '',
   portionGrams: '',
+  // 生重／熟重（ADR 0063）：空串＝不标
+  cookState: '',
   // 五类选填营养一并占位：否则没展开填过的键是 undefined，trim() 会抛错
   ...Object.fromEntries(OPTIONAL_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, ''])))
 })
 
-/**
- * 录入基准：per100＝按每 100g/ml 填；serving＝按「每份」填（份量自定义，单位 g 或 ml）。
- * 库里只存每 100 的数值——按份录入在保存时换算，份量同时存为常用份；编辑回填一律按每 100 显示。
- */
-const basis = ref<'per100' | 'serving'>('per100')
-
-/** 所有按基准换算的营养字段（主组 ＋ 五类选填；GI 不随份量变，不在内）。 */
-const SCALED_KEYS = [
-  ...MAIN_FIELDS.map((f) => f.key),
-  ...OPTIONAL_GROUPS.flatMap((g) => g.fields.map((f) => f.key))
-]
-
 /** 每 100g 热量的合理上限：纯油脂约 900 kcal，超过就在保存前提醒一次（每 100ml 不提醒）。 */
 const KCAL_PER100G_MAX = 900
 
-/** 当前填的份量（正数才有效）。 */
+/** 当前填的常用份份量（正数才有效）。 */
 function servingAmount(): number | null {
   const n = Number(form.portionGrams.trim())
   return form.portionGrams.trim() && Number.isFinite(n) && n > 0 ? n : null
@@ -85,70 +75,23 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-/** 有没有已经填了的、要随基准换算的营养数。 */
-function hasScaledValues(): boolean {
-  return SCALED_KEYS.some((k) => form[k].trim() !== '')
-}
-
 /**
- * 切换基准；已填数值跟着换算，免得每 100 的数被当成每份（线上「姜糖」就是这样被多除了一次）。
- * 已经填了数、份量还空着时，先问一份多少——不问就没法换算，填了才切过去，取消就留在原来的基准。
+ * 每份的营养只由每 100 推算、只读（ADR 0063）：填了常用份，每个营养格右边实时显示「每份 xx」。
+ * 改常用份只会改这里的显示，不会动每 100 的数。
  */
-async function setBasis(next: 'per100' | 'serving', unit?: 'g' | 'ml') {
-  if (basis.value === next) {
-    if (unit) form.unit = unit
-    return
-  }
-  let amount = servingAmount()
-  if (amount == null && hasScaledValues()) {
-    const u = (unit ?? form.unit) === 'ml' ? 'ml' : 'g'
-    // 可编辑确认框没有说明文字的位置（content 会变成输入框的预填值），说明放进标题
-    const t = await askInput({
-      title: next === 'serving' ? `已填的数要换算成每份：一份多少 ${u}？` : `已填的数要换算成每 100：一份多少 ${u}？`,
-      placeholder: '如：250',
-      confirmText: '换算'
-    })
-    if (t == null) return
-    const n = Number(t)
-    if (!t || !Number.isFinite(n) || n <= 0) {
-      uni.showToast({ title: '份量要大于 0', icon: 'none' })
-      return
-    }
-    form.portionGrams = String(n)
-    amount = n
-  }
-  if (unit) form.unit = unit
-  if (amount != null) {
-    const factor = next === 'serving' ? amount / 100 : 100 / amount
-    for (const k of SCALED_KEYS) {
-      const t = form[k].trim()
-      const n = Number(t)
-      if (!t || !Number.isFinite(n)) continue
-      const o = per100Origin[k]
-      if (next === 'per100' && o && o.shown === t && o.amount === amount) {
-        form[k] = String(o.per100) // 换算后没动过：还原原数，不带舍入误差
-      } else {
-        form[k] = String(round2(n * factor))
-        if (next === 'serving') per100Origin[k] = { shown: form[k], per100: n, amount }
-      }
-    }
-  }
-  if (next === 'per100') for (const k of Object.keys(per100Origin)) delete per100Origin[k]
-  basis.value = next
+function perServing(key: string): string {
+  const g = servingAmount()
+  const t = (form[key] ?? '').trim()
+  const n = Number(t)
+  if (g == null || !t || !Number.isFinite(n)) return ''
+  return `每份 ${round2((n * g) / 100)}`
 }
 
-/**
- * 从每 100 换算成每份时记下原数：每份只留两位小数，再换回每 100 会有误差（1.10 → 0.06 → 1.12）。
- * 某格换算后没再改过、份量也没变，保存或切回时直接用原数。
- */
-const per100Origin: Record<string, { shown: string; per100: number; amount: number }> = {}
-
-/** 按份录入时把这一格换算成每 100；换算后没动过的格子用原数。 */
-function servingToPer100(key: string, v: number, amount: number): number {
-  const o = per100Origin[key]
-  if (o && o.shown === form[key].trim() && o.amount === amount) return o.per100
-  return round2((v * 100) / amount)
-}
+const COOK_OPTIONS: { value: '' | 'raw' | 'cooked'; label: string }[] = [
+  { value: '', label: '不标' },
+  { value: 'raw', label: '生重' },
+  { value: 'cooked', label: '熟重' }
+]
 
 /** 折叠状态（默认全收起）。 */
 const openGroups = ref<Record<string, boolean>>({})
@@ -204,7 +147,7 @@ async function loadExisting() {
     fillForm(f)
     showRemoteImage(f.id, f.imageKey)
     if (copyFromId.value != null) {
-      uni.showToast({ title: '已带出预设数据，可修改后保存', icon: 'none' })
+      uni.showToast({ title: '已带出预置数据，可修改后保存', icon: 'none' })
     }
   } catch {
     // request 层已统一提示
@@ -224,6 +167,7 @@ function fillForm(f: FoodPayload) {
   form.gi = toStr(f.gi)
   form.portionLabel = f.portionLabel ?? ''
   form.portionGrams = toStr(f.portionGrams)
+  form.cookState = f.cookState ?? ''
   for (const g of OPTIONAL_GROUPS) {
     for (const fd of g.fields) {
       form[fd.key] = toStr((f as unknown as Record<string, unknown>)[fd.key])
@@ -417,16 +361,6 @@ function buildPayload(): FoodPayload | null {
     main[r.key] = v
   }
 
-  // 按份录入：份量必填，营养值换算成每 100 再存，份量记为常用份
-  const perServing = basis.value === 'serving'
-  const amount = servingAmount()
-  if (perServing && amount == null) {
-    uni.showToast({ title: '先填一份是多少' + (form.unit === 'ml' ? ' ml' : ' g'), icon: 'none' })
-    return null
-  }
-  const toPer100 = (k: string, v: number) => (perServing ? servingToPer100(k, v, amount as number) : v)
-  for (const k of Object.keys(main)) main[k] = toPer100(k, main[k])
-
   // 别名：按分隔符拆开交给服务端规整（去重、去掉和名字一样的、上限 10 个各 16 字）
   const aliases = form.aliases
     .split(/[、，,；;/|\s]+/)
@@ -437,8 +371,10 @@ function buildPayload(): FoodPayload | null {
     aliases,
     unit: form.unit === 'ml' ? 'ml' : 'g',
     ...main,
-    portionLabel: form.portionLabel.trim() || (perServing ? '1份' : null),
-    portionGrams: numOrNull('portionGrams') ?? null
+    // 常用份成对：填了份量没填份名就记成「1份」（详情页、导出都要份名和份量成对才显示）
+    portionLabel: form.portionLabel.trim() || (numOrNull('portionGrams') != null ? '1份' : null),
+    portionGrams: numOrNull('portionGrams') ?? null,
+    cookState: form.cookState === 'raw' || form.cookState === 'cooked' ? form.cookState : null
   }
   // 扩展字段 GI：选填（空串＝清空），非法数字当场拦下
   const gi = numOrNull('gi')
@@ -454,7 +390,7 @@ function buildPayload(): FoodPayload | null {
         uni.showToast({ title: `${fd.label}数字不正确`, icon: 'none' })
         return null
       }
-      payload[fd.key] = v == null ? null : toPer100(fd.key, v)
+      payload[fd.key] = v
     }
   }
   return payload as unknown as FoodPayload
@@ -464,7 +400,7 @@ async function save() {
   if (saving.value) return
   const payload = buildPayload()
   if (!payload) return
-  // 兜底：每 100g 超过 900 kcal（纯油脂也就 900 上下）多半是把每 100 当成每份又换算了一次
+  // 兜底：每 100g 超过 900 kcal（纯油脂也就 900 上下）多半是把每份的数当成每 100 填了
   if (payload.unit === 'g' && Number(payload.kcal) > KCAL_PER100G_MAX) {
     const ok = await ask({
       title: '热量看起来过高',
@@ -538,57 +474,45 @@ async function save() {
         <view class="unit-row">
           <text class="block__label">数值基准</text>
           <view class="units">
+            <view class="unit" :class="{ 'unit--active': form.unit !== 'ml' }" @click="form.unit = 'g'">每 100g</view>
+            <view class="unit" :class="{ 'unit--active': form.unit === 'ml' }" @click="form.unit = 'ml'">每 100ml</view>
+          </view>
+        </view>
+        <!-- 生重／熟重（ADR 0063）：营养数按生的还是熟的重量测的 -->
+        <view class="unit-row">
+          <text class="block__label">生熟</text>
+          <view class="units">
             <view
+              v-for="o in COOK_OPTIONS"
+              :key="o.value"
               class="unit"
-              :class="{ 'unit--active': basis === 'per100' && form.unit !== 'ml' }"
-              @click="setBasis('per100', 'g')"
+              :class="{ 'unit--active': form.cookState === o.value }"
+              @click="form.cookState = o.value"
             >
-              每 100g
-            </view>
-            <view
-              class="unit"
-              :class="{ 'unit--active': basis === 'per100' && form.unit === 'ml' }"
-              @click="setBasis('per100', 'ml')"
-            >
-              每 100ml
-            </view>
-            <view
-              class="unit"
-              :class="{ 'unit--active': basis === 'serving' }"
-              @click="setBasis('serving')"
-            >
-              按份
+              {{ o.label }}
             </view>
           </view>
         </view>
-        <!-- 按份：一份多少（g 或 ml，自定义）＋ 份名称；保存时营养换算成每 100，份量记为常用份 -->
-        <template v-if="basis === 'serving'">
-          <view class="fld">
-            <text class="fld__label">一份多少</text>
-            <input
-              v-model="form.portionGrams"
-              type="digit"
-              class="fld__input ft-num"
-              placeholder="如：250"
-              placeholder-class="ph"
-            />
-            <view class="units units--sm">
-              <view class="unit" :class="{ 'unit--active': form.unit !== 'ml' }" @click="form.unit = 'g'">g</view>
-              <view class="unit" :class="{ 'unit--active': form.unit === 'ml' }" @click="form.unit = 'ml'">ml</view>
-            </view>
-          </view>
-          <view class="fld">
-            <text class="fld__label">份名称</text>
-            <input
-              v-model="form.portionLabel"
-              class="fld__input"
-              placeholder="如：1杯（不填记为 1份）"
-              placeholder-class="ph"
-              maxlength="16"
-            />
-          </view>
-          <text class="serving-hint">下面的营养按「每份」填，保存时自动换算成每 100{{ form.unit === 'ml' ? 'ml' : 'g' }}</text>
-        </template>
+        <text class="serving-hint">营养一律按每 100{{ form.unit === 'ml' ? 'ml' : 'g' }} 填；包装只印了每份的，先换算成每 100 再填。</text>
+      </view>
+
+      <!-- 常用份（可选）：填了以后，下面每个营养格右边显示只读的「每份」（ADR 0063） -->
+      <view class="glass block">
+        <text class="block__title">常用份（可选）</text>
+        <view class="fld">
+          <text class="fld__label">份标签</text>
+          <input
+            v-model="form.portionLabel"
+            class="fld__input"
+            placeholder="如：1个（不填记为 1份）"
+            placeholder-class="ph"
+            maxlength="16"
+          />
+        </view>
+        <view class="fld">
+          <text class="fld__label">一份多少（{{ form.unit === 'ml' ? 'ml' : 'g' }}）</text>
+          <input v-model="form.portionGrams" type="digit" class="fld__input ft-num" placeholder="如：50" placeholder-class="ph" />
+        </view>
       </view>
 
       <!-- 食物图片（选填）：一张方图当封面，在列表里认得出它 -->
@@ -627,26 +551,31 @@ async function save() {
 
       <!-- 主组（必填） -->
       <view class="glass block">
-        <text class="block__title">主要营养（{{ basis === 'serving' ? '每份，' : '' }}必填）</text>
+        <text class="block__title">主要营养（每 100{{ form.unit === 'ml' ? 'ml' : 'g' }}，必填）</text>
         <view class="fld">
           <text class="fld__label">热量（大卡）<text v-if="isMissing('kcal')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('kcal')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.kcal" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+          <text v-if="perServing('kcal')" class="fld__per ft-num">{{ perServing('kcal') }}</text>
         </view>
         <view class="fld">
           <text class="fld__label">蛋白质（g）<text v-if="isMissing('protein')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('protein')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.protein" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+          <text v-if="perServing('protein')" class="fld__per ft-num">{{ perServing('protein') }}</text>
         </view>
         <view class="fld">
           <text class="fld__label">脂肪（g）<text v-if="isMissing('fat')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('fat')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.fat" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+          <text v-if="perServing('fat')" class="fld__per ft-num">{{ perServing('fat') }}</text>
         </view>
         <view class="fld">
           <text class="fld__label">碳水化合物（g）<text v-if="isMissing('carb')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('carb')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.carb" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+          <text v-if="perServing('carb')" class="fld__per ft-num">{{ perServing('carb') }}</text>
         </view>
         <view class="fld">
           <text class="fld__label">钠（mg）<text v-if="isMissing('sodium')" class="fld__warn"> 待补</text><text v-else-if="isUncertain('sodium')" class="fld__warn"> 待核对</text></text>
           <input v-model="form.sodium" type="digit" class="fld__input ft-num" placeholder="–" placeholder-class="ph" />
+          <text v-if="perServing('sodium')" class="fld__per ft-num">{{ perServing('sodium') }}</text>
         </view>
       </view>
 
@@ -665,29 +594,10 @@ async function save() {
         </view>
       </view>
 
-      <!-- 常用份（按份录入时份量已在上面填过，这里不再重复） -->
-      <view v-if="basis !== 'serving'" class="glass block">
-        <text class="block__title">常用份（可选）</text>
-        <view class="fld">
-          <text class="fld__label">份标签</text>
-          <input
-            v-model="form.portionLabel"
-            class="fld__input"
-            placeholder="如：1个"
-            placeholder-class="ph"
-            maxlength="16"
-          />
-        </view>
-        <view class="fld">
-          <text class="fld__label">一份多少（g/ml）</text>
-          <input v-model="form.portionGrams" type="digit" class="fld__input ft-num" placeholder="如：50" placeholder-class="ph" />
-        </view>
-      </view>
-
       <!-- 更多营养（折叠） -->
       <view v-for="g in OPTIONAL_GROUPS" :key="g.title" class="glass block">
         <view class="group-head" @click="toggleGroup(g.title)">
-          <text class="block__title">{{ g.title }}（{{ basis === 'serving' ? '每份，' : '' }}选填）</text>
+          <text class="block__title">{{ g.title }}（选填）</text>
           <view class="group-head__arrow" :class="{ 'group-head__arrow--open': openGroups[g.title] }">
             <FtIcon name="chevron-right" :size="18" tone="muted" />
           </view>
@@ -702,6 +612,7 @@ async function save() {
               placeholder="–"
               placeholder-class="ph"
             />
+            <text v-if="perServing(fd.key)" class="fld__per ft-num">{{ perServing(fd.key) }}</text>
           </view>
         </template>
       </view>
@@ -883,16 +794,6 @@ async function save() {
   color: $app-ink-muted;
 }
 
-.units--sm {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-}
-
-.units--sm .unit {
-  padding: 6rpx 18rpx;
-  font-size: $text-sm;
-}
-
 .serving-hint {
   display: block;
   padding: 4rpx 0 12rpx;
@@ -931,6 +832,16 @@ async function save() {
   text-align: right;
   font-size: $text-md;
   color: $app-ink;
+}
+
+/* 每份（只读，由每 100 和常用份推算，ADR 0063） */
+.fld__per {
+  flex-shrink: 0;
+  min-width: 120rpx;
+  margin-left: 16rpx;
+  text-align: right;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 /* 识别低置信度字段的「待核对」角标（ADR 0018） */

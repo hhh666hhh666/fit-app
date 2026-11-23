@@ -22,4 +22,6 @@ public class WaterDrinkDTO {
 
     @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
     private String time;
+    /** true＝清除这一笔的时刻（ADR 0062）；只在修改时用，和 time 同时给时以清除为准。 */
+    private Boolean clearTime;
 }

@@ -175,6 +175,9 @@ public class Food {
     /** 常用份克重（如 50）。 */
     private BigDecimal portionGrams;
 
+    /** 营养数按生重（raw）还是熟重（cooked）测的；null＝没标（ADR 0063）。 */
+    private String cookState;
+
     // ── 食物图片（ADR 0057）──
 
     /** 图片文件键（随机串，换图就换）；null＝没有图片。前端拿它当缓存版本号。 */

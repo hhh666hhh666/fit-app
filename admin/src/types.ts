@@ -19,6 +19,8 @@ export interface FoodRow {
   aliases: string[] | null
   /** 食物图片版本号（ADR 0057）；null＝没有图。 */
   imageKey: string | null
+  /** 生重／熟重（ADR 0063）；null＝没标。 */
+  cookState: 'raw' | 'cooked' | null
   category: string | null
   unit: 'g' | 'ml'
   kcal: number
@@ -42,6 +44,8 @@ export type FoodDetail = {
   gi?: number | null
   portionLabel?: string | null
   portionGrams?: number | null
+  /** 生重／熟重（ADR 0063）；null＝没标。 */
+  cookState?: 'raw' | 'cooked' | null
   updatedAt?: string
 } & Record<string, unknown>
 

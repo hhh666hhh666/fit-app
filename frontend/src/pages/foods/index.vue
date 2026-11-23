@@ -17,8 +17,7 @@ import { choosePhoto, compress } from '@/utils/photo'
 import { useRecognitionStore } from '@/stores/recognition'
 import { ensureLogin } from '@/utils/guard'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
-import FoodThumb from '@/components/FoodThumb.vue'
-import { matchedAlias } from '@/utils/food-match'
+import FoodRow from '@/components/FoodRow.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
 import FtEmpty from '@/components/FtEmpty.vue'
@@ -157,10 +156,6 @@ function goNew() {
 function onTap(f: FoodItem) {
   // 点条目 → 食物详情页（预置＝复制为自定义；自有＝编辑/删除，均在详情页内）
   uni.navigateTo({ url: `/pages/food-detail/index?id=${f.id}` })
-}
-
-function perText(f: FoodItem): string {
-  return `每100${f.unit === 'ml' ? 'ml' : 'g'} · ${Math.round(f.kcal)} 大卡 · 蛋白 ${f.protein}g`
 }
 
 // ── 拍照识别（ADR 0018）：选图 → 压缩（长边 1600，与餐照同口径——标签字小别压糊）→ 识别 → 草稿进编辑页 ──
@@ -305,19 +300,8 @@ function copyExport() {
           <view class="flist__head">
             <text class="flist__count ft-num">{{ keyword.trim() ? `找到 ${total} 项` : `共 ${total} 种` }}</text>
           </view>
-          <view v-for="f in list" :key="f.id" class="frow" @click="onTap(f)">
-            <FoodThumb v-if="f.imageKey" :id="f.id" :image-key="f.imageKey" />
-            <view class="frow__mid">
-              <view class="frow__line">
-                <text class="frow__name">{{ f.name }}</text>
-                <text v-if="f.preset" class="frow__badge">预设</text>
-                <text v-if="f.archived" class="frow__badge">已下架</text>
-              </view>
-              <text v-if="matchedAlias(f, keyword)" class="frow__alias">别名：{{ matchedAlias(f, keyword) }}</text>
-              <text class="frow__sub ft-num">{{ perText(f) }}</text>
-            </view>
-            <FtIcon name="chevron-right" :size="18" tone="subtle" />
-          </view>
+          <!-- 一行三行字：名字＋生熟 ／ 份量 ／ 三大营养素；自定义挂缩略图角标（ADR 0063） -->
+          <FoodRow v-for="f in list" :key="f.id" class="flist__row" :food="f" :keyword="keyword" @tap="onTap(f)" />
           <FtEmpty
             v-if="!loading && list.length === 0"
             :title="keyword.trim() ? '没有匹配的食物' : '还没有食物'"
@@ -327,7 +311,7 @@ function copyExport() {
           <view v-else-if="finished && list.length > 0" class="flist__more ft-num">共 {{ formatThousands(total) }} 种食物</view>
         </view>
 
-        <text class="note">「预设」＝系统内置只读数据（可复制为自定义）；「已下架」＝停用的预设，只有记录过它的人还看得到，可以删掉；名称带 * 的营养数据来自公开资料补全，供参考</text>
+        <text class="note">缩略图角上有铅笔的是自定义食物，其余是系统预置（只读，可复制为自定义）；「已下架」＝停用的预置，只有记录过它的人还看得到，可以删掉；名称带 * 的营养数据来自公开资料补全，供参考</text>
       </template>
 
       <!-- 组合页签：列表（点条目 → 编辑 / 删除） -->
@@ -534,7 +518,9 @@ function copyExport() {
 }
 
 .frow + .frow,
-.flist__head + .frow {
+.flist__head + .frow,
+.flist__row + .flist__row,
+.flist__head + .flist__row {
   border-top: 1rpx solid $app-line-soft;
 }
 
@@ -544,13 +530,6 @@ function copyExport() {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
-}
-
-.frow__line {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  min-width: 0;
 }
 
 .frow__name {
@@ -564,25 +543,8 @@ function copyExport() {
   color: $app-ink;
 }
 
-.frow__badge {
-  flex: none;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
 .frow__sub {
   font-size: $text-sm;
-  color: $app-ink-muted;
-}
-
-.frow__alias {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: $text-xs;
   color: $app-ink-muted;
 }
 

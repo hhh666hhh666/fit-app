@@ -414,7 +414,7 @@ public class AgentDataService {
                 break;
             }
             for (BowelRecord r : page) {
-                g.writeObject(new AgentHistoryRows.Bowel(r.getId(), r.getOccurredAt(), r.getKind(), r.getBristol(),
+                g.writeObject(new AgentHistoryRows.Bowel(r.getId(), r.getOccurredAt(), r.getKind(), r.getBristol(), r.getColor(),
                         r.getNote()));
             }
             g.flush();

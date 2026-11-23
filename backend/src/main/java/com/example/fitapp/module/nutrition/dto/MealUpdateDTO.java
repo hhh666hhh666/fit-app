@@ -24,7 +24,9 @@ public class MealUpdateDTO {
     @Pattern(regexp = ".*\\S.*", message = "名称不能为空")
     private String name;
 
-    /** 时刻（HH:mm，ADR 0059）。 */
+    /** 时刻（HH:mm，ADR 0059）。早午晚三餐的条目改时刻＝整餐一起改（ADR 0062）。 */
     @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
     private String time;
+    /** true＝清除时刻（ADR 0062）；和 time 同时给时以清除为准。三餐的条目清除＝整餐一起清。 */
+    private Boolean clearTime;
 }

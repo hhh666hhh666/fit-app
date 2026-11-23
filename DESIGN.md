@@ -47,6 +47,12 @@ colors:
   bowel-stool-bg: "#fdefe4"
   bowel-urine: "#b07a12"
   bowel-urine-bg: "#fdf3dc"
+  cook-raw-bg: "#e9f3e4"
+  cook-raw-fg: "#3d7a33"
+  cook-cooked-bg: "#f6ecdf"
+  cook-cooked-fg: "#9a6233"
+  food-thumb-empty-bg: "#f3efe9"
+  food-thumb-empty-fg: "#b9a58c"
   viewer-bg: "rgba(10, 11, 13, 0.96)"
   viewer-ink: "#ffffff"
   viewer-chip: "rgba(255, 255, 255, 0.14)"
@@ -213,6 +219,9 @@ components:
 
 - **营养四色**（protein 杏橙、carb 雾蓝、fat 玫粉、water 青绿）：营养素进度条，首页与饮食页共用；每色另有一条极浅的轨道色（见 `uni.scss` 的 `$ring-*-track`）。kcal 进度条是一条从浅橙到深橙的横向渐变（`$ring-kcal`）。
 - **餐次六组**（breakfast 晨橙、lunch 麦黄、dinner 暮紫、snack 饼干红、water 湖青、weight 草绿，各一对 bg／fg）：餐次入口图标块、相册照片的餐次角标。每组都是「浅色底 ＋ 同色系深字」，六个入口各占一个色相。首页入口第二页的排便另有一组 `$meal-bowel-*`（暖灰褐，ADR 0061 修订）。
+- **小便七色**（`$urine-1…7`：无色透明、浅黄、黄、深黄、琥珀、茶褐、红／粉）：只当排便页的色块用，不当字色；浅色块靠 `$urine-swatch-ring` 描边显形。
+- **生熟两签**（`$cook-raw-*` 生重浅绿、`$cook-cooked-*` 熟重暖褐，ADR 0063）：食物名字后的小标签。暖褐比排便的灰褐更红，两者不撞。
+- **食物缩略图**：没有图片时的占位底 `$food-thumb-empty-*`；自定义食物右下角的铅笔角标借余烬薄雾／深余烬（`$food-custom-badge-*`），预置不标。
 
 ### Tertiary
 

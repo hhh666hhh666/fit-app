@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 排便统计（ADR 0061）：范围内每天大便、小便各几次；平均间隔；一天里集中在哪几个钟点；大便形态分布。
+ * 排便统计（ADR 0061）：范围内每天大便、小便各几次；平均间隔；一天里集中在哪几个钟点；大便形态分布、小便颜色分布。
  */
 @Data
 public class BowelStatsVO {
@@ -24,6 +24,9 @@ public class BowelStatsVO {
 
     /** 大便形态分布：下标 0–6 对应 1–7 型；没填形态的不算。 */
     private int[] bristol = new int[7];
+
+    /** 小便颜色分布：下标 0–6 对应 1–7 档；没填颜色的不算。 */
+    private int[] color = new int[7];
 
     @Data
     public static class Day {

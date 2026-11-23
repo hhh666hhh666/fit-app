@@ -10,6 +10,7 @@ import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
 import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
+import com.example.fitapp.module.nutrition.dto.MealTimeDTO;
 import com.example.fitapp.module.nutrition.dto.MealUpdateDTO;
 import com.example.fitapp.module.nutrition.dto.WaterDTO;
 import com.example.fitapp.module.nutrition.entity.DietDaily;
@@ -184,8 +185,71 @@ public class DietService {
     public MealItemVO addMeal(Long userId, MealLogDTO dto) {
         Food food = requireOwnFood(userId, dto.getFoodId());
         LocalDate date = parseDate(dto.getDate());
-        return insertMeal(userId, date, dto.getMeal(), EntryTime.resolve(dto.getTime(), date, dto.getMeal()),
+        return insertMeal(userId, date, dto.getMeal(), timeForNew(userId, date, dto.getMeal(), dto.getTime()),
                 food, dto.getGrams());
+    }
+
+    /** 早午晚三餐（一餐一个时刻，ADR 0062）；加餐按条记。 */
+    static boolean isMainMeal(String meal) {
+        return "breakfast".equals(meal) || "lunch".equals(meal) || "dinner".equals(meal);
+    }
+
+    /**
+     * 新条目用的时刻：三餐里已经有条目的，跟着这一餐的时刻（可能是清空了的 null）；
+     * 否则按传来的时刻，没传按默认规则（ADR 0059）。
+     */
+    private LocalTime timeForNew(Long userId, LocalDate date, String meal, String time) {
+        if (isMainMeal(meal)) {
+            MealLog existing = mealLogMapper.selectOne(Wrappers.<MealLog>lambdaQuery()
+                    .eq(MealLog::getUserId, userId)
+                    .eq(MealLog::getLogDate, date)
+                    .eq(MealLog::getMeal, meal)
+                    .orderByAsc(MealLog::getId)
+                    .last("LIMIT 1"));
+            if (existing != null) {
+                return existing.getEatenAt();
+            }
+        }
+        return EntryTime.resolve(time, date, meal);
+    }
+
+    /**
+     * 改时刻（ADR 0062）：三餐按日期＋餐次整餐一起改，加餐按选中的条目改；time 为 null＝清除。
+     * 返回改过的条目。
+     */
+    @Transactional
+    public List<MealItemVO> retime(Long userId, MealTimeDTO dto) {
+        LocalTime t = dto.getTime() == null ? null : EntryTime.parse(dto.getTime());
+        List<MealLog> logs;
+        if (isMainMeal(dto.getMeal())) {
+            if (dto.getDate() == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "日期不能为空");
+            }
+            logs = mealLogMapper.selectList(Wrappers.<MealLog>lambdaQuery()
+                    .eq(MealLog::getUserId, userId)
+                    .eq(MealLog::getLogDate, parseDate(dto.getDate()))
+                    .eq(MealLog::getMeal, dto.getMeal()));
+        } else {
+            List<Long> ids = dto.getIds() == null ? List.of() : dto.getIds().stream().distinct().toList();
+            if (ids.isEmpty()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "没有选中条目");
+            }
+            logs = mealLogMapper.selectList(Wrappers.<MealLog>lambdaQuery()
+                    .eq(MealLog::getUserId, userId)
+                    .in(MealLog::getId, ids));
+            if (logs.size() != ids.size() || logs.stream().anyMatch(l -> isMainMeal(l.getMeal()))) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "只有加餐能按条改时刻");
+            }
+        }
+        if (logs.isEmpty()) {
+            return List.of();
+        }
+        mealLogMapper.update(null, Wrappers.<MealLog>lambdaUpdate()
+                .eq(MealLog::getUserId, userId)
+                .in(MealLog::getId, logs.stream().map(MealLog::getId).toList())
+                .set(MealLog::getEatenAt, t));
+        logs.forEach(l -> l.setEatenAt(t));
+        return logs.stream().map(this::toItem).toList();
     }
 
     /**
@@ -198,8 +262,8 @@ public class DietService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "餐次不正确");
         }
         List<MealItemVO> out = new ArrayList<>();
-        // 同一次加进来的条目共用一个时刻（ADR 0059）
-        LocalTime time = EntryTime.resolve(dto.getTime(), dto.getDate(), dto.getMeal());
+        // 同一次加进来的条目共用一个时刻（ADR 0059）；三餐已有条目的跟着这一餐（ADR 0062）
+        LocalTime time = timeForNew(userId, dto.getDate(), dto.getMeal(), dto.getTime());
         for (FoodAmountDTO it : dto.getItems()) {
             Food food = requireOwnFood(userId, it.getFoodId());
             out.add(insertMeal(userId, dto.getDate(), dto.getMeal(), time, food, it.getGrams()));
@@ -236,7 +300,7 @@ public class DietService {
         log.setUserId(userId);
         log.setLogDate(parseDate(dto.getDate()));
         log.setMeal(dto.getMeal());
-        log.setEatenAt(EntryTime.resolve(dto.getTime(), log.getLogDate(), dto.getMeal()));
+        log.setEatenAt(timeForNew(userId, log.getLogDate(), dto.getMeal(), dto.getTime()));
         log.setFoodId(null);
         log.setFoodName(dto.getName().trim());
         log.setGrams(dto.getGrams());
@@ -251,7 +315,8 @@ public class DietService {
 
     public MealItemVO updateMeal(Long userId, Long id, MealUpdateDTO dto) {
         MealLog log = requireOwnMeal(userId, id);
-        if (dto.getGrams() == null && dto.getName() == null && dto.getTime() == null) {
+        boolean clear = Boolean.TRUE.equals(dto.getClearTime());
+        if (dto.getGrams() == null && dto.getName() == null && dto.getTime() == null && !clear) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "没有要修改的内容");
         }
         if (dto.getName() != null) {
@@ -264,10 +329,18 @@ public class DietService {
         if (dto.getGrams() != null) {
             log.setGrams(dto.getGrams());
         }
-        if (dto.getTime() != null) {
-            log.setEatenAt(EntryTime.parse(dto.getTime()));
-        }
         mealLogMapper.updateById(log);
+        if (clear || dto.getTime() != null) {
+            // 清除要显式 set null（全局 not_null 更新策略会跳过）；三餐的条目改时刻＝整餐一起改（ADR 0062）
+            LocalTime t = clear ? null : EntryTime.parse(dto.getTime());
+            MealTimeDTO r = new MealTimeDTO();
+            r.setMeal(log.getMeal());
+            r.setDate(log.getLogDate().toString());
+            r.setIds(List.of(log.getId()));
+            r.setTime(t == null ? null : EntryTime.format(t));
+            retime(userId, r);
+            log.setEatenAt(t);
+        }
         return toItem(log);
     }
 
@@ -492,7 +565,8 @@ public class DietService {
     @Transactional
     public WaterDrinkVO updateDrink(Long userId, Long id, WaterDrinkDTO dto) {
         WaterLog w = requireOwnDrink(userId, id);
-        if (dto.getMl() == null && dto.getTime() == null) {
+        boolean clear = Boolean.TRUE.equals(dto.getClearTime());
+        if (dto.getMl() == null && dto.getTime() == null && !clear) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "没有要修改的内容");
         }
         if (dto.getMl() != null) {
@@ -502,6 +576,13 @@ public class DietService {
             w.setDrunkAt(EntryTime.parse(dto.getTime()));
         }
         waterLogMapper.updateById(w);
+        if (clear) {
+            // 清除时刻（ADR 0062）：显式 set null，全局 not_null 更新策略会跳过 null
+            waterLogMapper.update(null, Wrappers.<WaterLog>lambdaUpdate()
+                    .eq(WaterLog::getId, id)
+                    .set(WaterLog::getDrunkAt, null));
+            w.setDrunkAt(null);
+        }
         syncWaterTotal(userId, w.getLogDate());
         return toDrink(w);
     }

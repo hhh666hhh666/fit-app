@@ -301,7 +301,8 @@ public class AdminFoodService {
     }
 
     private static AdminFoodRowVO toRow(Food f) {
-        return new AdminFoodRowVO(f.getId(), f.getName(), f.getAliases(), f.getImageKey(), f.getCategory(), f.getUnit(),
+        return new AdminFoodRowVO(f.getId(), f.getName(), f.getAliases(), f.getImageKey(), f.getCookState(),
+                f.getCategory(), f.getUnit(),
                 f.getKcal(), f.getProtein(), f.getFat(), f.getCarb(), f.getSodium(),
                 Boolean.TRUE.equals(f.getArchived()), f.getUpdatedAt());
     }

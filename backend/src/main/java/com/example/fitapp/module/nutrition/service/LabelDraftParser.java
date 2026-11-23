@@ -25,7 +25,7 @@ import java.util.Set;
  *   <li><b>NRV%</b>：标签右侧「营养素参考值%」是比例不是绝对值——prompt 要求模型把它
  *       放进 {@code nrv} 字段，本类**永不读取**，从结构上杜绝混入。</li>
  * </ul>
- * 按份印的标签（每份 X g）：模型给每份数值＋serving_grams，本类换算成每 100。
+ * 按份印的标签（每份 X g）：模型给每份数值＋serving_grams，本类换算成每 100，并把份量记成常用份（ADR 0063）。
  */
 public final class LabelDraftParser {
 
@@ -105,6 +105,12 @@ public final class LabelDraftParser {
         }
         // nrv 字段被显式丢弃：比例不是数值，永不进 DTO
         normalized.setAll(scaledNutrients(root.path("nutrients"), factor));
+        // 按份印的标签：份量顺手记成常用份（ADR 0063），主人就不用再填一遍
+        BigDecimal serving = servingGrams(root.path("serving_grams"));
+        if (serving != null) {
+            normalized.put("portionGrams", serving.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros());
+            normalized.put("portionLabel", "1份");
+        }
 
         FoodSaveDTO dto = MAPPER.convertValue(normalized, FoodSaveDTO.class);
 
@@ -128,6 +134,18 @@ public final class LabelDraftParser {
             uncertain.add("name"); // 名字缺失也标「待核对」——确认页会提示用户补
         }
         return new Draft(dto, uncertain, missing);
+    }
+
+    /** 标签上印的每份克数；按 100 印（或没给、非正数、大得离谱）时为 null。 */
+    private static BigDecimal servingGrams(JsonNode servingGrams) {
+        if (!servingGrams.isNumber()) {
+            return null;
+        }
+        BigDecimal g = servingGrams.decimalValue();
+        if (g.signum() <= 0 || g.compareTo(new BigDecimal("9999")) > 0) {
+            return null;
+        }
+        return g;
     }
 
     /** 每份 → 每100 倍率；按 100 印（或没给）时为 1。非正数视为没给。 */

@@ -12,13 +12,23 @@ import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 
 type Closer = () => void
 
-const stack: Closer[] = []
+/** depth：登记时页面栈有几层。弹层开着时跳到别的页（如记一餐弹层里点食物看详情），返回键该退回那一页，不是关底下页面的弹层。 */
+const stack: { close: Closer; depth: number }[] = []
+
+function pageDepth(): number {
+  try {
+    return getCurrentPages().length
+  } catch {
+    return 0
+  }
+}
 
 /** 登记一层弹层，返回撤销函数（在 onBeforeUnmount 里调） */
 export function pushBack(close: Closer): () => void {
-  stack.push(close)
+  const entry = { close, depth: pageDepth() }
+  stack.push(entry)
   return () => {
-    const i = stack.lastIndexOf(close)
+    const i = stack.lastIndexOf(entry)
     if (i >= 0) stack.splice(i, 1)
   }
 }
@@ -82,7 +92,9 @@ export function handleBack(): boolean {
   if (cancelUniOverlay()) return true
   const top = stack[stack.length - 1]
   if (!top) return false
-  top()
+  // 最上面那层弹层属于底下的页面：当前页是后来推进来的，让它正常后退
+  if (top.depth < pageDepth()) return false
+  top.close()
   return true
 }
 

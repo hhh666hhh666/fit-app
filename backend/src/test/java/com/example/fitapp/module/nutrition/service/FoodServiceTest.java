@@ -207,7 +207,7 @@ class FoodServiceTest {
         full.setKcal(new BigDecimal("118"));
         full.setCalcium(new BigDecimal("100"));
         Food preset = presetFood(99L);
-        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of(full, preset));
+        when(foodMapper.search(any(), any(), any(), any(), any())).thenReturn(List.of(full, preset));
 
         List<Food> lite = service().listLite(7L, null, 10, 0);
 
@@ -297,16 +297,13 @@ class FoodServiceTest {
     // ── 列表与搜索（ADR 0056）：排序写死在 FoodMapper.search 的注解 SQL 里，这里测传进去的参数 ──
 
     @Test
-    void list_noKeyword_passesNoTermsAndRecentWindow() {
-        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    void list_noKeyword_passesNoTermsAndPaging() {
+        when(foodMapper.search(any(), any(), any(), any(), any())).thenReturn(List.of());
 
         service().listLite(7L, "   ", 10, 20);
 
-        ArgumentCaptor<java.time.LocalDate> since = ArgumentCaptor.forClass(java.time.LocalDate.class);
         var wrapper = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
-        verify(foodMapper).search(wrapper.capture(), isNull(), eq(7L), since.capture(), eq(20), eq(10));
-        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"));
-        assertEquals(today.minusDays(FoodService.RECENT_DAYS - 1L), since.getValue(), "近 30 天含今天");
+        verify(foodMapper).search(wrapper.capture(), isNull(), eq(7L), eq(20), eq(10));
         String sql = wrapper.getValue().getSqlSegment().toUpperCase();
         assertFalse(sql.contains("ORDER BY"), "排序只在注解 SQL 里写，wrapper 不该带：" + sql);
         assertFalse(sql.contains("LIKE"), "没有关键词就不该筛名字：" + sql);
@@ -314,13 +311,13 @@ class FoodServiceTest {
 
     @Test
     void list_keyword_filtersNameOrAliasesInCharOrder() {
-        when(foodMapper.search(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(foodMapper.search(any(), any(), any(), any(), any())).thenReturn(List.of());
 
         service().listLite(7L, " 猪肠 ", null, null);
 
         ArgumentCaptor<FoodSearch> terms = ArgumentCaptor.forClass(FoodSearch.class);
         var wrapper = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
-        verify(foodMapper).search(wrapper.capture(), terms.capture(), eq(7L), any(), isNull(), isNull());
+        verify(foodMapper).search(wrapper.capture(), terms.capture(), eq(7L), isNull(), isNull());
         assertEquals("猪肠", terms.getValue().getKw());
         assertEquals("%猪%肠%", terms.getValue().getFuzzy());
         String sql = wrapper.getValue().getSqlSegment();

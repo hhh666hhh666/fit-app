@@ -43,8 +43,11 @@ public final class AgentHistoryRows {
     public record Water(LocalDate date, Integer ml) {
     }
 
-    /** 排便记录（ADR 0061）：kind＝stool 大便／urine 小便；bristol 只有大便才可能有。 */
-    public record Bowel(Long id, LocalDateTime occurredAt, String kind, Integer bristol, String note) {
+    /**
+     * 排便记录（ADR 0061）：kind＝stool 大便／urine 小便；bristol 只有大便才可能有；
+     * color 只有小便才可能有，1–7 依次是无色透明、浅黄、黄、深黄、琥珀、茶褐、红／粉。
+     */
+    public record Bowel(Long id, LocalDateTime occurredAt, String kind, Integer bristol, Integer color, String note) {
     }
 
     public record Photo(Long id, LocalDate date, String meal, String mime, Integer sizeBytes, Integer thumbBytes,

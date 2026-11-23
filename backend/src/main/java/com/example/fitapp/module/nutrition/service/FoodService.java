@@ -23,7 +23,6 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,8 +89,7 @@ public class FoodService {
         if (terms != null) {
             terms.filter(w, terms.getFuzzy());
         }
-        LocalDate since = LocalDate.now(ZONE).minusDays(RECENT_DAYS - 1L);
-        return foodMapper.search(w, terms, userId, since, offset, limit);
+        return foodMapper.search(w, terms, userId, offset, limit);
     }
 
     /** 浏览次数 +1（详情页查看时调用）。预置与自有均可浏览；不存在或他人私有 → 404。 */
@@ -281,7 +279,8 @@ public class FoodService {
                 .set(Food::getAlcohol, dto.getAlcohol())
                 .set(Food::getOrganicAcid, dto.getOrganicAcid())
                 .set(Food::getPortionLabel, dto.getPortionLabel())
-                .set(Food::getPortionGrams, dto.getPortionGrams());
+                .set(Food::getPortionGrams, dto.getPortionGrams())
+                .set(Food::getCookState, dto.getCookState());
     }
 
     /** 导出全库：只导**自有**（预置系统自带、无需备份）；与导入对称的 snake_case 结构（只含非空字段）。 */
@@ -403,6 +402,7 @@ public class FoodService {
             p.put("grams", f.getPortionGrams());
             m.put("portion", p);
         }
+        putIfNotNull(m, "cook_state", f.getCookState());
         return m;
     }
 
@@ -464,6 +464,7 @@ public class FoodService {
         lite.setGi(f.getGi());
         lite.setPortionLabel(f.getPortionLabel());
         lite.setPortionGrams(f.getPortionGrams());
+        lite.setCookState(f.getCookState());
         lite.setPreset(f.getUserId() == null);
         return lite;
     }

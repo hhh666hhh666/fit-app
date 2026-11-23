@@ -85,6 +85,9 @@ class LabelDraftParserTest {
         assertBd("12.40", d.dto().getProtein());
         assertBd("4.00", d.dto().getFat());
         assertBd("60.00", d.dto().getSodium());
+        // 按份印的：份量顺手记成常用份（ADR 0063）
+        assertBd("50", d.dto().getPortionGrams());
+        assertEquals("1份", d.dto().getPortionLabel());
     }
 
     @Test

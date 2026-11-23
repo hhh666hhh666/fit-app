@@ -1,7 +1,7 @@
 import request, { unwrap } from './request'
 import { mutating, read } from './cache'
 
-// ── 排便记录（ADR 0061）：一次大便或小便；入口在身体页最底部 ──
+// ── 排便记录（ADR 0061）：一次大便或小便；入口在首页餐次入口的第二页 ──
 
 export type BowelKind = 'stool' | 'urine'
 
@@ -12,6 +12,8 @@ export interface BowelRecord {
   occurredAt: string
   /** 布里斯托形态 1–7：只有大便可能有。 */
   bristol?: number | null
+  /** 小便颜色 1–7（见 URINE_COLORS）：只有小便可能有。 */
+  color?: number | null
   note?: string | null
 }
 
@@ -19,6 +21,7 @@ export interface BowelSave {
   kind?: BowelKind
   occurredAt?: string
   bristol?: number | null
+  color?: number | null
   note?: string | null
 }
 
@@ -39,6 +42,8 @@ export interface BowelStats {
   urine: BowelKindStats
   /** 下标 0–6 对应 1–7 型。 */
   bristol: number[]
+  /** 小便颜色分布：下标 0–6 对应 1–7 档。 */
+  color: number[]
 }
 
 /** 历史：最近的在前。 */

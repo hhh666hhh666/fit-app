@@ -9,6 +9,13 @@ import type { PhotoQuality } from '@/utils/photo'
 
 export type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
+/** 生重／熟重（ADR 0063）。 */
+export type CookState = 'raw' | 'cooked'
+export const COOK_STATE_LABEL: Record<CookState, string> = { raw: '生重', cooked: '熟重' }
+
+/** 早午晚三餐一餐一个时刻（ADR 0062）；加餐按条记。 */
+export const isMainMeal = (m: MealKey) => m !== 'snack'
+
 /** 食物（库里一条）：营养值一律「每 100g / 100ml」；未设的字段缺省。 */
 export interface FoodItem {
   id: number
@@ -73,6 +80,8 @@ export interface FoodItem {
   organicAcid?: number | null
   portionLabel?: string | null
   portionGrams?: number | null
+  /** 营养数按生重（raw）还是熟重（cooked）测的；没标为空（ADR 0063）。 */
+  cookState?: CookState | null
   /** 系统预置（只读，可「复制为自定义」）；lite 列表也会带此标志。 */
   preset?: boolean | null
   /** 预置已下架（ADR 0048）：只有用过的人看得到，带「已下架」标签，可以对自己删掉。 */
@@ -449,9 +458,17 @@ export function addCustomMeal(payload: {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals/custom', payload)))
 }
 
-/** 改一条条目：给了哪项改哪项；名称只有临时条目能改。 */
-export function updateMeal(id: number, patch: { grams?: number; name?: string; time?: string }) {
+/** 改一条条目：给了哪项改哪项；名称只有临时条目能改；clearTime 清除时刻（三餐的条目＝整餐一起，ADR 0062）。 */
+export function updateMeal(id: number, patch: { grams?: number; name?: string; time?: string; clearTime?: boolean }) {
   return mutating('diet', () => unwrap(request.put<MealItem>(`/diet/meals/${id}`, patch)))
+}
+
+/**
+ * 改时刻（ADR 0062）：三餐给 date ＋ meal，整餐一起改；加餐给 ids，选中的几条一起改。
+ * time 为 null＝清除。返回改过的条目。
+ */
+export function retimeMeals(payload: { meal: MealKey; date?: string; ids?: number[]; time: string | null }) {
+  return mutating('diet', () => unwrap(request.put<MealItem[]>('/diet/meals/time', payload)))
 }
 
 /** 吃过的一种临时条目（名字和营养一样的合成一种）；营养是每 100。 */
@@ -490,8 +507,8 @@ export function addDrink(payload: { date: string; ml: number; time?: string }) {
   return mutating('diet', () => unwrap(request.post<WaterDrink>('/diet/water/drinks', payload)))
 }
 
-/** 改一笔饮水的毫升数或时刻。 */
-export function updateDrink(id: number, patch: { ml?: number; time?: string }) {
+/** 改一笔饮水的毫升数或时刻；clearTime 清除时刻（ADR 0062）。 */
+export function updateDrink(id: number, patch: { ml?: number; time?: string; clearTime?: boolean }) {
   return mutating('diet', () => unwrap(request.put<WaterDrink>(`/diet/water/drinks/${id}`, patch)))
 }
 

@@ -253,14 +253,27 @@ async function bumpWater(direction: 1 | -1) {
 }
 
 function onDrinkTap(d: WaterDrink) {
+  // 有时刻才给「清除时刻」（ADR 0062）
+  const actions = d.time ? ['修改毫升', '修改时刻', '清除时刻', '删除'] : ['修改毫升', '修改时刻', '删除']
   uni.showActionSheet({
-    itemList: ['修改毫升', '修改时刻', '删除'],
+    itemList: actions,
     success: ({ tapIndex }) => {
-      if (tapIndex === 0) void editDrinkMl(d)
-      else if (tapIndex === 1) void editDrinkTime(d)
-      else if (tapIndex === 2) void removeDrink(d)
+      const a = actions[tapIndex]
+      if (a === '修改毫升') void editDrinkMl(d)
+      else if (a === '修改时刻') void editDrinkTime(d)
+      else if (a === '清除时刻') void clearDrinkTime(d)
+      else if (a === '删除') void removeDrink(d)
     }
   })
+}
+
+async function clearDrinkTime(d: WaterDrink) {
+  try {
+    const u = await updateDrink(d.id, { clearTime: true })
+    setDrinks(drinks.value.map((x) => (x.id === d.id ? u : x)))
+  } catch {
+    // request 层已统一提示
+  }
 }
 
 async function editDrinkMl(d: WaterDrink) {

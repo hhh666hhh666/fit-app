@@ -65,6 +65,7 @@ class MealPickServiceTest {
         l.setCarbPer100(BigDecimal.ONE);
         l.setGrams(new BigDecimal(grams));
         l.setLogDate(date);
+        l.setCreatedAt(date.atTime(12, 0).plusSeconds(id));
         return l;
     }
 
@@ -77,7 +78,7 @@ class MealPickServiceTest {
         LocalDate today = LocalDate.now(FoodService.ZONE);
         when(foodService.searchForPicks(eq(7L), eq("红烧"), anyInt()))
                 .thenReturn(List.of(food(1, "红烧鸡块", null)));
-        when(mealLogMapper.countRecentByFood(eq(7L), any(), anyList())).thenReturn(List.of());
+        when(mealLogMapper.lastUsedByFood(eq(7L), anyList())).thenReturn(List.of());
         when(mealLogMapper.selectList(any())).thenReturn(List.of(
                 temp("红烧肉", "300", "150", today, 9),
                 temp("红烧肉", "300", "120", today.minusDays(3), 8)));
@@ -95,7 +96,7 @@ class MealPickServiceTest {
         LocalDate today = LocalDate.now(FoodService.ZONE);
         when(foodService.searchForPicks(eq(7L), eq("米饭"), anyInt()))
                 .thenReturn(List.of(food(1, "米饭", null)));
-        when(mealLogMapper.countRecentByFood(eq(7L), any(), anyList())).thenReturn(List.of());
+        when(mealLogMapper.lastUsedByFood(eq(7L), anyList())).thenReturn(List.of());
         when(mealLogMapper.selectList(any())).thenReturn(List.of(
                 temp("糙米饭", "120", "200", today, 9),
                 temp("糙米饭", "130", "200", today, 8),
@@ -116,16 +117,17 @@ class MealPickServiceTest {
     }
 
     @Test
-    void recordCountOrdersFoodsAndTempsTogether() {
+    void lastUsedOrdersFoodsAndTempsTogether() {
         LocalDate today = LocalDate.now(FoodService.ZONE);
         when(foodService.searchForPicks(eq(7L), eq(null), anyInt()))
-                .thenReturn(List.of(food(1, "鸡胸肉", 7L), food(2, "苹果", null)));
-        when(mealLogMapper.countRecentByFood(eq(7L), any(), anyList()))
-                .thenReturn(List.of(Map.of("fid", 1L, "cnt", 5L), Map.of("fid", 2L, "cnt", 1L)));
+                .thenReturn(List.of(food(1, "鸡胸肉", 7L), food(2, "苹果", null), food(3, "香蕉", null)));
+        // 鸡胸肉三天前记过，苹果昨天记过（ADR 0064：只看最后一次，不看次数）；香蕉没记过
+        when(mealLogMapper.lastUsedByFood(eq(7L), anyList())).thenReturn(List.of(
+                Map.of("fid", 1L, "last", today.minusDays(3).atTime(9, 0)),
+                Map.of("fid", 2L, "last", java.sql.Timestamp.valueOf(today.minusDays(1).atTime(9, 0)))));
         when(mealLogMapper.selectList(any())).thenReturn(List.of(
-                temp("红烧肉", "300", "150", today, 9),
-                temp("红烧肉", "300", "150", today, 8)));
+                temp("红烧肉", "300", "150", today.minusDays(2), 9)));
 
-        assertEquals(List.of("鸡胸肉", "临时:红烧肉", "苹果"), names(service().picks(7L, null, 200)));
+        assertEquals(List.of("苹果", "临时:红烧肉", "鸡胸肉", "香蕉"), names(service().picks(7L, null, 200)));
     }
 }

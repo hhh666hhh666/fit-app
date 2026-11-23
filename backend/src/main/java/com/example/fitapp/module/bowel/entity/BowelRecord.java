@@ -29,6 +29,9 @@ public class BowelRecord {
     /** 布里斯托形态 1–7：只有大便可以填，选填。 */
     private Integer bristol;
 
+    /** 小便颜色 1–7：无色透明、浅黄、黄、深黄、琥珀、茶褐、红／粉；只有小便可以填，选填（ADR 0061 修订）。 */
+    private Integer color;
+
     private String note;
 
     private LocalDateTime createdAt;

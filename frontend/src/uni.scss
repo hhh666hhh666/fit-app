@@ -111,6 +111,28 @@ $bowel-stool: $meal-breakfast-fg;
 $bowel-stool-bg: $meal-breakfast-bg;
 $bowel-urine: $meal-lunch-fg;
 $bowel-urine-bg: $meal-lunch-bg;
+// 小便颜色七档的色块（ADR 0061 修订）：仿常见尿色卡，从无色透明到红／粉；只当色块用，不当字色
+$urine-1: #f4f6f3; // 无色透明（加描边才看得见）
+$urine-2: #f7efb4; // 浅黄
+$urine-3: #f2dc62; // 黄
+$urine-4: #e0b52c; // 深黄
+$urine-5: #c98a1e; // 琥珀
+$urine-6: #8a5a2b; // 茶褐
+$urine-7: #d98a8f; // 红／粉
+$urine-swatch-ring: rgba(30, 50, 80, 0.16); // 色块描边（浅色块在白底上要靠它显形）
+
+// ── 食物列表（ADR 0063）──
+// 生重／熟重小标签：生重浅绿（新鲜、生的），熟重暖褐（烤过、熟的）；暖褐比排便入口的灰褐更红一些，两者不撞
+$cook-raw-bg: #e9f3e4;
+$cook-raw-fg: #3d7a33;
+$cook-cooked-bg: #f6ecdf;
+$cook-cooked-fg: #9a6233;
+// 自定义食物：缩略图右下角的浅橙铅笔角标（借 PR 角标那套浅橙，不新造色）
+$food-custom-badge-bg: $accent-soft;
+$food-custom-badge-fg: $accent-strong;
+// 没有图片时缩略图位置的占位底
+$food-thumb-empty-bg: #f3efe9;
+$food-thumb-empty-fg: #b9a58c;
 
 // ── 形状 ──
 $radius-xs: 16rpx; // 8px，小 tag

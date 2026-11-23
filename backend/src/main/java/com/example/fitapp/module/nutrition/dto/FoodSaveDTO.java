@@ -200,4 +200,8 @@ public class FoodSaveDTO {
 
     @DecimalMin(value = "0.01", message = "份克重必须大于 0")
     private BigDecimal portionGrams;
+
+    /** 生重（raw）／熟重（cooked）／不标（null，ADR 0063）。 */
+    @Pattern(regexp = "raw|cooked", message = "生熟只能是生重或熟重")
+    private String cookState;
 }

@@ -205,6 +205,9 @@ const num = (v: number | null) => (v == null ? '—' : String(Number(v)))
           <template #default="{ row }">
             <span>{{ row.name }}</span>
             <el-tag v-if="row.imageKey" size="small" type="info" style="margin-left: 6px">有图</el-tag>
+            <el-tag v-if="row.cookState" size="small" :type="row.cookState === 'raw' ? 'success' : 'warning'" style="margin-left: 6px">
+              {{ row.cookState === 'raw' ? '生重' : '熟重' }}
+            </el-tag>
             <div v-if="row.aliases?.length" class="alias">也叫：{{ row.aliases.join('、') }}</div>
           </template>
         </el-table-column>

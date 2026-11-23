@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -60,6 +61,15 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class DietServiceTest {
+
+    /** 改时刻、清时刻走 lambda wrapper：单测里要先登记实体的表信息。 */
+    @org.junit.jupiter.api.BeforeAll
+    static void registerTableInfo() {
+        var assistant = new org.apache.ibatis.builder.MapperBuilderAssistant(
+                new com.baomidou.mybatisplus.core.MybatisConfiguration(), "");
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(assistant, MealLog.class);
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(assistant, WaterLog.class);
+    }
 
     @Mock
     private PresetHiddenService presetHiddenService;
@@ -576,5 +586,104 @@ class DietServiceTest {
         // 算不出消耗就不给缺口数字——不拿兜底值造一个看着精确的假数
         assertNull(vo.getGap());
         assertEquals("profile", vo.getEnergy().getMissing());
+    }
+
+    // ── 三餐一餐一个时刻、加餐按条、时刻可清除（ADR 0062）──
+
+    @Test
+    void addMeal_mainMealFollowsExistingMealTime() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLog existing = log("lunch", "米饭", "100", "116", "2.6", "25.9", "0.3");
+        existing.setEatenAt(java.time.LocalTime.of(12, 30));
+        when(mealLogMapper.selectOne(any())).thenReturn(existing);
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("lunch");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("100"));
+        dto.setTime("13:15");
+
+        MealItemVO item = service().addMeal(7L, dto);
+
+        assertEquals("12:30", item.getTime(), "午餐已有条目，新条目跟着整餐的时刻");
+    }
+
+    @Test
+    void addMeal_mainMealWithClearedTimeStaysWithoutTime() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        when(mealLogMapper.selectOne(any())).thenReturn(log("dinner", "米饭", "100", "116", "2.6", "25.9", "0.3"));
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("dinner");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("100"));
+        dto.setTime("19:00");
+
+        assertNull(service().addMeal(7L, dto).getTime(), "整餐清掉了时刻，新条目也没有");
+    }
+
+    @Test
+    void addMeal_snackUsesGivenTimeEvenWhenSnackHasEntries() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-10-12");
+        dto.setMeal("snack");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("100"));
+        dto.setTime("15:40");
+
+        assertEquals("15:40", service().addMeal(7L, dto).getTime());
+        verify(mealLogMapper, never()).selectOne(any());
+    }
+
+    @Test
+    void retime_snackIdsMustAllBeSnacks() {
+        MealLog a = log("snack", "苹果", "100", "52", "0.3", "14", "0.2");
+        a.setId(1L);
+        MealLog b = log("lunch", "米饭", "100", "116", "2.6", "25.9", "0.3");
+        b.setId(2L);
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(a, b));
+        com.example.fitapp.module.nutrition.dto.MealTimeDTO dto = new com.example.fitapp.module.nutrition.dto.MealTimeDTO();
+        dto.setMeal("snack");
+        dto.setIds(List.of(1L, 2L));
+        dto.setTime("10:00");
+
+        assertThrows(BusinessException.class, () -> service().retime(7L, dto));
+    }
+
+    @Test
+    void retime_mainMealUpdatesWholeMealAndNullClears() {
+        MealLog a = log("breakfast", "鸡蛋", "50", "144", "13", "1", "9");
+        a.setId(1L);
+        a.setEatenAt(java.time.LocalTime.of(8, 0));
+        MealLog b = log("breakfast", "牛奶", "250", "54", "3", "5", "3");
+        b.setId(2L);
+        b.setEatenAt(java.time.LocalTime.of(8, 0));
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(a, b));
+        com.example.fitapp.module.nutrition.dto.MealTimeDTO dto = new com.example.fitapp.module.nutrition.dto.MealTimeDTO();
+        dto.setMeal("breakfast");
+        dto.setDate("2026-10-12");
+
+        List<MealItemVO> out = service().retime(7L, dto);
+
+        assertEquals(2, out.size());
+        assertTrue(out.stream().allMatch(i -> i.getTime() == null), "time 不给＝整餐清除");
+        verify(mealLogMapper).update(isNull(), any());
+    }
+
+    @Test
+    void updateDrink_clearTimeSetsNull() {
+        com.example.fitapp.module.nutrition.entity.WaterLog w = new com.example.fitapp.module.nutrition.entity.WaterLog();
+        w.setId(4L);
+        w.setUserId(7L);
+        w.setMl(250);
+        w.setLogDate(java.time.LocalDate.of(2026, 10, 12));
+        w.setDrunkAt(java.time.LocalTime.of(9, 30));
+        when(waterLogMapper.selectById(4L)).thenReturn(w);
+        com.example.fitapp.module.nutrition.dto.WaterDrinkDTO dto = new com.example.fitapp.module.nutrition.dto.WaterDrinkDTO();
+        dto.setClearTime(true);
+
+        assertNull(service().updateDrink(7L, 4L, dto).getTime());
+        verify(waterLogMapper).update(isNull(), any());
     }
 }

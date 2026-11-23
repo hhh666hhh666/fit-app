@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
+import { COOK_STATE_LABEL, setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
 import { fetchFoodImage } from '@/utils/photo'
@@ -55,7 +55,7 @@ async function load() {
 
 const preset = computed(() => food.value?.preset === true)
 const archived = computed(() => preset.value && food.value?.archived === true)
-/** 底栏：自建食物＝删除 / 编辑；已下架的预置＝删除 / 复制一份；上架的预置没有底栏。 */
+/** 底栏：自定义食物＝删除 / 编辑；已下架的预置＝删除 / 复制一份；上架的预置没有底栏。 */
 const hasBar = computed(() => !!food.value && (!preset.value || archived.value))
 const starred = computed(() => (food.value?.name ?? '').endsWith('*'))
 const favorited = computed(() => food.value?.favorite === true)
@@ -194,14 +194,18 @@ function doDelete() {
         <view class="glass">
           <view class="fd__name-row">
             <text class="fd__name">{{ food.name }}</text>
-            <text v-if="preset" class="fd__badge">预设</text>
+            <text v-if="food.cookState" class="fd__badge" :class="'fd__badge--' + food.cookState">
+              {{ COOK_STATE_LABEL[food.cookState] }}
+            </text>
             <text v-if="archived" class="fd__badge">已下架</text>
           </view>
+          <!-- 来源（ADR 0063）：列表里预置不标、自定义挂角标，这里写明 -->
+          <text class="fd__meta">来源：{{ preset ? '系统预置（只读）' : '自定义' }}</text>
           <text v-if="aliasText" class="fd__meta">也叫：{{ aliasText }}</text>
           <text v-if="food.category" class="fd__meta">{{ food.category }}</text>
           <text class="fd__meta">以下数值均为每 100{{ food.unit === 'ml' ? 'ml' : 'g' }}</text>
           <text v-if="starred" class="fd__meta">营养数据来自公开资料补全，供参考</text>
-          <text v-if="archived" class="fd__meta">这条预设已经下架，只有记录过它的人还看得到；可以复制一份留给自己，或者删掉不再显示</text>
+          <text v-if="archived" class="fd__meta">这条预置已经下架，只有记录过它的人还看得到；可以复制一份留给自己，或者删掉不再显示</text>
         </view>
 
         <!-- 主要营养（4+1，固定显示） -->
@@ -245,7 +249,7 @@ function doDelete() {
       </view>
     </view>
 
-    <!-- 底部操作（自建食物：编辑 / 删除；已下架的预设：复制一份 / 删除）：和会话页汇总条同一款悬浮胶囊 -->
+    <!-- 底部操作（自定义食物：编辑 / 删除；已下架的预置：复制一份 / 删除）：和会话页汇总条同一款悬浮胶囊 -->
     <view v-if="hasBar" class="fd__bar">
       <view class="fd__del" role="button" @click="doDelete">删除</view>
       <FtButton v-if="archived" variant="primary" class="fd__edit" @click="doCopy">复制一份</FtButton>
@@ -322,6 +326,16 @@ function doDelete() {
   background: $app-surface-2;
   font-size: $text-xs;
   color: $app-ink-muted;
+}
+
+.fd__badge--raw {
+  background: $cook-raw-bg;
+  color: $cook-raw-fg;
+}
+
+.fd__badge--cooked {
+  background: $cook-cooked-bg;
+  color: $cook-cooked-fg;
 }
 
 .fd__meta {

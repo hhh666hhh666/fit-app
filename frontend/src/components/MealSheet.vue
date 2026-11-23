@@ -6,6 +6,9 @@ import {
   addMealsBatch,
   deleteMeal,
   getDay,
+  getFood,
+  isMainMeal,
+  retimeMeals,
   listCombos,
   listMealPicks,
   updateMeal,
@@ -26,13 +29,20 @@ import { choosePhoto, compress, deletePhoto, fetchMealPhoto, pickAndUploadPhotos
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import { useDietStore } from '@/stores/diet'
 import ComboEditSheet from '@/components/ComboEditSheet.vue'
-import FoodThumb from '@/components/FoodThumb.vue'
+import FoodRow from '@/components/FoodRow.vue'
 import RecognizeHint from '@/components/RecognizeHint.vue'
-import { matchedAlias } from '@/utils/food-match'
 import FtIcon from '@/components/FtIcon.vue'
-import { useBackClose } from '@/utils/backStack'
+import { useBackClose, useBackWhile } from '@/utils/backStack'
 import { ask, askInput, TRASH_HINT } from '@/utils/confirm'
-import { byTime, defaultEntryTime, TIME_RE } from '@/utils/diet'
+import {
+  amountHint,
+  amountToGrams,
+  byTime,
+  defaultEntryTime,
+  TIME_RE,
+  trim2,
+  type AmountMode
+} from '@/utils/diet'
 
 // ── 记录弹层：某餐的条目列表 ＋ 选食物/份量 ＋ 拍照（首页卡与「饮食」页共用；v-if 挂载）──
 
@@ -82,22 +92,105 @@ interface Choice {
   temp?: TempPick
 }
 const selected = ref<Choice | null>(null)
+/** 份量输入框里的文字：按份时是份数，按 g 时是克数（ADR 0063）。 */
 const grams = ref('')
+const amountMode = ref<AmountMode>('gram')
+const addHint = computed(() =>
+  selected.value ? amountHint(grams.value, amountMode.value, selected.value.portionGrams, unitText(selected.value)) : ''
+)
 
 /** 这一次加进来的条目共用的时刻（ADR 0059）：今天默认现在的钟点，补记按餐次；顶部可改。 */
 const entryTime = ref(defaultEntryTime(props.date, props.meal))
-function onTimePick(e: { detail: { value: string } }) {
-  entryTime.value = e.detail.value
+/** 早午晚三餐一餐一个时刻（ADR 0062）：已有条目时顶部显示、改的是整餐的时刻；加餐按条记。 */
+const mainMeal = isMainMeal(props.meal)
+/** 三餐已经有条目：顶部时刻＝整餐的时刻（可能被清掉了，为 null）。 */
+const mealHasTime = computed(() => mainMeal && items.value.length > 0)
+const mealTime = computed(() => (mealHasTime.value ? (items.value[0]?.time ?? null) : null))
+const headerTime = computed(() => (mealHasTime.value ? mealTime.value : entryTime.value))
+async function onTimePick(e: { detail: { value: string } }) {
+  const v = e.detail.value
+  if (!mealHasTime.value) {
+    entryTime.value = v
+    return
+  }
+  if (v === mealTime.value) return
+  await setMealTime(v)
+}
+/** 三餐整餐改时刻或清除（null）。 */
+async function setMealTime(time: string | null) {
+  try {
+    const updated = await retimeMeals({ meal: props.meal, date: props.date, time })
+    applyUpdated(updated)
+    if (time) entryTime.value = time
+    emit('changed')
+  } catch {
+    // request 层已统一提示
+  }
+}
+function clearMealTime() {
+  void ask({ title: '清除这一餐的时刻？', content: '这一餐的条目都不再有时刻。', confirmText: '清除' }).then((ok) => {
+    if (ok) void setMealTime(null)
+  })
+}
+/** 服务端返回的条目替换掉本地的同 id 条目。 */
+function applyUpdated(updated: MealItem[]) {
+  const byId = new Map(updated.map((u) => [u.id, u]))
+  items.value = items.value.map((x) => byId.get(x.id) ?? x)
 }
 /** 本餐条目按时刻排（没有时刻的老条目在后）。 */
 const sortedItems = computed(() => [...items.value].sort(byTime))
 
+// ── 加餐多选：长按进入，批量改时刻或清除（ADR 0062）──
+const selectMode = ref(false)
+const picked = ref<Set<number>>(new Set())
+useBackWhile(selectMode, exitSelect)
+function exitSelect() {
+  selectMode.value = false
+  picked.value = new Set()
+}
+function onItemLongPress(it: MealItem) {
+  if (mainMeal || selectMode.value || editingId.value != null) return
+  selectMode.value = true
+  picked.value = new Set([it.id])
+}
+function togglePicked(id: number) {
+  const s = new Set(picked.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  picked.value = s
+}
+async function batchRetime(clear: boolean) {
+  const ids = [...picked.value]
+  if (ids.length === 0) return
+  let time: string | null = null
+  if (!clear) {
+    const t = await askInput({ title: `这 ${ids.length} 条几点吃的（时:分）`, value: entryTime.value, placeholder: '如 15:30', confirmText: '保存' })
+    if (t == null) return
+    time = t.replace('：', ':')
+    if (!TIME_RE.test(time)) {
+      uni.showToast({ title: '时刻写成 15:30 这样', icon: 'none' })
+      return
+    }
+  }
+  try {
+    applyUpdated(await retimeMeals({ meal: props.meal, ids, time }))
+    exitSelect()
+    uni.showToast({ title: clear ? '已清除时刻' : '已改时刻', icon: 'none' })
+    emit('changed')
+  } catch {
+    // request 层已统一提示
+  }
+}
+
 const pickKey = (p: MealPick) =>
   p.type === 'food' ? `f${p.food.id}` : `t${p.temp.name}|${p.temp.kcal}|${p.temp.protein}|${p.temp.fat}|${p.temp.carb}|${p.temp.sodium ?? ''}`
 
-// ── 改份量（行内） ──
+// ── 改份量（行内）：有常用份的食物可以按份改（ADR 0063）──
 const editingId = ref<number | null>(null)
 const editGrams = ref('')
+const editMode = ref<AmountMode>('gram')
+/** 正在改的这一条，来源食物现在的一份多少（没有常用份或是临时条目为 null）。 */
+const editPortion = ref<{ grams: number; unit: string } | null>(null)
 
 // ── 食物组合：横滑条「整份加入」＋ 「把这一餐存为组合」 ──
 const combos = ref<FoodComboVO[]>([])
@@ -334,20 +427,43 @@ function selectPick(p: MealPick) {
       portionLabel: f.portionLabel,
       foodId: f.id
     }
-    // 默认份量：有常用份按 1 份，否则 100（g / ml）
-    grams.value = String(f.portionGrams ?? 100)
+    // 默认份量：有常用份按份、1 份；否则按 g、100（ADR 0063）
+    if (f.portionGrams && f.portionGrams > 0) {
+      amountMode.value = 'portion'
+      grams.value = '1'
+    } else {
+      amountMode.value = 'gram'
+      grams.value = '100'
+    }
   } else {
     const t = p.temp
     selected.value = { name: t.name, unit: 'g', kcal: t.kcal, protein: t.protein, temp: t }
     // 临时条目：默认上次的份量
+    amountMode.value = 'gram'
     grams.value = String(t.grams)
   }
 }
 
-function usePortion(n: number) {
+/** 「份 / g」切换：把已填的数换成另一种单位，总量不变。 */
+function switchAmount(next: AmountMode, portionGrams: number | null | undefined, value: { v: string }) {
+  if (!portionGrams || portionGrams <= 0) return
+  const g = amountToGrams(value.v, next === 'portion' ? 'gram' : 'portion', portionGrams)
+  if (g != null) value.v = next === 'portion' ? trim2(g / portionGrams) : trim2(g)
+}
+
+function setAmountMode(next: AmountMode) {
   const f = selected.value
-  if (!f || !f.portionGrams) return
-  grams.value = String(Number((f.portionGrams * n).toFixed(2)))
+  if (!f || amountMode.value === next) return
+  const box = { v: grams.value }
+  switchAmount(next, f.portionGrams, box)
+  grams.value = box.v
+  amountMode.value = next
+}
+
+/** 点食物行：食物库的进详情页（只看，返回还在这一层）；临时条目没有详情页，等于点「+」。 */
+function openPick(p: MealPick) {
+  if (p.type === 'food') uni.navigateTo({ url: `/pages/food-detail/index?id=${p.food.id}` })
+  else selectPick(p)
 }
 
 function cancelSelect() {
@@ -358,8 +474,8 @@ function cancelSelect() {
 async function confirmAdd() {
   const f = selected.value
   if (!f || saving.value) return
-  const g = Number(grams.value)
-  if (!Number.isFinite(g) || g <= 0) {
+  const g = amountToGrams(grams.value, amountMode.value, f.portionGrams)
+  if (g == null) {
     uni.showToast({ title: '份量要大于 0', icon: 'none' })
     return
   }
@@ -776,19 +892,31 @@ async function confirmTmp() {
 // ── 条目操作：点行 → 修改份量 / 删除 ──
 
 function onItemTap(it: MealItem) {
+  if (selectMode.value) {
+    togglePicked(it.id)
+    return
+  }
   // 正在改这一条的份量：点的是行里的输入框，别再弹一次菜单（菜单会被键盘顶上去、正好盖住数字）
   if (editingId.value === it.id) return
+  // 三餐的时刻在顶部整餐改（ADR 0062），条目菜单里没有；加餐按条改、可清除
   // 临时条目多一项「改名」（scope #48）；从食物库记的条目名字是食物的快照，不能改
-  const actions = it.temporary ? ['修改份量', '修改时刻', '改名', '删除'] : ['修改份量', '修改时刻', '删除']
+  const actions = ['修改份量']
+  if (!mainMeal) {
+    actions.push('修改时刻')
+    if (it.time) actions.push('清除时刻')
+  }
+  if (it.temporary) actions.push('改名')
+  actions.push('删除')
   uni.showActionSheet({
     itemList: actions,
     success: ({ tapIndex }) => {
       const a = actions[tapIndex]
       if (a === '修改份量') {
-        editingId.value = it.id
-        editGrams.value = String(it.grams)
+        void startEdit(it)
       } else if (a === '修改时刻') {
         void retimeItem(it)
+      } else if (a === '清除时刻') {
+        void clearItemTime(it)
       } else if (a === '改名') {
         void renameItem(it)
       } else if (a === '删除') {
@@ -809,11 +937,43 @@ function revealEdit() {
   }, 300)
 }
 
+/** 开始改份量：来源食物有常用份就默认按份（份数＝克数÷一份），否则按 g。 */
+async function startEdit(it: MealItem) {
+  editPortion.value = null
+  editMode.value = 'gram'
+  editGrams.value = String(it.grams)
+  if (it.foodId != null) {
+    try {
+      const f = await getFood(it.foodId)
+      if (f.portionGrams && f.portionGrams > 0) {
+        editPortion.value = { grams: Number(f.portionGrams), unit: f.unit === 'ml' ? 'ml' : 'g' }
+        editMode.value = 'portion'
+        editGrams.value = trim2(Number(it.grams) / Number(f.portionGrams))
+      }
+    } catch {
+      // 来源食物取不到（被删了）：照旧按克改
+    }
+  }
+  editingId.value = it.id
+}
+
+function setEditMode(next: AmountMode) {
+  if (editMode.value === next || !editPortion.value) return
+  const box = { v: editGrams.value }
+  switchAmount(next, editPortion.value.grams, box)
+  editGrams.value = box.v
+  editMode.value = next
+}
+
+const editHint = computed(() =>
+  editPortion.value ? amountHint(editGrams.value, editMode.value, editPortion.value.grams, editPortion.value.unit) : ''
+)
+
 async function confirmEdit() {
   const id = editingId.value
   if (id == null || saving.value) return
-  const g = Number(editGrams.value)
-  if (!Number.isFinite(g) || g <= 0) {
+  const g = amountToGrams(editGrams.value, editMode.value, editPortion.value?.grams)
+  if (g == null) {
     uni.showToast({ title: '份量要大于 0', icon: 'none' })
     return
   }
@@ -843,6 +1003,16 @@ async function retimeItem(it: MealItem) {
     const updated = await updateMeal(it.id, { time: v })
     const idx = items.value.findIndex((x) => x.id === it.id)
     if (idx >= 0) items.value[idx] = updated
+    emit('changed')
+  } catch {
+    // request 层已统一提示
+  }
+}
+
+async function clearItemTime(it: MealItem) {
+  try {
+    const updated = await updateMeal(it.id, { clearTime: true })
+    applyUpdated([updated])
     emit('changed')
   } catch {
     // request 层已统一提示
@@ -908,13 +1078,16 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
         </view>
         <text class="ms__title">{{ MEAL_LABEL[meal] }}</text>
         <text class="ms__date ft-num">{{ date }}</text>
-        <!-- 这一次加进来的条目记在哪个时刻（ADR 0059） -->
-        <picker mode="time" :value="entryTime" @change="onTimePick">
-          <view class="ms__time ft-num" role="button" aria-label="改时刻">
+        <!-- 加餐：这一次加进来的条目记在哪个时刻（ADR 0059）；三餐有条目后是整餐的时刻，改了整餐一起改（ADR 0062） -->
+        <picker mode="time" :value="headerTime ?? entryTime" @change="onTimePick">
+          <view class="ms__time ft-num" role="button" :aria-label="mealHasTime ? '改这一餐的时刻' : '改时刻'">
             <FtIcon name="clock" :size="14" :stroke="2" />
-            <text>{{ entryTime }}</text>
+            <text>{{ headerTime ?? '无时刻' }}</text>
           </view>
         </picker>
+        <view v-if="mealHasTime && mealTime" class="ms__time-clear" role="button" aria-label="清除这一餐的时刻" @click="clearMealTime">
+          <FtIcon name="close" :size="12" :stroke="2.2" />
+        </view>
         <view class="ms__close" role="button" aria-label="关闭" @click="emit('close')">
           <FtIcon name="close" :size="18" :stroke="2" />
         </view>
@@ -1056,15 +1229,14 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                 {{ selected.protein }}g
               </view>
               <view class="pick__row">
-                <view v-if="selected.portionGrams" class="pick__portions">
-                  <text class="pick__portion" @click="usePortion(1)">
-                    {{ selected.portionLabel || '1份' }}
-                  </text>
-                  <text class="pick__portion ft-num" @click="usePortion(2)">×2</text>
-                </view>
                 <view class="pick__input">
                   <input v-model="grams" type="digit" class="pick__input-field ft-num" />
-                  <text class="pick__unit">{{ unitText(selected) }}</text>
+                  <!-- 有常用份才能按份（ADR 0063）：份数可以填 0.5、3 这样的任意数 -->
+                  <view v-if="selected.portionGrams" class="amt-seg">
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': amountMode === 'portion' }" @click="setAmountMode('portion')">份</text>
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': amountMode === 'gram' }" @click="setAmountMode('gram')">{{ unitText(selected) }}</text>
+                  </view>
+                  <text v-else class="pick__unit">{{ unitText(selected) }}</text>
                 </view>
                 <view
                   class="pick__btn"
@@ -1075,44 +1247,24 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                   添加
                 </view>
               </view>
+              <text v-if="selected.portionGrams" class="pick__hint ft-num">
+                一份 {{ trim2(Number(selected.portionGrams)) }}{{ unitText(selected) }}<text v-if="addHint"> · {{ addHint }}</text>
+              </text>
             </view>
 
-            <!-- 食物列表 -->
+            <!-- 食物列表：点「+」弹份量行记录，点行看详情（ADR 0063） -->
             <view v-else-if="!hintOpen" class="foods">
-              <view v-for="p in shownFoods" :key="pickKey(p)" class="frow" @click="selectPick(p)">
-                <template v-if="p.type === 'food'">
-                  <FoodThumb
-                    v-if="p.food.imageKey"
-                    :id="p.food.id"
-                    :image-key="p.food.imageKey"
-                    :size="40"
-                    class="frow__thumb"
-                  />
-                  <view class="frow__mid">
-                    <view class="frow__line">
-                      <text class="frow__name">{{ p.food.name }}</text>
-                      <text v-if="p.food.preset" class="frow__badge">预设</text>
-                      <text v-if="p.food.archived" class="frow__badge">已下架</text>
-                    </view>
-                    <text v-if="matchedAlias(p.food, keyword)" class="frow__alias">
-                      别名：{{ matchedAlias(p.food, keyword) }}
-                    </text>
-                    <text class="frow__sub ft-num">每100{{ unitText(p.food) }} · 蛋白 {{ p.food.protein }}g</text>
-                  </view>
-                  <text class="frow__kcal ft-num">{{ Math.round(p.food.kcal) }} 大卡</text>
-                </template>
-                <!-- 吃过的临时条目：照上次的营养再记一条，不进食物库（scope #48） -->
-                <template v-else>
-                  <view class="frow__mid">
-                    <view class="frow__line">
-                      <text class="frow__name">{{ p.temp.name }}</text>
-                      <text class="frow__badge">临时</text>
-                    </view>
-                    <text class="frow__sub ft-num">每100g · 蛋白 {{ p.temp.protein }}g · 上次 {{ p.temp.grams }}g</text>
-                  </view>
-                  <text class="frow__kcal ft-num">{{ Math.round(p.temp.kcal) }} 大卡</text>
-                </template>
-              </view>
+              <FoodRow
+                v-for="p in shownFoods"
+                :key="pickKey(p)"
+                class="foods__row"
+                :food="p.type === 'food' ? p.food : null"
+                :temp="p.type === 'temp' ? p.temp : null"
+                :keyword="keyword"
+                addable
+                @tap="openPick(p)"
+                @add="selectPick(p)"
+              />
               <view v-if="foods.length === 0" class="foods__empty">
                 没有找到匹配的食物——可去「食物库」新增，或点「AI 识别」拍一张
               </view>
@@ -1122,21 +1274,45 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
 
           <!-- 本餐条目 -->
           <view class="list">
-            <view class="list__head">
+            <view v-if="!selectMode" class="list__head">
               <text class="list__title">这一餐</text>
               <text class="list__sum ft-num">合计 {{ mealKcal }} 大卡</text>
             </view>
+            <!-- 加餐多选（长按进入）：批量改时刻或清除（ADR 0062） -->
+            <view v-else class="list__head list__head--sel">
+              <text class="list__title ft-num">已选 {{ picked.size }} 条</text>
+              <view class="selops">
+                <text class="selops__btn" :class="{ 'is-off': picked.size === 0 }" @click="batchRetime(false)">改时刻</text>
+                <text class="selops__btn" :class="{ 'is-off': picked.size === 0 }" @click="batchRetime(true)">清除时刻</text>
+                <text class="selops__btn selops__btn--quiet" @click="exitSelect">取消</text>
+              </view>
+            </view>
             <view v-if="items.length === 0" class="list__empty">还没有记录</view>
-            <view v-for="it in sortedItems" :key="it.id" class="irow" @click="onItemTap(it)">
+            <text v-else-if="!mainMeal && !selectMode && items.length > 1" class="list__tip">长按一条可以多选，批量改时刻</text>
+            <view
+              v-for="it in sortedItems"
+              :key="it.id"
+              class="irow"
+              @click="onItemTap(it)"
+              @longpress="onItemLongPress(it)"
+            >
+              <view v-if="selectMode" class="check" :class="{ 'check--on': picked.has(it.id) }">
+                <FtIcon v-if="picked.has(it.id)" name="check" :size="13" :stroke="2.4" tone="inverse" />
+              </view>
               <template v-if="editingId === it.id">
                 <text class="irow__name">{{ it.foodName }}</text>
                 <view class="irow__edit">
                   <input v-model="editGrams" type="digit" :focus="true" class="irow__edit-input ft-num" @focus="revealEdit" />
-                  <text class="irow__edit-unit">g</text>
+                  <view v-if="editPortion" class="amt-seg" @click.stop>
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': editMode === 'portion' }" @click="setEditMode('portion')">份</text>
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': editMode === 'gram' }" @click="setEditMode('gram')">{{ editPortion.unit }}</text>
+                  </view>
+                  <text v-else class="irow__edit-unit">g</text>
                   <view class="irow__ok" role="button" aria-label="保存份量" @click.stop="confirmEdit">
                     <FtIcon name="check" :size="16" :stroke="2.4" />
                   </view>
                 </view>
+                <text v-if="editHint" class="irow__edit-hint ft-num">{{ editHint }}</text>
               </template>
               <template v-else>
                 <view class="irow__mid">
@@ -1145,7 +1321,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                     <text v-if="it.temporary" class="frow__badge">临时</text>
                   </view>
                   <text class="irow__sub ft-num">
-                    {{ it.time ? it.time + ' · ' : '' }}{{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
+                    {{ !mainMeal && it.time ? it.time + ' · ' : '' }}{{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
                   </text>
                 </view>
                 <text class="irow__kcal ft-num">{{ Math.round(it.kcal) }} 大卡</text>
@@ -1290,6 +1466,18 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   background: $app-surface-2;
   font-size: $text-sm;
   color: $app-ink-2;
+}
+
+.ms__time-clear {
+  width: 40rpx;
+  height: 40rpx;
+  margin-left: 8rpx;
+  border-radius: 50%;
+  background: $app-surface-2;
+  color: $app-ink-muted;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ms__close {
@@ -1689,19 +1877,6 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   padding-top: 20rpx;
 }
 
-.pick__portions {
-  display: flex;
-  gap: 12rpx;
-}
-
-.pick__portion {
-  padding: 10rpx 20rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-sm;
-  color: $app-ink-2;
-}
-
 .pick__input {
   flex: 1;
   min-width: 0;
@@ -1746,8 +1921,36 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   opacity: 0.5;
 }
 
+.pick__hint {
+  display: block;
+  padding-top: 12rpx;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+/* 「份 / g」切换（ADR 0063）：挨着输入框，和 AI 识别草稿里的 g / ml 小分段同一个样子 */
+.amt-seg {
+  flex: none;
+  display: flex;
+  padding: 4rpx;
+  border-radius: $radius-pill;
+  background: $app-surface;
+}
+
+.amt-seg__opt {
+  padding: 6rpx 16rpx;
+  border-radius: $radius-pill;
+  font-size: $text-sm;
+  color: $app-ink-muted;
+}
+
+.amt-seg__opt--on {
+  background: $app-ink;
+  color: $app-surface;
+}
+
 .foods {
-  max-height: 420rpx;
+  max-height: 540rpx;
   overflow-y: auto;
   margin-top: 16rpx;
   padding: 0 24rpx;
@@ -1755,40 +1958,11 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   border-radius: $radius-lg;
 }
 
-.frow {
-  display: flex;
-  align-items: center;
-  padding: 22rpx 0;
-  @include press(dim);
-}
-
-.frow + .frow {
-  border-top: 1rpx solid $app-line-soft;
-}
-
-.frow__mid {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
 .frow__line {
   display: flex;
   align-items: center;
   gap: 10rpx;
   min-width: 0;
-}
-
-.frow__name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: $text-md;
-  color: $app-ink;
 }
 
 .frow__badge {
@@ -1800,28 +1974,8 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   color: $app-ink-muted;
 }
 
-.frow__sub {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-.frow__thumb {
-  margin-right: 16rpx;
-}
-
-.frow__alias {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
-
-.frow__kcal {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-  font-size: $text-sm;
-  color: $app-ink;
+.foods__row + .foods__row {
+  border-top: 1rpx solid $app-line-soft;
 }
 
 .foods__empty {
@@ -1857,6 +2011,60 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   color: $app-ink;
 }
 
+.list__head--sel {
+  align-items: center;
+}
+
+.selops {
+  display: flex;
+  gap: 12rpx;
+}
+
+.selops__btn {
+  padding: 8rpx 20rpx;
+  border-radius: $radius-pill;
+  background: $app-surface-2;
+  font-size: $text-sm;
+  color: $app-ink-2;
+  @include press(dim);
+}
+
+.selops__btn.is-off {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.selops__btn--quiet {
+  background: transparent;
+  color: $app-ink-muted;
+}
+
+.list__tip {
+  display: block;
+  padding-bottom: 8rpx;
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.check {
+  width: 40rpx;
+  height: 40rpx;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2rpx solid $app-line-dash;
+  background: $app-surface;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.check--on {
+  background: $app-ink;
+  border-color: $app-ink;
+}
+
 .list__empty {
   padding: 16rpx 0 24rpx;
   font-size: $text-sm;
@@ -1865,6 +2073,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
 
 .irow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   padding: 22rpx 0;
   border-top: 1rpx solid $app-line-soft;
@@ -1914,6 +2123,18 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   font-size: $text-md;
   font-weight: $weight-bold;
   color: $app-ink;
+}
+
+.irow__edit .amt-seg {
+  background: $app-surface-2;
+}
+
+.irow__edit-hint {
+  width: 100%;
+  padding-top: 8rpx;
+  text-align: right;
+  font-size: $text-xs;
+  color: $app-ink-muted;
 }
 
 .irow__edit-unit {

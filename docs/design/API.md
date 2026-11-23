@@ -69,13 +69,13 @@
 
 ## 排便记录接口
 
-`/api/bowel`（[ADR 0061](../adr/0061-bowel-record.md)）走登录态 JWT：`GET`（`limit`、`offset`，最近的在前）、`POST`（`kind` 为 `stool`／`urine`，`occurredAt` 不给就是现在，`bristol` 1–7 只对大便有效，`note` 最多 200 字）、`PUT /{id}`（时刻、形态、备注整体覆盖，`kind` 不给就不改）、`DELETE /{id}`（进回收站，类型 `bowel`）、`GET /stats?days=`（最近几天，含今天；`0` 从第一条记录起）：每天次数、两种各自的次数／平均每天／相邻两次的平均间隔（小时）／24 个钟点分布，以及大便形态 1–7 型的分布。外部 agent 的历史里多一组 `bowel`。
+`/api/bowel`（[ADR 0061](../adr/0061-bowel-record.md)）走登录态 JWT：`GET`（`limit`、`offset`，最近的在前）、`POST`（`kind` 为 `stool`／`urine`，`occurredAt` 不给就是现在，`bristol` 1–7 只对大便有效，`color` 1–7 只对小便有效，`note` 最多 200 字）、`PUT /{id}`（时刻、形态、备注整体覆盖，`kind` 不给就不改）、`DELETE /{id}`（进回收站，类型 `bowel`）、`GET /stats?days=`（最近几天，含今天；`0` 从第一条记录起）：每天次数、两种各自的次数／平均每天／相邻两次的平均间隔（小时）／24 个钟点分布，以及大便形态 1–7 型、小便颜色 1–7 档的分布（`bristol`、`color`）。外部 agent 的历史里多一组 `bowel`。
 
 ## 食物库接口
 
 `/api/foods`（[ADR 0056](../adr/0056-food-search-ranking-and-aliases.md)、[ADR 0057](../adr/0057-food-image.md)）走登录态 JWT，字段以接口文档运行时为准。有三处要注意：
 
-- **搜索与排序**：`q` 里的字按顺序出现在名字或别名里就算命中；`q` 全是字母时，名字或别名的拼音首字母连着包含它也算命中（`zr` → 猪肉，[ADR 0058](../adr/0058-food-search-two-tiers-and-pinyin-initials.md)）。排序由服务端决定（两档：完全一样／其余命中 → 收藏 → 本人近 30 天记录次数 → 自建优先 → 名称、id）。`GET /api/foods/count` 用同一个筛选条件。管理端列表的 `q` 同样认首字母。
+- **搜索与排序**：`q` 里的字按顺序出现在名字或别名里就算命中；`q` 全是字母时，名字或别名的拼音首字母连着包含它也算命中（`zr` → 猪肉，[ADR 0058](../adr/0058-food-search-two-tiers-and-pinyin-initials.md)）。排序由服务端决定（两档：完全一样／其余命中 → 收藏 → 本人最后一次记进餐里的时间 → 自定义优先 → 名称、id；[ADR 0064](../adr/0064-food-order-by-last-used.md)）。食物多一个 `cookState`（`raw`／`cooked`／null，[ADR 0063](../adr/0063-food-per100-truth-cook-state-and-list-row.md)），JSON 导入导出里叫 `cook_state`；标签识别（`POST /api/foods/recognize`）读到按份印的标签时，草稿顺带给 `portionGrams` 和 `portionLabel: "1份"`。`GET /api/foods/count` 用同一个筛选条件。管理端列表的 `q` 同样认首字母。
 - **别名**：新建和编辑都带 `aliases`（字符串数组，也收一个分隔好的串），服务端负责拆分、去重和校验（最多 10 个，每个不超过 16 字），编辑是整体覆盖，不给就清空。新建时可以带 `copyImageFrom`，把那条食物的图片复制过来（「复制为自定义」用）。
 - **图片**：`POST /api/foods/{id}/image`（multipart：`file` ＋ 可选 `x`、`y`、`size`，口径同头像）只收 JPEG/PNG，只限自建食物；`DELETE` 同路径去掉图片（不进回收站）；`GET /api/foods/{id}/image?kind=thumb|full` 直出二进制，没有图时返回 404。列表里的 `imageKey` 是图片版本号，换图就变。
 
@@ -83,9 +83,11 @@
 
 记一餐的 AI 识别（[ADR 0052](../adr/0052-meal-ai-recognition-temporary-entry.md)）：`POST /api/food-recognition/meal` 照片进、临时食物草稿出，不落库，营养是每 100、`grams` 是这一份的量（照片没估出重量时服务端兜底 100，并带 `gramsGuessed: true`——这时营养其实是整份总量）；`POST /api/diet/meals/custom` 记一条临时条目（营养按每 100 传，钠可空），条目的 `foodId` 为空。条目返回都多带 `sodium`，老条目为 `null`。
 
-临时条目的改名与复用（scope #48，2026-11-21）：条目多带 `temporary`（＝`foodId` 为空，含来源食物已删的条目）。`PUT /api/diet/meals/{id}` 改成「给了哪项改哪项」：`grams`、`name` 都可选，`name` 只有临时条目能改，否则 400。`GET /api/diet/picks?q=&limit=` 是记一餐弹层的列表：每行是 `{type: food, food}` 或 `{type: temp, temp}`，`temp` 是近 30 天吃过的一种临时条目（名字和每 100 营养一样的合成一种，带上次份量 `grams`、次数 `count`、最近日期 `lastDate`），和食物按同一套规则排好（两档 → 收藏 → 近 30 天次数 → 自建，临时条目算自建、不能收藏）。再记一条走 `POST /api/diet/meals/custom`。
+临时条目的改名与复用（scope #48，2026-11-21）：条目多带 `temporary`（＝`foodId` 为空，含来源食物已删的条目）。`PUT /api/diet/meals/{id}` 改成「给了哪项改哪项」：`grams`、`name` 都可选，`name` 只有临时条目能改，否则 400。`GET /api/diet/picks?q=&limit=` 是记一餐弹层的列表：每行是 `{type: food, food}` 或 `{type: temp, temp}`，`temp` 是近 30 天吃过的一种临时条目（名字和每 100 营养一样的合成一种，带上次份量 `grams`、次数 `count`、最近日期 `lastDate`），和食物按同一套规则排好（两档 → 收藏 → 最后一次记进餐里的时间 → 自定义，临时条目算自定义、不能收藏；[ADR 0064](../adr/0064-food-order-by-last-used.md)）。再记一条走 `POST /api/diet/meals/custom`。
 
 时刻与饮水明细（[ADR 0059](../adr/0059-water-per-drink-and-entry-time.md)，2026-11-21）：加条目的三个接口（`/meals`、`/meals/custom`、`/meals/batch`）和 `PUT /meals/{id}` 都收可选的 `time`（`HH:mm`）；不给时服务端兜底——记今天用北京时间的当前钟点，补记按餐次（早 8、午 12、晚 18，加餐用当前钟点）。前端一律自己带上本机时刻。条目返回带 `time`，当日总览的每餐带 `firstTime`，`items` 按时刻排。饮水改成一笔一笔：`POST /api/diet/water/drinks`（`date`、`ml`、可选 `time`）、`PUT`／`DELETE /api/diet/water/drinks/{id}`；当日总览的 `water.drinks` 是当天每一笔。老接口 `POST /api/diet/water {date, delta}` 仍在（首页卡用）：正数＝记一笔，负数＝撤掉当天最后记的那一笔，返回当天合计。
+
+三餐一餐一个时刻、时刻可清除（[ADR 0062](../adr/0062-main-meal-single-time-and-clearable-time.md)，2026-11-23）：往早午晚三餐加条目时，这一餐已有条目就跟着这一餐的时刻（传来的 `time` 不用），空的一餐才按 `time` 或默认规则。`PUT /api/diet/meals/time {meal, date?, ids?, time}` 改时刻：三餐给 `date`＋`meal` 整餐一起改，加餐给 `ids`（只能全是加餐条目，否则 400）；`time` 为 null＝清除；返回改过的条目。`PUT /meals/{id}` 与 `PUT /water/drinks/{id}` 多一个 `clearTime: true`；三餐条目改 `time` 或清除＝整餐一起。
 
 识别前的提示词与多轮纠正（[ADR 0060](../adr/0060-meal-recognition-hint-and-follow-up.md)，2026-11-21）：`POST /api/food-recognition` 与 `/meal` 都多收一个可选的 `hint`（拍照前的提示词，最多 500 字，接在 prompt 后面）。`/meal` 还收 `history`（JSON 串：前面的对话 `[{role, content}]`，`assistant` 是模型上一轮的原样输出、`user` 是主人的回复，交替、由 `assistant` 开头）和 `reply`（这一轮的回复）；有 `history` 就必须有 `reply`。照片每轮都重新上传，服务端不存照片也不存对话。草稿多带 `questions`（AI 拿不准的大白话问题，最多 5 条）、`output`（这一轮的原样输出，前端下一轮放进 `history`）与 `round`。每一轮单独记一条用量流水，带 `round` 与 `note`。
 

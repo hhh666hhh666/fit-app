@@ -10,7 +10,6 @@ import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public interface FoodMapper extends BaseMapper<Food> {
@@ -18,7 +17,8 @@ public interface FoodMapper extends BaseMapper<Food> {
     /**
      * 食物库列表与搜索（ADR 0056，分档改两档见 ADR 0058）。筛选条件由调用方放进 wrapper（可见范围、关键词），这里只管排序和分页：
      * ① 有关键词时先分两档：名字、名字方括号里的叫法、某个别名（见 FoodSearch.SEGMENTS）或某段拼音首字母完全一样的在前，
-     * 其余命中的在后 ② 收藏 ③ 这个用户从 since 起记过几次 ④ 自建排在预置前面 ⑤ 名称、id（分页稳定）。
+     * 其余命中的在后 ② 收藏 ③ 这个用户最后一次把它记进餐里的时间，新的在前（ADR 0064；没记过的排后面）
+     * ④ 自定义排在预置前面 ⑤ 名称、id（分页稳定）。
      * wrapper 里不要放 orderBy——ORDER BY 在这里写死。
      */
     @ResultMap("mybatis-plus_Food")
@@ -35,8 +35,8 @@ public interface FoodMapper extends BaseMapper<Food> {
               END,
             </if>
               food.favorite DESC,
-              (SELECT COUNT(*) FROM meal_log ml
-                WHERE ml.user_id = #{userId} AND ml.food_id = food.id AND ml.log_date &gt;= #{since}) DESC,
+              (SELECT MAX(ml.created_at) FROM meal_log ml
+                WHERE ml.user_id = #{userId} AND ml.food_id = food.id) DESC,
               (food.user_id IS NULL),
               food.name,
               food.id
@@ -46,7 +46,6 @@ public interface FoodMapper extends BaseMapper<Food> {
     List<Food> search(@Param(Constants.WRAPPER) Wrapper<Food> ew,
                       @Param("t") FoodSearch t,
                       @Param("userId") Long userId,
-                      @Param("since") LocalDate since,
                       @Param("offset") Integer offset,
                       @Param("limit") Integer limit);
 

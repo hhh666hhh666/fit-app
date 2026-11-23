@@ -63,3 +63,42 @@ export function byTime<T extends { time?: string | null }>(a: T, b: T): number {
   if (b.time) return 1
   return 0
 }
+
+// ── 食物列表与份量（ADR 0063）──
+
+/** 列表里三大营养素的克数：10 以上取整，不到 10 留一位小数（0.4g 写成 0 会误导）。 */
+export function macroGram(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '0'
+  return v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10)
+}
+
+/** 两位小数、去尾零。 */
+export function trim2(n: number): string {
+  return String(Math.round(n * 100) / 100)
+}
+
+/**
+ * 份量输入的「份 / g」两种单位（ADR 0063）：有常用份才能按份。
+ * 按份：填的是份数，总量＝份数×一份；按 g：填的是克数，合多少份＝克数÷一份。
+ */
+export type AmountMode = 'portion' | 'gram'
+
+/** 把输入换成克数；输入不是正数时为 null。 */
+export function amountToGrams(raw: string, mode: AmountMode, portionGrams: number | null | undefined): number | null {
+  const n = Number(raw.trim())
+  if (!raw.trim() || !Number.isFinite(n) || n <= 0) return null
+  if (mode === 'portion') return portionGrams && portionGrams > 0 ? Math.round(n * portionGrams * 100) / 100 : null
+  return n
+}
+
+/** 输入框下的小字：按份时写总量，按 g 时写合几份；没有常用份或输入无效时为空。 */
+export function amountHint(
+  raw: string,
+  mode: AmountMode,
+  portionGrams: number | null | undefined,
+  unit: string
+): string {
+  const g = amountToGrams(raw, mode, portionGrams)
+  if (g == null || !portionGrams || portionGrams <= 0) return ''
+  return mode === 'portion' ? `共 ${trim2(g)}${unit}` : `约 ${trim2(g / portionGrams)} 份`
+}

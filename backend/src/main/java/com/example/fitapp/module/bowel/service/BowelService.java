@@ -72,6 +72,7 @@ public class BowelService {
                 .set(BowelRecord::getKind, r.getKind())
                 .set(BowelRecord::getOccurredAt, r.getOccurredAt())
                 .set(BowelRecord::getBristol, r.getBristol())
+                .set(BowelRecord::getColor, r.getColor())
                 .set(BowelRecord::getNote, r.getNote()));
         return r;
     }
@@ -89,6 +90,7 @@ public class BowelService {
         r.setOccurredAt(dto.getOccurredAt() == null ? null : dto.getOccurredAt().truncatedTo(ChronoUnit.MINUTES));
         // 形态只对大便有意义：小便给了也清掉
         r.setBristol(BowelRecord.STOOL.equals(r.getKind()) ? dto.getBristol() : null);
+        r.setColor(BowelRecord.URINE.equals(r.getKind()) ? dto.getColor() : null);
         String note = dto.getNote() == null ? null : dto.getNote().strip();
         r.setNote(note == null || note.isEmpty() ? null : note);
     }
@@ -163,6 +165,9 @@ public class BowelService {
                 lastStool = r.getOccurredAt();
             } else {
                 if (day != null) day.setUrine(day.getUrine() + 1);
+                if (r.getColor() != null && r.getColor() >= 1 && r.getColor() <= 7) {
+                    vo.getColor()[r.getColor() - 1]++;
+                }
                 if (lastUrine != null) {
                     urineGapMinutes += Duration.between(lastUrine, r.getOccurredAt()).toMinutes();
                     urineGaps++;

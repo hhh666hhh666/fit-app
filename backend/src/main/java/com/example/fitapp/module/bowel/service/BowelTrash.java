@@ -31,10 +31,16 @@ public class BowelTrash implements TrashHandler {
         return null;
     }
 
+    /** 小便颜色 1–7 的叫法，和 App 的选项一致。 */
+    static final String[] URINE_COLORS = {"无色透明", "浅黄", "黄", "深黄", "琥珀", "茶褐", "红／粉"};
+
     static String summary(BowelRecord r) {
         String s = BowelRecord.STOOL.equals(r.getKind()) ? "大便" : "小便";
         if (r.getBristol() != null) {
             s += " · " + r.getBristol() + " 型";
+        }
+        if (r.getColor() != null && r.getColor() >= 1 && r.getColor() <= URINE_COLORS.length) {
+            s += " · " + URINE_COLORS[r.getColor() - 1];
         }
         if (r.getNote() != null && !r.getNote().isBlank()) {
             s += " · " + r.getNote();
