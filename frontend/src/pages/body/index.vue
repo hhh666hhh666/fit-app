@@ -1360,6 +1360,7 @@ function fatText(v: number | null | undefined): string {
 
 /* ── 底部 ── */
 .bodypg__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

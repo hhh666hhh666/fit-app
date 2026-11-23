@@ -168,6 +168,10 @@ jobs:
             APP_VERSION=${{ needs.version.outputs.image_tag }}
           tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/fit-app-server:${{ needs.version.outputs.image_tag }}
 
+      # App 内更新日志（ADR 0068）读 CHANGELOG.md，而前端镜像的构建上下文只有 frontend/：先拷进去
+      - name: 把更新日志放进前端构建上下文
+        run: cp CHANGELOG.md frontend/CHANGELOG.md
+
       - name: 构建并推前端镜像
         uses: docker/build-push-action@v6
         with:

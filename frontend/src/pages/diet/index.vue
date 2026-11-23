@@ -19,12 +19,14 @@ import FtPageHeader from '@/components/FtPageHeader.vue'
 import FtSheet from '@/components/FtSheet.vue'
 import FtTrendChart from '@/components/FtTrendChart.vue'
 import MealSheet from '@/components/MealSheet.vue'
+import EatCountBar from '@/components/EatCountBar.vue'
 import { useDietStore } from '@/stores/diet'
 import { buildNutrientBars, TIME_RE } from '@/utils/diet'
 import { askInput } from '@/utils/confirm'
 import { formatThousands, nowTime } from '@/utils/format'
 import { activityLabel, gapText, sexLabel } from '@/utils/energy'
 import { ensureLogin } from '@/utils/guard'
+import { openEatCount } from '@/utils/eatCount'
 
 // ── 全屏「饮食」页：记录（今日 / 按天翻看）＋ 趋势（五指标切换）──
 
@@ -60,6 +62,22 @@ const TABS: { key: 'log' | 'trend'; label: string }[] = [
 const dateStr = ref(todayStr)
 const overview = ref<DayOverview | null>(null)
 const sheetMeal = ref<MealKey | null>(null)
+
+/** 长按一餐＝进这一餐的边吃边数（ADR 0067）；它只记今天。长按之后松手的 click 不再开弹层。 */
+let longPressed = false
+function onMealLongPress(meal: MealKey) {
+  longPressed = true
+  setTimeout(() => (longPressed = false), 600)
+  if (!isToday.value) {
+    uni.showToast({ title: '边吃边数只记今天', icon: 'none' })
+    return
+  }
+  openEatCount(meal)
+}
+function onMealTap(meal: MealKey) {
+  if (longPressed) return
+  sheetMeal.value = meal
+}
 
 const trend = ref<TrendPoint[]>([])
 const metric = ref<Metric>('kcal')
@@ -379,6 +397,7 @@ const fullHeight = computed(() => {
 
       <!-- ── 记录 ── -->
       <template v-if="tab === 'log'">
+        <EatCountBar />
         <view class="datebar">
           <view class="datebar__pill">
             <view class="datebar__arrow" role="button" aria-label="前一天" @click="shiftDate(-1)">
@@ -434,7 +453,14 @@ const fullHeight = computed(() => {
 
         <!-- 四餐 -->
         <view class="glass meals">
-          <view v-for="r in mealRows" :key="r.key" class="meal" role="button" @click="sheetMeal = r.key">
+          <view
+            v-for="r in mealRows"
+            :key="r.key"
+            class="meal"
+            role="button"
+            @click="onMealTap(r.key)"
+            @longpress="onMealLongPress(r.key)"
+          >
             <view class="meal__ico" :class="'meal__ico--' + r.key">
               <FtIcon :name="r.key" :size="20" />
             </view>

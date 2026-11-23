@@ -26,6 +26,12 @@ public class MealItemVO {
 
     /** 实际摄入量（克；ml 单位食物为毫升）。 */
     private BigDecimal grams;
+    /** 按份记时的单位与一份多少 g（ADR 0066）；按克记为 null。 */
+    private String portionUnit;
+    private BigDecimal portionGrams;
+    /** 来源食物现在的图片版本号与生熟（ADR 0066：条目行和食物列表同一种行）；没有来源食物为 null。 */
+    private String imageKey;
+    private String cookState;
 
     private BigDecimal kcal;
 

@@ -9,6 +9,21 @@ const PKG = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8')
 ) as { version: string }
 
+// App 内更新日志（ADR 0068）：仓根 CHANGELOG.md 是唯一内容源，构建时整份打进去。
+// 镜像构建的上下文只有 frontend/，发版流水线先把它拷成 frontend/CHANGELOG.md（已 gitignore）；
+// 本地开发直接读仓根那份。两处都读不到就是空的，App 里不显示更新日志。
+function readChangelog(): string {
+  for (const rel of ['./CHANGELOG.md', '../CHANGELOG.md']) {
+    try {
+      return readFileSync(new URL(rel, import.meta.url), 'utf8')
+    } catch {
+      // 换下一处
+    }
+  }
+  return ''
+}
+const CHANGELOG = readChangelog()
+
 // ⚠️ @dcloudio/vite-plugin-uni 是 CJS 包，工厂函数挂在 exports.default 上（带 __esModule）。
 // 本项目 package.json 有 "type": "module"，配置文件以原生 ESM 加载，此时默认导入拿到的是
 // module.exports 整个对象而不是那个函数，uni() 会直接报 "uni is not a function"。
@@ -22,7 +37,8 @@ export default defineConfig({
   plugins: [uni()],
   define: {
     // 只给 `api/cache.ts` 用；读取处用 typeof 兜底，构建期没注入也不会抛 ReferenceError
-    __APP_VERSION__: JSON.stringify(PKG.version)
+    __APP_VERSION__: JSON.stringify(PKG.version),
+    __CHANGELOG__: JSON.stringify(CHANGELOG)
   },
   css: {
     preprocessorOptions: {

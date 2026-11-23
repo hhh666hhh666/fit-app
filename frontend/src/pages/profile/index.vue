@@ -15,6 +15,7 @@ import { formatBytes, formatDateTimeLabel, formatThousands } from '@/utils/forma
 import { ensureLogin } from '@/utils/guard'
 import FtTabPage from '@/components/FtTabPage.vue'
 import FtListRow from '@/components/FtListRow.vue'
+import { APP_VERSION } from '@/utils/changelog'
 import FtIcon from '@/components/FtIcon.vue'
 import { useTabPage } from '@/utils/tab-page'
 
@@ -230,6 +231,10 @@ function goRecognitionLogs() {
   uni.navigateTo({ url: '/pages/recognition-log/index' })
 }
 
+function goChangelog() {
+  uni.navigateTo({ url: '/pages/changelog/index' })
+}
+
 function goAgent() {
   uni.navigateTo({ url: '/pages/agent/index' })
 }
@@ -328,6 +333,11 @@ function goAgent() {
           </view>
         </view>
         <text class="storage__hint">让自己的 agent 只读拉取数据做分析；点开管理令牌、看接口文档</text>
+      </view>
+
+      <!-- 更新日志（ADR 0068）：右边是当前版本 -->
+      <view class="glass entries">
+        <FtListRow title="更新日志" :value="APP_VERSION === 'dev' ? '开发版' : `v${APP_VERSION}`" arrow @click="goChangelog" />
       </view>
     </view>
   </FtTabPage>

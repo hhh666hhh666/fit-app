@@ -9,4 +9,7 @@ public class AccountVO {
     private String username;
     private String nickname;
     private Long avatarId;
+
+    /** 是不是管理员（ADR 0048）；App 里只拿它决定更新日志里显示不显示开发细节（ADR 0068）。 */
+    private boolean admin;
 }

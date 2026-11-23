@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.example.fitapp.module.nutrition.entity.Food;
 import com.example.fitapp.module.nutrition.entity.MealLog;
+import com.example.fitapp.module.nutrition.dto.PickHideDTO;
+import com.example.fitapp.module.nutrition.entity.MealPickHidden;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
+import com.example.fitapp.module.nutrition.mapper.MealPickHiddenMapper;
 import com.example.fitapp.module.nutrition.vo.MealPickVO;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** 记一餐列表：食物和临时条目按同一套规则排在一起（scope #48）。 */
@@ -33,6 +37,7 @@ class MealPickServiceTest {
     @BeforeAll
     static void registerTableInfo() {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), MealLog.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), MealPickHidden.class);
     }
 
     @Mock
@@ -41,9 +46,12 @@ class MealPickServiceTest {
     @Mock
     private MealLogMapper mealLogMapper;
 
+    @Mock
+    private MealPickHiddenMapper hiddenMapper;
+
     private MealPickService service() {
         lenient().when(foodService.toLite(any())).thenAnswer(inv -> inv.getArgument(0));
-        return new MealPickService(foodService, mealLogMapper);
+        return new MealPickService(foodService, mealLogMapper, hiddenMapper);
     }
 
     private static Food food(long id, String name, Long userId) {
@@ -129,5 +137,45 @@ class MealPickServiceTest {
                 temp("红烧肉", "300", "150", today.minusDays(2), 9)));
 
         assertEquals(List.of("苹果", "临时:红烧肉", "鸡胸肉", "香蕉"), names(service().picks(7L, null, 200)));
+    }
+
+    private static MealPickHidden hidden(String key, java.time.LocalDateTime at) {
+        MealPickHidden h = new MealPickHidden();
+        h.setPickKey(key);
+        h.setHiddenAt(at);
+        return h;
+    }
+
+    @Test
+    void hiddenTempDisappearsUntilEatenAgain() {
+        LocalDate today = LocalDate.now(FoodService.ZONE);
+        MealLog old = temp("红烧肉", "300", "150", today.minusDays(2), 9);
+        MealLog other = temp("鸡蛋羹", "80", "100", today.minusDays(1), 8);
+        when(foodService.searchForPicks(eq(7L), eq(null), anyInt())).thenReturn(List.of());
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(old, other));
+        String key = MealPickService.keyOf("红烧肉", new BigDecimal("300"), BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE, null);
+        // 移除在最后一次记之后：不出现
+        when(hiddenMapper.selectList(any())).thenReturn(List.of(hidden(key, today.atTime(8, 0))));
+        assertEquals(List.of("临时:鸡蛋羹"), names(service().picks(7L, null, 200)));
+
+        // 移除之后又记了一条：重新出现
+        MealLog again = temp("红烧肉", "300", "150", today, 10);
+        again.setCreatedAt(today.atTime(9, 0));
+        when(mealLogMapper.selectList(any())).thenReturn(List.of(again, old, other));
+        assertEquals(List.of("临时:红烧肉", "临时:鸡蛋羹"), names(service().picks(7L, null, 200)));
+    }
+
+    @Test
+    void hideStoresKeyMatchingListGrouping() {
+        PickHideDTO dto = new PickHideDTO();
+        dto.setName(" 红烧肉 ");
+        dto.setKcal(new BigDecimal("300.00"));
+        dto.setProtein(new BigDecimal("1.0"));
+        dto.setFat(BigDecimal.ONE);
+        dto.setCarb(BigDecimal.ONE);
+        service().hide(7L, dto);
+        verify(hiddenMapper).insert(org.mockito.ArgumentMatchers.<MealPickHidden>argThat(h ->
+                h.getUserId() == 7L && h.getPickKey().equals("红烧肉|300|1|1|1|")));
     }
 }

@@ -31,3 +31,6 @@ Thumbs.db
 
 # vite 编译配置时的临时产物（出现即不该入库）
 *.timestamp-*.mjs
+
+# 发版流水线拷进前端构建上下文的更新日志（真身在仓根，ADR 0068）
+frontend/CHANGELOG.md

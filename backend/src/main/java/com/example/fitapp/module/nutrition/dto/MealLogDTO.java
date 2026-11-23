@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import com.example.fitapp.module.nutrition.service.EntryTime;
 import lombok.Data;
 
@@ -32,6 +33,14 @@ public class MealLogDTO {
     @DecimalMin(value = "0.01", message = "份量必须大于 0")
     @DecimalMax(value = "9999.99", message = "份量过大")
     private BigDecimal grams;
+
+    /** 按份记时的单位（ADR 0066）；和 portionGrams 成对给，按克记两个都不给。 */
+    @Size(max = 8, message = "单位过长")
+    private String portionUnit;
+
+    @DecimalMin(value = "0.01", message = "一份要大于 0")
+    @DecimalMax(value = "99999.99", message = "一份过大")
+    private BigDecimal portionGrams;
 
     /** 时刻（HH:mm，ADR 0059）；不给按默认规则：记今天用现在的钟点，补记按餐次（见 EntryTime）。 */
     @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")

@@ -1427,6 +1427,7 @@ function comingSoon(tip: string) {
 /* ── 底部汇总条（悬浮胶囊） ── */
 .dock {
   @include glass($glass-bg-strong);
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

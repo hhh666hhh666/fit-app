@@ -8,6 +8,8 @@ import com.example.fitapp.module.diary.mapper.DiaryPhotoMapper;
 import com.example.fitapp.common.TransientRetry;
 import com.example.fitapp.module.nutrition.dto.FoodAmountDTO;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
+import com.example.fitapp.module.nutrition.dto.MealCountDTO;
+import com.example.fitapp.module.nutrition.dto.MealCountItemDTO;
 import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealTimeDTO;
@@ -52,6 +54,7 @@ import com.example.fitapp.module.nutrition.vo.WaterDrinkVO;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.Set;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -150,6 +153,7 @@ public class DietService {
             groups.add(g);
         }
         vo.setMeals(groups);
+        fillFoodLooks(groups.stream().flatMap(g -> g.getItems().stream()).toList());
 
         // 饮水 + 目标（设置行不存在时给默认）
         SettingVO setting = settingService.get(userId);
@@ -185,8 +189,20 @@ public class DietService {
     public MealItemVO addMeal(Long userId, MealLogDTO dto) {
         Food food = requireOwnFood(userId, dto.getFoodId());
         LocalDate date = parseDate(dto.getDate());
-        return insertMeal(userId, date, dto.getMeal(), timeForNew(userId, date, dto.getMeal(), dto.getTime()),
+        MealLog log = newLog(userId, date, dto.getMeal(), timeForNew(userId, date, dto.getMeal(), dto.getTime()),
                 food, dto.getGrams());
+        applyPortion(log, dto.getPortionUnit(), dto.getPortionGrams());
+        mealLogMapper.insert(log);
+        return withFood(toItem(log), food);
+    }
+
+    /** 按份记的才冻结单位与一份多少 g（ADR 0066）：两项成对给才算，缺一项按克记。 */
+    private static void applyPortion(MealLog log, String unit, BigDecimal grams) {
+        String u = unit == null ? null : unit.trim();
+        if (u != null && !u.isEmpty() && grams != null && grams.signum() > 0) {
+            log.setPortionUnit(u);
+            log.setPortionGrams(grams);
+        }
     }
 
     /** 早午晚三餐（一餐一个时刻，ADR 0062）；加餐按条记。 */
@@ -274,6 +290,13 @@ public class DietService {
     /** 落一条条目：每 100 数值按 food 现值快照，此后改库/删库不影响本条。 */
     private MealItemVO insertMeal(Long userId, LocalDate date, String meal, LocalTime time, Food food,
                                   BigDecimal grams) {
+        MealLog log = newLog(userId, date, meal, time, food, grams);
+        mealLogMapper.insert(log);
+        return withFood(toItem(log), food);
+    }
+
+    private static MealLog newLog(Long userId, LocalDate date, String meal, LocalTime time, Food food,
+                                  BigDecimal grams) {
         MealLog log = new MealLog();
         log.setUserId(userId);
         log.setLogDate(date);
@@ -287,8 +310,47 @@ public class DietService {
         log.setCarbPer100(food.getCarb());
         log.setFatPer100(food.getFat());
         log.setSodiumPer100(food.getSodium());
-        mealLogMapper.insert(log);
-        return toItem(log);
+        return log;
+    }
+
+    /**
+     * 边吃边数吃完了（ADR 0067）：一次事务把数过的几种记进同一餐，每种一条普通条目，
+     * 按份冻结单位与一个多少 g（ADR 0066）。食物库的按食物快照，临时条目按传来的每 100。
+     */
+    @Transactional
+    public List<MealItemVO> addCounted(Long userId, MealCountDTO dto) {
+        LocalDate date = parseDate(dto.getDate());
+        LocalTime time = timeForNew(userId, date, dto.getMeal(), dto.getTime());
+        List<MealItemVO> out = new ArrayList<>();
+        for (MealCountItemDTO it : dto.getItems()) {
+            MealLog log;
+            Food food = null;
+            if (it.getFoodId() != null) {
+                food = requireOwnFood(userId, it.getFoodId());
+                log = newLog(userId, date, dto.getMeal(), time, food, it.getGrams());
+            } else {
+                if (it.getName() == null || it.getName().isBlank() || it.getKcal() == null || it.getProtein() == null
+                        || it.getFat() == null || it.getCarb() == null) {
+                    throw new BusinessException(ResultCode.BAD_REQUEST, "临时条目要有名字和营养");
+                }
+                log = new MealLog();
+                log.setUserId(userId);
+                log.setLogDate(date);
+                log.setMeal(dto.getMeal());
+                log.setEatenAt(time);
+                log.setFoodName(it.getName().trim());
+                log.setGrams(it.getGrams());
+                log.setKcalPer100(it.getKcal());
+                log.setProteinPer100(it.getProtein());
+                log.setCarbPer100(it.getCarb());
+                log.setFatPer100(it.getFat());
+                log.setSodiumPer100(it.getSodium());
+            }
+            applyPortion(log, it.getPortionUnit(), it.getPortionGrams());
+            mealLogMapper.insert(log);
+            out.add(food == null ? toItem(log) : withFood(toItem(log), food));
+        }
+        return out;
     }
 
     /**
@@ -326,10 +388,24 @@ public class DietService {
             }
             log.setFoodName(dto.getName().trim());
         }
+        boolean clearPortion = false;
         if (dto.getGrams() != null) {
             log.setGrams(dto.getGrams());
+            // 按份改＝换新的份数快照；只给克数＝按克改，份数快照清掉（ADR 0066）
+            String before = log.getPortionUnit();
+            log.setPortionUnit(null);
+            log.setPortionGrams(null);
+            applyPortion(log, dto.getPortionUnit(), dto.getPortionGrams());
+            clearPortion = log.getPortionUnit() == null && before != null;
         }
         mealLogMapper.updateById(log);
+        if (clearPortion) {
+            // 全局 not_null 更新策略会跳过 null，要显式 set
+            mealLogMapper.update(null, Wrappers.<MealLog>lambdaUpdate()
+                    .eq(MealLog::getId, log.getId())
+                    .set(MealLog::getPortionUnit, null)
+                    .set(MealLog::getPortionGrams, null));
+        }
         if (clear || dto.getTime() != null) {
             // 清除要显式 set null（全局 not_null 更新策略会跳过）；三餐的条目改时刻＝整餐一起改（ADR 0062）
             LocalTime t = clear ? null : EntryTime.parse(dto.getTime());
@@ -696,6 +772,30 @@ public class DietService {
         return v == null ? BigDecimal.ZERO : v.setScale(2, RoundingMode.HALF_UP);
     }
 
+    /** 条目行要显示来源食物的图片与生熟（ADR 0066）：按来源食物一次取齐；删了的食物就没有。 */
+    private void fillFoodLooks(List<MealItemVO> items) {
+        Set<Long> ids = items.stream().map(MealItemVO::getFoodId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        Map<Long, Food> foods = foodMapper.selectBatchIds(ids).stream()
+                .collect(Collectors.toMap(Food::getId, f -> f, (a, b) -> a));
+        for (MealItemVO i : items) {
+            Food f = i.getFoodId() == null ? null : foods.get(i.getFoodId());
+            if (f != null) {
+                i.setImageKey(f.getImageKey());
+                i.setCookState(f.getCookState());
+            }
+        }
+    }
+
+    private static MealItemVO withFood(MealItemVO i, Food f) {
+        i.setImageKey(f.getImageKey());
+        i.setCookState(f.getCookState());
+        return i;
+    }
+
     private MealItemVO toItem(MealLog l) {
         MealItemVO i = new MealItemVO();
         i.setId(l.getId());
@@ -705,6 +805,8 @@ public class DietService {
         i.setFoodName(l.getFoodName());
         i.setTemporary(l.getFoodId() == null);
         i.setGrams(l.getGrams());
+        i.setPortionUnit(l.getPortionUnit());
+        i.setPortionGrams(l.getPortionGrams());
         i.setKcal(actual(l.getKcalPer100(), l.getGrams()));
         i.setProtein(actual(l.getProteinPer100(), l.getGrams()));
         i.setCarb(actual(l.getCarbPer100(), l.getGrams()));

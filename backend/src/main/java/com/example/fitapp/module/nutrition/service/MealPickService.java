@@ -2,8 +2,11 @@ package com.example.fitapp.module.nutrition.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.example.fitapp.module.nutrition.entity.Food;
+import com.example.fitapp.module.nutrition.dto.PickHideDTO;
 import com.example.fitapp.module.nutrition.entity.MealLog;
+import com.example.fitapp.module.nutrition.entity.MealPickHidden;
 import com.example.fitapp.module.nutrition.mapper.MealLogMapper;
+import com.example.fitapp.module.nutrition.mapper.MealPickHiddenMapper;
 import com.example.fitapp.module.nutrition.vo.MealPickVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +36,7 @@ public class MealPickService {
 
     private final FoodService foodService;
     private final MealLogMapper mealLogMapper;
+    private final MealPickHiddenMapper hiddenMapper;
 
     /** lastUsed 为 null＝没记过，排在记过的后面。 */
     private record Row(MealPickVO vo, int tier, boolean favorite, LocalDateTime lastUsed, boolean own) {
@@ -95,6 +99,35 @@ public class MealPickService {
         return null;
     }
 
+    /**
+     * 从记一餐列表里移除一种吃过的临时条目（已经记下的不动）。再移除一次只是把时刻往后挪；
+     * 移除之后又记了同样的一条，它会重新出现（见 {@link #temps}）。
+     */
+    public void hide(Long userId, PickHideDTO dto) {
+        String key = keyOf(dto.getName().trim(), dto.getKcal(), dto.getProtein(), dto.getFat(), dto.getCarb(),
+                dto.getSodium());
+        LocalDateTime now = LocalDateTime.now(FoodService.ZONE);
+        MealPickHidden h = hiddenMapper.selectOne(Wrappers.<MealPickHidden>lambdaQuery()
+                .eq(MealPickHidden::getUserId, userId)
+                .eq(MealPickHidden::getPickKey, key));
+        if (h == null) {
+            h = new MealPickHidden();
+            h.setUserId(userId);
+            h.setPickKey(key);
+            h.setHiddenAt(now);
+            hiddenMapper.insert(h);
+        } else {
+            h.setHiddenAt(now);
+            hiddenMapper.updateById(h);
+        }
+    }
+
+    /** 一种临时条目的键：名字 ＋ 每 100 营养（去尾零），列表合并与移除都按它认。 */
+    static String keyOf(String name, BigDecimal kcal, BigDecimal protein, BigDecimal fat, BigDecimal carb,
+                        BigDecimal sodium) {
+        return String.join("|", name, plain(kcal), plain(protein), plain(fat), plain(carb), plain(sodium));
+    }
+
     /** 近 30 天的临时条目，名字和每 100 营养都一样的合成一种；最近记的在前，份量取最近一次的。 */
     List<TempGroup> temps(Long userId, LocalDate since) {
         List<MealLog> logs = mealLogMapper.selectList(Wrappers.<MealLog>lambdaQuery()
@@ -106,8 +139,8 @@ public class MealPickService {
         Map<String, MealPickVO.Temp> groups = new LinkedHashMap<>();
         Map<String, LocalDateTime> last = new HashMap<>();
         for (MealLog l : logs) {
-            String key = String.join("|", l.getFoodName(), plain(l.getKcalPer100()), plain(l.getProteinPer100()),
-                    plain(l.getFatPer100()), plain(l.getCarbPer100()), plain(l.getSodiumPer100()));
+            String key = keyOf(l.getFoodName(), l.getKcalPer100(), l.getProteinPer100(), l.getFatPer100(),
+                    l.getCarbPer100(), l.getSodiumPer100());
             MealPickVO.Temp t = groups.get(key);
             if (t == null) {
                 t = new MealPickVO.Temp();
@@ -127,8 +160,24 @@ public class MealPickService {
                 last.put(key, c);
             }
         }
+        Map<String, LocalDateTime> hidden = new HashMap<>();
+        if (!groups.isEmpty()) {
+            for (MealPickHidden h : hiddenMapper.selectList(Wrappers.<MealPickHidden>lambdaQuery()
+                    .eq(MealPickHidden::getUserId, userId)
+                    .in(MealPickHidden::getPickKey, groups.keySet()))) {
+                hidden.put(h.getPickKey(), h.getHiddenAt());
+            }
+        }
         List<TempGroup> out = new ArrayList<>();
-        groups.forEach((k, t) -> out.add(new TempGroup(t, last.get(k))));
+        groups.forEach((k, t) -> {
+            LocalDateTime h = hidden.get(k);
+            LocalDateTime l = last.get(k);
+            // 移除之后没再记过：不出现；移除之后又记了一条：重新出现
+            if (h != null && (l == null || !l.isAfter(h))) {
+                return;
+            }
+            out.add(new TempGroup(t, l));
+        });
         return out;
     }
 

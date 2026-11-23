@@ -40,6 +40,14 @@
       "style": { "navigationBarTitleText": "排便记录" }
     },
     {
+      "path": "pages/eat-count/index",
+      "style": { "navigationBarTitleText": "边吃边数" }
+    },
+    {
+      "path": "pages/changelog/index",
+      "style": { "navigationBarTitleText": "更新日志" }
+    },
+    {
       "path": "pages/library/index",
       "style": { "navigationBarTitleText": "动作库" }
     },

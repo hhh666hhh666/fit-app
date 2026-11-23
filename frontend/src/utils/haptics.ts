@@ -32,3 +32,13 @@ export function tickSet() {
 export function tickPr() {
   vibrate([12, 80, 28])
 }
+
+/** 边吃边数点一下（ADR 0067）：比完成一组更轻 */
+export function tickCount() {
+  vibrate([8])
+}
+
+/** 边吃边数满十个：两下 */
+export function tickTen() {
+  vibrate([10, 70, 22])
+}

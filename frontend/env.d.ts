@@ -14,3 +14,5 @@ declare module '*.vue' {
 
 /** 构建期注入的应用版本（`vite.config.ts` 的 define，取自 package.json）；缓存快照的版本闸用它。 */
 declare const __APP_VERSION__: string
+/** 仓根 CHANGELOG.md 的全文，构建时注入（ADR 0068：App 内更新日志只读这一份）。 */
+declare const __CHANGELOG__: string

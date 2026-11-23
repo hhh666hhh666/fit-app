@@ -288,6 +288,7 @@ async function save() {
 }
 
 .settings__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

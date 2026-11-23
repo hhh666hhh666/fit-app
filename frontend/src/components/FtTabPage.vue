@@ -35,6 +35,7 @@ defineProps<{ page: TabPage }>()
 }
 
 .ft-tab-page__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: 0;
   right: 0;

@@ -368,6 +368,7 @@ async function close() {
 
 /* ── 底部 ── */
 .summary__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

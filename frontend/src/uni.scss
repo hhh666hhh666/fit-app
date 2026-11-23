@@ -106,6 +106,8 @@ $meal-weight-bg: #e6f4e1;
 $meal-weight-fg: #3d8b37;
 $meal-bowel-bg: #f1ebe4; // 排便（首页入口第二页）：暖灰褐，和前六个都不撞色相
 $meal-bowel-fg: #86664a;
+$meal-count-bg: #e6ecf6; // 边吃边数（首页入口第二页，ADR 0067）：石板蓝，和其余入口都不撞色相
+$meal-count-fg: #4b6694;
 // 排便记录（ADR 0061）：大便借早餐的赭色、小便借午餐的琥珀色，只在排便页的统计图里用
 $bowel-stool: $meal-breakfast-fg;
 $bowel-stool-bg: $meal-breakfast-bg;
@@ -133,6 +135,11 @@ $food-custom-badge-fg: $accent-strong;
 // 没有图片时缩略图位置的占位底
 $food-thumb-empty-bg: #f3efe9;
 $food-thumb-empty-fg: #b9a58c;
+
+// ── 边吃边数（ADR 0067）：每种食物一个识别色，给小珠子和点按涟漪用 ──
+// 借餐次入口那几组色相（不新造色）；按卡片顺序轮换，第一张避开晨橙——橙色只给动作
+$count-hues: ($meal-lunch-fg $meal-lunch-bg) ($meal-water-fg $meal-water-bg) ($meal-dinner-fg $meal-dinner-bg)
+  ($meal-weight-fg $meal-weight-bg) ($meal-snack-fg $meal-snack-bg);
 
 // ── 形状 ──
 $radius-xs: 16rpx; // 8px，小 tag
@@ -180,6 +187,26 @@ $ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
     } @else if $kind == fill {
       background-color: $app-surface-2;
     }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+// ── 贴底悬浮件：键盘弹起时藏起来（utils/keyboard.ts 给 <html> 挂 is-keyboard-open）──
+// 安卓壳的键盘是 adjustResize，网页变矮后 fixed 贴底的按钮会被顶到表单中间、盖住输入框。
+// 保存、完成、底栏这类贴底的东西都 include 它；收起键盘再滑回来。
+@mixin hide-on-keyboard {
+  transition: opacity $dur-fast $ease-out, transform $dur-fast $ease-out, visibility 0s;
+
+  // visibility 连子元素一起藏（底栏的胶囊自己设了 pointer-events: auto，光靠 pointer-events 拦不住）
+  .is-keyboard-open & {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(48rpx);
+    pointer-events: none;
+    transition: opacity $dur-fast $ease-out, transform $dur-fast $ease-out, visibility 0s $dur-fast;
   }
 
   @media (prefers-reduced-motion: reduce) {

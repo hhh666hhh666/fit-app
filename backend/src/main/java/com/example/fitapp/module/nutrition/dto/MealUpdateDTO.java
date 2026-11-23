@@ -24,6 +24,17 @@ public class MealUpdateDTO {
     @Pattern(regexp = ".*\\S.*", message = "名称不能为空")
     private String name;
 
+    /**
+     * 按份改份量时的单位与一份多少 g（ADR 0066），和 grams 一起给；
+     * 只给 grams 不给这两项＝按克改，条目上的份数快照随之清掉。
+     */
+    @Size(max = 8, message = "单位过长")
+    private String portionUnit;
+
+    @DecimalMin(value = "0.01", message = "一份要大于 0")
+    @DecimalMax(value = "99999.99", message = "一份过大")
+    private BigDecimal portionGrams;
+
     /** 时刻（HH:mm，ADR 0059）。早午晚三餐的条目改时刻＝整餐一起改（ADR 0062）。 */
     @Pattern(regexp = EntryTime.PATTERN, message = "时刻格式不正确")
     private String time;

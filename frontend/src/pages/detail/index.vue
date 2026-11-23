@@ -800,6 +800,7 @@ function back() {
 
 /* ── 底部保存 ── */
 .detail__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

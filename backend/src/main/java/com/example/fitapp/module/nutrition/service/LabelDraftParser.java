@@ -109,7 +109,7 @@ public final class LabelDraftParser {
         BigDecimal serving = servingGrams(root.path("serving_grams"));
         if (serving != null) {
             normalized.put("portionGrams", serving.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros());
-            normalized.put("portionLabel", "1份");
+            normalized.put("portionLabel", "份");
         }
 
         FoodSaveDTO dto = MAPPER.convertValue(normalized, FoodSaveDTO.class);

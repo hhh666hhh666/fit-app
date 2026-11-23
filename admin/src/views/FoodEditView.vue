@@ -298,8 +298,8 @@ const unitText = computed(() => (form.unit === 'ml' ? '100ml' : '100g'))
       </el-form-item>
 
       <h3 class="form__group">常用份（选填，成对）</h3>
-      <el-form-item label="份名">
-        <el-input v-model="form.portionLabel" placeholder="如：1 个" maxlength="16" style="width: 200px" />
+      <el-form-item label="单位">
+        <el-input v-model="form.portionLabel" placeholder="如：个（只填单位，ADR 0066）" maxlength="4" style="width: 200px" />
       </el-form-item>
       <el-form-item :label="`克重（${form.unit === 'ml' ? 'ml' : 'g'}）`">
         <el-input-number v-model="form.portionGrams" :min="0" :precision="2" :controls="false" style="width: 200px" />

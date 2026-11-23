@@ -39,6 +39,12 @@ public class MealLog {
     /** 实际摄入量（克；ml 单位食物为毫升）。 */
     private BigDecimal grams;
 
+    /** 按份记时的单位快照（如「个」，ADR 0066）；按克记为 null。 */
+    private String portionUnit;
+
+    /** 按份记时一份多少 g 的快照；以后改了食物的常用份，老条目的份数不变。 */
+    private BigDecimal portionGrams;
+
     private BigDecimal kcalPer100;
 
     private BigDecimal proteinPer100;

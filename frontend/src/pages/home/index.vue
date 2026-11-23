@@ -4,6 +4,8 @@ import {onHide, onPullDownRefresh, onShow} from '@dcloudio/uni-app'
 import FtIcon, { type FtIconName } from '@/components/FtIcon.vue'
 import FtNutrientBars from '@/components/FtNutrientBars.vue'
 import MealSheet from '@/components/MealSheet.vue'
+import EatCountBar from '@/components/EatCountBar.vue'
+import WhatsNewSheet from '@/components/WhatsNewSheet.vue'
 import {useScheduleStore} from '@/stores/schedule'
 import {useDietStore} from '@/stores/diet'
 import {addWater, type DayOverview, getDay, type MealKey} from '@/api/nutrition'
@@ -12,6 +14,7 @@ import {clearAll} from '@/api/cache'
 import {buildNutrientBars} from '@/utils/diet'
 import {formatDateLabel, formatLoad, formatThousands} from '@/utils/format'
 import {ensureLogin} from '@/utils/guard'
+import {openEatCount} from '@/utils/eatCount'
 import FtTabPage from '@/components/FtTabPage.vue'
 import { useTabPage } from '@/utils/tab-page'
 
@@ -29,7 +32,8 @@ const todayWeek = `周${['日', '一', '二', '三', '四', '五', '六'][new Da
 const dietStore = useDietStore()
 const dietDay = ref<DayOverview | null>(null)
 // 入口各占一个色相：浅色底 ＋ 同色系图标（$meal-* token，ADR 0041）。
-// 一页六格、左右滑动换页（ADR 0061 修订）：第一页是三餐／加餐／饮水／体重，排便在第二页
+// 一页六格、左右滑动换页（ADR 0061 修订）：第一页是三餐／加餐／饮水／体重，第二页是边吃边数（ADR 0067）和排便；
+// 长按四个餐次入口＝进那一餐的边吃边数
 type Shortcut = { key: string; label: string; icon: FtIconName }
 const shortcutPages: Shortcut[][] = [
   [
@@ -40,7 +44,10 @@ const shortcutPages: Shortcut[][] = [
     {key: 'water', label: '饮水', icon: 'water'},
     {key: 'weight', label: '记体重', icon: 'weight'}
   ],
-  [{key: 'bowel', label: '排便', icon: 'bowel'}]
+  [
+    {key: 'count', label: '边吃边数', icon: 'tally'},
+    {key: 'bowel', label: '排便', icon: 'bowel'}
+  ]
 ]
 const shortcutPage = ref(0)
 
@@ -83,13 +90,26 @@ function goDiet() {
   uni.navigateTo({url: '/pages/diet/index'})
 }
 
+/** 长按餐次入口：进那一餐的边吃边数；长按之后松手的那一下 click 不再开记一餐弹层。 */
+let longPressed = false
+function onShortcutLongPress(key: string) {
+  if (!MEAL_KEYS.includes(key as MealKey)) return
+  longPressed = true
+  setTimeout(() => (longPressed = false), 600)
+  openEatCount(key as MealKey)
+}
+const MEAL_KEYS: MealKey[] = ['breakfast', 'lunch', 'dinner', 'snack']
+
 function onDietShortcut(key: string) {
+  if (longPressed) return
   if (key === 'water') {
     void bumpWater()
   } else if (key === 'weight') {
     uni.navigateTo({url: '/pages/body/index?record=1'})
   } else if (key === 'bowel') {
     uni.navigateTo({url: '/pages/bowel/index'})
+  } else if (key === 'count') {
+    openEatCount(null)
   } else {
     sheetMeal.value = key as MealKey
   }
@@ -314,6 +334,8 @@ function goDiary() {
         <view class="home__pill" role="button" @click="goDiary">日记</view>
       </view>
 
+      <EatCountBar />
+
       <!-- 今天吃了：数字区与条形点开「饮食」页，下面的入口直接记（左右滑换页） -->
       <view class="glass diet">
         <view class="diet__tap" @click="goDiet">
@@ -347,6 +369,7 @@ function goDiary() {
                   class="diet__shortcut"
                   role="button"
                   @click="onDietShortcut(s.key)"
+                  @longpress="onShortcutLongPress(s.key)"
                 >
                   <view class="diet__ico" :class="'diet__ico--' + s.key">
                     <FtIcon :name="s.icon" :size="22" />
@@ -427,6 +450,9 @@ function goDiary() {
         </view>
       </view>
     </view>
+
+    <!-- 自动更新后第一次打开：这次更新了什么（ADR 0068） -->
+    <WhatsNewSheet />
 
     <!-- 饮食记录弹层 -->
     <Transition name="ft-sheet">
@@ -645,6 +671,11 @@ function goDiary() {
 .diet__ico--bowel {
   background: $meal-bowel-bg;
   color: $meal-bowel-fg;
+}
+
+.diet__ico--count {
+  background: $meal-count-bg;
+  color: $meal-count-fg;
 }
 
 .diet__shortcut-label {

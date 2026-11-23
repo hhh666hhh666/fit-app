@@ -3,6 +3,8 @@ package com.example.fitapp.module.nutrition.controller;
 import com.example.fitapp.common.PhotoData;
 import com.example.fitapp.common.Result;
 import com.example.fitapp.module.nutrition.dto.MealBatchDTO;
+import com.example.fitapp.module.nutrition.dto.MealCountDTO;
+import com.example.fitapp.module.nutrition.dto.PickHideDTO;
 import com.example.fitapp.module.nutrition.dto.MealCustomDTO;
 import com.example.fitapp.module.nutrition.dto.MealLogDTO;
 import com.example.fitapp.module.nutrition.dto.MealTimeDTO;
@@ -68,6 +70,19 @@ public class DietController {
     }
 
     /** 记一条临时条目（ADR 0052）：AI 识别后核对过的「临时食物」，不进食物库，只落这一条。 */
+    /** 从记一餐列表里移除一种吃过的临时条目（已经记下的不动）。 */
+    @PostMapping("/picks/hide")
+    public Result<Void> hidePick(@Valid @RequestBody PickHideDTO body) {
+        mealPickService.hide(UserContext.requireUserId(), body);
+        return Result.success();
+    }
+
+    /** 边吃边数吃完了（ADR 0067）：数过的几种一次记进同一餐。 */
+    @PostMapping("/meals/counted")
+    public Result<List<MealItemVO>> addCounted(@Valid @RequestBody MealCountDTO body) {
+        return Result.success(dietService.addCounted(UserContext.requireUserId(), body));
+    }
+
     @PostMapping("/meals/custom")
     public Result<MealItemVO> addCustomMeal(@Valid @RequestBody MealCustomDTO body) {
         return Result.success(dietService.addCustomMeal(UserContext.requireUserId(), body));

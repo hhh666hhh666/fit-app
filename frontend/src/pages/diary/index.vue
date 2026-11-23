@@ -322,6 +322,7 @@ async function confirmDelete() {
 }
 
 .diary__write {
+  @include hide-on-keyboard;
   position: fixed;
   left: 40rpx;
   right: 40rpx;

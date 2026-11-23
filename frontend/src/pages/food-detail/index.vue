@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { COOK_STATE_LABEL, setFoodFavorite, deleteFood, getFood, incrementFoodView, type FoodItem } from '@/api/nutrition'
 import { MAIN_FIELDS, OPTIONAL_GROUPS } from '@/utils/food-fields'
 import { ensureLogin } from '@/utils/guard'
+import { portionUnit } from '@/utils/diet'
 import { fetchFoodImage } from '@/utils/photo'
 import FtIcon from '@/components/FtIcon.vue'
 import FtButton from '@/components/FtButton.vue'
@@ -115,7 +116,7 @@ const giText = computed(() => numText(food.value?.gi))
 const portionText = computed(() => {
   const f = food.value
   if (!f?.portionLabel || f.portionGrams == null) return null
-  return `${f.portionLabel} ＝ ${numText(f.portionGrams)}${f.unit === 'ml' ? 'ml' : 'g'}`
+  return `1${portionUnit(f.portionLabel)} ＝ ${numText(f.portionGrams)}${f.unit === 'ml' ? 'ml' : 'g'}`
 })
 
 /** 可选分组：只保留有值的行；整组无值则不显示该组。 */
@@ -402,6 +403,7 @@ function doDelete() {
 /* ── 底部悬浮条 ── */
 .fd__bar {
   @include glass($glass-bg-strong);
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

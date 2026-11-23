@@ -16,6 +16,9 @@ const ICONS = {
   search: { paths: p('M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 1 1 13 0z', 'M20 20l-4.2-4.2') },
   check: { paths: p('m5 12.5 4.5 4.5L19 7.5') },
   plus: { paths: p('M12 5v14M5 12h14') },
+  minus: { paths: p('M5 12h14') },
+  // 边吃边数（ADR 0067）：四竖一斜的「正」字式计数
+  tally: { paths: p('M6 5v14M10 5v14M14 5v14M18 5v14', 'M3.5 15.5 20.5 8.5') },
   close: { paths: p('M6 6l12 12M18 6 6 18') },
   'chevron-right': { paths: p('m9.5 6 6 6-6 6') },
   'chevron-left': { paths: p('m14.5 6-6 6 6 6') },

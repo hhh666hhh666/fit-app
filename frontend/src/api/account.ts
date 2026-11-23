@@ -11,6 +11,8 @@ export interface AccountInfo {
   nickname: string | null
   /** 当前头像；没设为 null（显示首字母，ADR 0051） */
   avatarId: number | null
+  /** 管理员（ADR 0048）；App 里只用来决定更新日志显示不显示开发细节（ADR 0068）。 */
+  admin?: boolean
 }
 
 /** 历史头像里的一项：宽高与裁剪框都按摆正后的原图像素算（ADR 0051）。 */

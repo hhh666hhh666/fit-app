@@ -214,6 +214,105 @@ class DietServiceTest {
     }
 
     @Test
+    void addMeal_byPortionFreezesUnitAndPieceGrams() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-11-23");
+        dto.setMeal("dinner");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("60"));
+        dto.setPortionUnit(" 个 ");
+        dto.setPortionGrams(new BigDecimal("20"));
+
+        MealItemVO item = service().addMeal(7L, dto);
+
+        assertEquals("个", item.getPortionUnit());
+        assertEquals(new BigDecimal("20"), item.getPortionGrams());
+    }
+
+    @Test
+    void addMeal_unitWithoutPieceGramsCountsAsGrams() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        MealLogDTO dto = new MealLogDTO();
+        dto.setDate("2026-11-23");
+        dto.setMeal("dinner");
+        dto.setFoodId(5L);
+        dto.setGrams(new BigDecimal("60"));
+        dto.setPortionUnit("个");
+
+        assertNull(service().addMeal(7L, dto).getPortionUnit());
+    }
+
+    @Test
+    void addCounted_writesFoodAndTempWithPortionAndSharedTime() {
+        when(foodMapper.selectById(5L)).thenReturn(chicken());
+        com.example.fitapp.module.nutrition.dto.MealCountItemDTO food = new com.example.fitapp.module.nutrition.dto.MealCountItemDTO();
+        food.setFoodId(5L);
+        food.setGrams(new BigDecimal("208"));
+        food.setPortionUnit("个");
+        food.setPortionGrams(new BigDecimal("20.8"));
+        com.example.fitapp.module.nutrition.dto.MealCountItemDTO tmp = new com.example.fitapp.module.nutrition.dto.MealCountItemDTO();
+        tmp.setName("猪肉丸");
+        tmp.setKcal(new BigDecimal("196"));
+        tmp.setProtein(new BigDecimal("14.5"));
+        tmp.setFat(new BigDecimal("13"));
+        tmp.setCarb(new BigDecimal("5"));
+        tmp.setGrams(new BigDecimal("60"));
+        tmp.setPortionUnit("颗");
+        tmp.setPortionGrams(new BigDecimal("20"));
+        com.example.fitapp.module.nutrition.dto.MealCountDTO dto = new com.example.fitapp.module.nutrition.dto.MealCountDTO();
+        dto.setDate("2026-11-23");
+        dto.setMeal("snack");
+        dto.setTime("19:05");
+        dto.setItems(List.of(food, tmp));
+
+        List<MealItemVO> out = service().addCounted(7L, dto);
+
+        assertEquals(2, out.size());
+        assertEquals("19:05", out.get(0).getTime());
+        assertEquals("19:05", out.get(1).getTime());
+        assertEquals(5L, out.get(0).getFoodId());
+        assertEquals("个", out.get(0).getPortionUnit());
+        assertTrue(out.get(1).isTemporary());
+        assertEquals("颗", out.get(1).getPortionUnit());
+        // 196 × 60 ÷ 100 = 117.60
+        assertEquals(new BigDecimal("117.60"), out.get(1).getKcal());
+    }
+
+    @Test
+    void addCounted_tempWithoutNutritionThrows() {
+        com.example.fitapp.module.nutrition.dto.MealCountItemDTO tmp = new com.example.fitapp.module.nutrition.dto.MealCountItemDTO();
+        tmp.setName("猪肉丸");
+        tmp.setGrams(new BigDecimal("60"));
+        tmp.setPortionUnit("颗");
+        tmp.setPortionGrams(new BigDecimal("20"));
+        com.example.fitapp.module.nutrition.dto.MealCountDTO dto = new com.example.fitapp.module.nutrition.dto.MealCountDTO();
+        dto.setDate("2026-11-23");
+        dto.setMeal("snack");
+        dto.setItems(List.of(tmp));
+
+        assertThrows(BusinessException.class, () -> service().addCounted(7L, dto));
+        verify(mealLogMapper, never()).insert(any(MealLog.class));
+    }
+
+    @Test
+    void updateMeal_byGramsClearsPortionSnapshot() {
+        MealLog l = log("lunch", "饺子", "200", "250", "10", "30", "10");
+        l.setId(3L);
+        l.setFoodId(5L);
+        l.setPortionUnit("个");
+        l.setPortionGrams(new BigDecimal("20"));
+        when(mealLogMapper.selectById(3L)).thenReturn(l);
+        MealUpdateDTO dto = new MealUpdateDTO();
+        dto.setGrams(new BigDecimal("180"));
+
+        MealItemVO item = service().updateMeal(7L, 3L, dto);
+
+        assertNull(item.getPortionUnit());
+        verify(mealLogMapper).update(any(), any());
+    }
+
+    @Test
     void addMeal_foreignFood_throws() {
         Food other = chicken();
         other.setUserId(99L);

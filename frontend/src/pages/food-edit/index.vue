@@ -17,6 +17,7 @@ import FtButton from '@/components/FtButton.vue'
 import FtIcon from '@/components/FtIcon.vue'
 import FtPageHeader from '@/components/FtPageHeader.vue'
 import { ask } from '@/utils/confirm'
+import { PORTION_UNITS, portionUnit } from '@/utils/diet'
 
 // ── 食物新增 / 编辑 / 复制为自定义（营养 45 项：主组必填 ＋ 五类折叠；另有扩展字段 GI，常显）──
 //    另承接「拍照识别」的草稿预填（recognized=1；ADR 0018）：低置信度字段标「待核对」，撞名给二选一。
@@ -84,7 +85,20 @@ function perServing(key: string): string {
   const t = (form[key] ?? '').trim()
   const n = Number(t)
   if (g == null || !t || !Number.isFinite(n)) return ''
-  return `每份 ${round2((n * g) / 100)}`
+  return `每${unitShown.value} ${round2((n * g) / 100)}`
+}
+
+// ── 常用份的单位（ADR 0066）：常用单位点一下，也能自己打字；不选就是「份」──
+const customUnit = ref(false)
+const unitShown = computed(() => form.portionLabel.trim() || '份')
+function pickUnit(u: string) {
+  customUnit.value = false
+  // 再点一下已选的＝不选（存的时候按「份」）
+  form.portionLabel = form.portionLabel === u ? '' : u
+}
+function useCustomUnit() {
+  if (!customUnit.value && (PORTION_UNITS as readonly string[]).includes(form.portionLabel)) form.portionLabel = ''
+  customUnit.value = true
 }
 
 const COOK_OPTIONS: { value: '' | 'raw' | 'cooked'; label: string }[] = [
@@ -165,7 +179,9 @@ function fillForm(f: FoodPayload) {
   form.carb = toStr(f.carb)
   form.sodium = toStr(f.sodium)
   form.gi = toStr(f.gi)
-  form.portionLabel = f.portionLabel ?? ''
+  // 份标签只存单位（ADR 0066）；迁移前的老写法「1个」显示成「个」
+  form.portionLabel = f.portionLabel ? portionUnit(f.portionLabel) : ''
+  customUnit.value = !!form.portionLabel && !(PORTION_UNITS as readonly string[]).includes(form.portionLabel)
   form.portionGrams = toStr(f.portionGrams)
   form.cookState = f.cookState ?? ''
   for (const g of OPTIONAL_GROUPS) {
@@ -371,8 +387,8 @@ function buildPayload(): FoodPayload | null {
     aliases,
     unit: form.unit === 'ml' ? 'ml' : 'g',
     ...main,
-    // 常用份成对：填了份量没填份名就记成「1份」（详情页、导出都要份名和份量成对才显示）
-    portionLabel: form.portionLabel.trim() || (numOrNull('portionGrams') != null ? '1份' : null),
+    // 常用份成对（ADR 0066）：份标签只存单位；填了克数没选单位就记成「份」（详情页、导出都要成对才显示）
+    portionLabel: numOrNull('portionGrams') != null ? unitShown.value : null,
     portionGrams: numOrNull('portionGrams') ?? null,
     cookState: form.cookState === 'raw' || form.cookState === 'cooked' ? form.cookState : null
   }
@@ -499,18 +515,29 @@ async function save() {
       <!-- 常用份（可选）：填了以后，下面每个营养格右边显示只读的「每份」（ADR 0063） -->
       <view class="glass block">
         <text class="block__title">常用份（可选）</text>
-        <view class="fld">
-          <text class="fld__label">份标签</text>
+        <view class="fld fld--col">
+          <text class="fld__label">按什么算一份</text>
+          <view class="units">
+            <text
+              v-for="u in PORTION_UNITS"
+              :key="u"
+              class="unit"
+              :class="{ 'unit--on': !customUnit && form.portionLabel === u }"
+              @click="pickUnit(u)"
+            >{{ u }}</text>
+            <text class="unit" :class="{ 'unit--on': customUnit }" @click="useCustomUnit">自定义</text>
+          </view>
           <input
+            v-if="customUnit"
             v-model="form.portionLabel"
-            class="fld__input"
-            placeholder="如：1个（不填记为 1份）"
+            class="unit-in"
+            maxlength="4"
+            placeholder="自己填单位，如：只"
             placeholder-class="ph"
-            maxlength="16"
           />
         </view>
         <view class="fld">
-          <text class="fld__label">一份多少（{{ form.unit === 'ml' ? 'ml' : 'g' }}）</text>
+          <text class="fld__label">一{{ unitShown }}多少（{{ form.unit === 'ml' ? 'ml' : 'g' }}）</text>
           <input v-model="form.portionGrams" type="digit" class="fld__input ft-num" placeholder="如：50" placeholder-class="ph" />
         </view>
       </view>
@@ -820,6 +847,44 @@ async function save() {
   border-top: 1rpx solid $app-line-soft;
 }
 
+/* 常用份的单位（ADR 0066）：一排可点的单位，选中＝深字 ＋ 灰蓝胶囊底 */
+.fld--col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16rpx;
+}
+
+.units {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.unit {
+  @include press(dim);
+  min-width: 56rpx;
+  padding: 10rpx 22rpx;
+  border: 1rpx solid $app-line;
+  border-radius: $radius-pill;
+  font-size: $text-md;
+  color: $app-ink-muted;
+  text-align: center;
+}
+
+.unit--on {
+  @include seg-item-on;
+  border-color: transparent;
+}
+
+.unit-in {
+  height: 80rpx;
+  padding: 0 24rpx;
+  border-radius: $radius-md;
+  background: $app-surface;
+  font-size: $text-md;
+  color: $app-ink;
+}
+
 .fld__label {
   flex-shrink: 0;
   font-size: $text-base;
@@ -885,6 +950,7 @@ async function save() {
 }
 
 .fe__bottom {
+  @include hide-on-keyboard;
   position: fixed;
   left: $tabbar-side;
   right: $tabbar-side;

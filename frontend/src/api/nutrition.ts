@@ -105,6 +105,12 @@ export interface MealItem {
   temporary: boolean
   /** 实际摄入量（克；ml 单位食物为毫升）。 */
   grams: number
+  /** 按份记时的单位与一份多少 g（ADR 0066）；按克记为 null。 */
+  portionUnit?: string | null
+  portionGrams?: number | null
+  /** 来源食物现在的图片版本号与生熟（条目行和食物列表同一种行，ADR 0066）；临时条目没有。 */
+  imageKey?: string | null
+  cookState?: CookState | null
   kcal: number
   protein: number
   carb: number
@@ -435,7 +441,16 @@ export interface WaterDrink {
 }
 
 /** `time`（HH:mm）不给时服务端按默认规则补：记今天用现在的钟点，补记按餐次（ADR 0059）。 */
-export function addMeal(payload: { date: string; meal: MealKey; foodId: number; grams: number; time?: string }) {
+export function addMeal(payload: {
+  date: string
+  meal: MealKey
+  foodId: number
+  grams: number
+  time?: string
+  /** 按份记时成对给（ADR 0066）：条目冻结单位与一份多少 g。 */
+  portionUnit?: string
+  portionGrams?: number
+}) {
   return mutating('diet', () => unwrap(request.post<MealItem>('/diet/meals', payload)))
 }
 
@@ -459,7 +474,10 @@ export function addCustomMeal(payload: {
 }
 
 /** 改一条条目：给了哪项改哪项；名称只有临时条目能改；clearTime 清除时刻（三餐的条目＝整餐一起，ADR 0062）。 */
-export function updateMeal(id: number, patch: { grams?: number; name?: string; time?: string; clearTime?: boolean }) {
+export function updateMeal(
+  id: number,
+  patch: { grams?: number; name?: string; time?: string; clearTime?: boolean; portionUnit?: string; portionGrams?: number }
+) {
   return mutating('diet', () => unwrap(request.put<MealItem>(`/diet/meals/${id}`, patch)))
 }
 
@@ -496,6 +514,43 @@ export function listMealPicks(q?: string, limit = 200) {
   const params: Record<string, unknown> = { limit }
   if (q) params.q = q
   return read<MealPick[]>('/diet/picks', params, ['diet', 'food'], !q)
+}
+
+/** 从记一餐列表里移除一种吃过的临时条目；已经记下的不动，以后又记了同样的一条会重新出现。 */
+export function hideTempPick(t: TempPick) {
+  return mutating(['diet', 'food'], () =>
+    unwrap(
+      request.post<void>('/diet/picks/hide', {
+        name: t.name,
+        kcal: t.kcal,
+        protein: t.protein,
+        fat: t.fat,
+        carb: t.carb,
+        sodium: t.sodium ?? null
+      })
+    )
+  )
+}
+
+/** 边吃边数吃完了（ADR 0067）：数过的几种一次记进同一餐。食物给 foodId；临时条目给名字和每 100 营养。 */
+export function addCountedMeals(payload: {
+  date: string
+  meal: MealKey
+  time: string
+  items: {
+    foodId?: number
+    name?: string
+    kcal?: number
+    protein?: number
+    fat?: number
+    carb?: number
+    sodium?: number | null
+    grams: number
+    portionUnit: string
+    portionGrams: number
+  }[]
+}) {
+  return mutating('diet', () => unwrap(request.post<MealItem[]>('/diet/meals/counted', payload)))
 }
 
 export function deleteMeal(id: number) {

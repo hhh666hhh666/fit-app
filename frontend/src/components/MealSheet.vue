@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import {
   addCustomMeal,
   addMeal,
+  hideTempPick,
   addMealsBatch,
   deleteMeal,
   getDay,
@@ -41,6 +42,7 @@ import {
   defaultEntryTime,
   TIME_RE,
   trim2,
+  portionUnit,
   type AmountMode
 } from '@/utils/diet'
 
@@ -96,7 +98,9 @@ const selected = ref<Choice | null>(null)
 const grams = ref('')
 const amountMode = ref<AmountMode>('gram')
 const addHint = computed(() =>
-  selected.value ? amountHint(grams.value, amountMode.value, selected.value.portionGrams, unitText(selected.value)) : ''
+  selected.value
+    ? amountHint(grams.value, amountMode.value, selected.value.portionGrams, unitText(selected.value), selectedUnit.value)
+    : ''
 )
 
 /** 这一次加进来的条目共用的时刻（ADR 0059）：今天默认现在的钟点，补记按餐次；顶部可改。 */
@@ -190,7 +194,9 @@ const editingId = ref<number | null>(null)
 const editGrams = ref('')
 const editMode = ref<AmountMode>('gram')
 /** 正在改的这一条，来源食物现在的一份多少（没有常用份或是临时条目为 null）。 */
-const editPortion = ref<{ grams: number; unit: string } | null>(null)
+const editPortion = ref<{ grams: number; unit: string; name: string } | null>(null)
+/** 选中的食物按什么单位算一份（ADR 0066）：份标签只存单位，没设是「份」。 */
+const selectedUnit = computed(() => portionUnit(selected.value?.portionLabel))
 
 // ── 食物组合：横滑条「整份加入」＋ 「把这一餐存为组合」 ──
 const combos = ref<FoodComboVO[]>([])
@@ -462,8 +468,40 @@ function setAmountMode(next: AmountMode) {
 
 /** 点食物行：食物库的进详情页（只看，返回还在这一层）；临时条目没有详情页，等于点「+」。 */
 function openPick(p: MealPick) {
+  if (pickLongPressed) return
   if (p.type === 'food') uni.navigateTo({ url: `/pages/food-detail/index?id=${p.food.id}` })
   else selectPick(p)
+}
+
+/**
+ * 长按吃过的临时条目：从这个列表里移除（已经记下的那些餐不动，热量不变）。
+ * 以后又记了一模一样的一条，它会重新出现。食物库的食物不在这里删，去食物库。
+ */
+let pickLongPressed = false
+function onPickLongPress(p: MealPick) {
+  if (p.type !== 'temp') return
+  pickLongPressed = true
+  setTimeout(() => (pickLongPressed = false), 600)
+  const t = p.temp
+  uni.showActionSheet({
+    itemList: ['从列表移除'],
+    success: async () => {
+      const ok = await ask({
+        title: `从列表移除「${t.name}」？`,
+        content: '以前记过它的那些餐不受影响；以后又记了一样的，它会重新出现。',
+        confirmText: '移除',
+        danger: true
+      })
+      if (!ok) return
+      try {
+        await hideTempPick(t)
+        foods.value = foods.value.filter((x) => x !== p)
+        uni.showToast({ title: '已从列表移除', icon: 'none' })
+      } catch {
+        // request 层已统一提示
+      }
+    }
+  })
 }
 
 function cancelSelect() {
@@ -495,7 +533,17 @@ async function confirmAdd() {
           sodium: t.sodium ?? null,
           time: entryTime.value
         })
-      : await addMeal({ date: props.date, meal: props.meal, foodId: f.foodId as number, grams: g, time: entryTime.value })
+      : await addMeal({
+          date: props.date,
+          meal: props.meal,
+          foodId: f.foodId as number,
+          grams: g,
+          time: entryTime.value,
+          // 按份记的冻结单位与一份多少 g（ADR 0066）
+          ...(amountMode.value === 'portion' && f.portionGrams
+            ? { portionUnit: selectedUnit.value, portionGrams: Number(f.portionGrams) }
+            : {})
+        })
     items.value.push(item)
     cancelSelect()
     keyword.value = ''
@@ -937,16 +985,23 @@ function revealEdit() {
   }, 300)
 }
 
-/** 开始改份量：来源食物有常用份就默认按份（份数＝克数÷一份），否则按 g。 */
+/**
+ * 开始改份量：条目是按份记的就按它记下时的单位和一份多少 g（ADR 0066）；
+ * 否则来源食物有常用份就默认按份（份数＝克数÷一份），再否则按 g。
+ */
 async function startEdit(it: MealItem) {
   editPortion.value = null
   editMode.value = 'gram'
   editGrams.value = String(it.grams)
-  if (it.foodId != null) {
+  if (it.portionUnit && it.portionGrams && Number(it.portionGrams) > 0) {
+    editPortion.value = { grams: Number(it.portionGrams), unit: 'g', name: it.portionUnit }
+    editMode.value = 'portion'
+    editGrams.value = trim2(Number(it.grams) / Number(it.portionGrams))
+  } else if (it.foodId != null) {
     try {
       const f = await getFood(it.foodId)
       if (f.portionGrams && f.portionGrams > 0) {
-        editPortion.value = { grams: Number(f.portionGrams), unit: f.unit === 'ml' ? 'ml' : 'g' }
+        editPortion.value = { grams: Number(f.portionGrams), unit: f.unit === 'ml' ? 'ml' : 'g', name: portionUnit(f.portionLabel) }
         editMode.value = 'portion'
         editGrams.value = trim2(Number(it.grams) / Number(f.portionGrams))
       }
@@ -966,7 +1021,9 @@ function setEditMode(next: AmountMode) {
 }
 
 const editHint = computed(() =>
-  editPortion.value ? amountHint(editGrams.value, editMode.value, editPortion.value.grams, editPortion.value.unit) : ''
+  editPortion.value
+    ? amountHint(editGrams.value, editMode.value, editPortion.value.grams, editPortion.value.unit, editPortion.value.name)
+    : ''
 )
 
 async function confirmEdit() {
@@ -979,9 +1036,11 @@ async function confirmEdit() {
   }
   saving.value = true
   try {
-    const updated = await updateMeal(id, { grams: g })
+    const p = editMode.value === 'portion' ? editPortion.value : null
+    const updated = await updateMeal(id, p ? { grams: g, portionUnit: p.name, portionGrams: p.grams } : { grams: g })
     const idx = items.value.findIndex((x) => x.id === id)
-    if (idx >= 0) items.value[idx] = updated
+    // 改份量的返回里没有食物图片与生熟：沿用原来的
+    if (idx >= 0) items.value[idx] = { ...items.value[idx], ...updated, imageKey: items.value[idx].imageKey, cookState: items.value[idx].cookState }
     editingId.value = null
     emit('changed')
   } catch {
@@ -1233,7 +1292,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                   <input v-model="grams" type="digit" class="pick__input-field ft-num" />
                   <!-- 有常用份才能按份（ADR 0063）：份数可以填 0.5、3 这样的任意数 -->
                   <view v-if="selected.portionGrams" class="amt-seg">
-                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': amountMode === 'portion' }" @click="setAmountMode('portion')">份</text>
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': amountMode === 'portion' }" @click="setAmountMode('portion')">{{ selectedUnit }}</text>
                     <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': amountMode === 'gram' }" @click="setAmountMode('gram')">{{ unitText(selected) }}</text>
                   </view>
                   <text v-else class="pick__unit">{{ unitText(selected) }}</text>
@@ -1248,7 +1307,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                 </view>
               </view>
               <text v-if="selected.portionGrams" class="pick__hint ft-num">
-                一份 {{ trim2(Number(selected.portionGrams)) }}{{ unitText(selected) }}<text v-if="addHint"> · {{ addHint }}</text>
+                一{{ selectedUnit }} {{ trim2(Number(selected.portionGrams)) }}{{ unitText(selected) }}<text v-if="addHint"> · {{ addHint }}</text>
               </text>
             </view>
 
@@ -1264,6 +1323,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                 addable
                 @tap="openPick(p)"
                 @add="selectPick(p)"
+                @longpress="onPickLongPress(p)"
               />
               <view v-if="foods.length === 0" class="foods__empty">
                 没有找到匹配的食物——可去「食物库」新增，或点「AI 识别」拍一张
@@ -1304,7 +1364,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                 <view class="irow__edit">
                   <input v-model="editGrams" type="digit" :focus="true" class="irow__edit-input ft-num" @focus="revealEdit" />
                   <view v-if="editPortion" class="amt-seg" @click.stop>
-                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': editMode === 'portion' }" @click="setEditMode('portion')">份</text>
+                    <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': editMode === 'portion' }" @click="setEditMode('portion')">{{ editPortion.name }}</text>
                     <text class="amt-seg__opt" :class="{ 'amt-seg__opt--on': editMode === 'gram' }" @click="setEditMode('gram')">{{ editPortion.unit }}</text>
                   </view>
                   <text v-else class="irow__edit-unit">g</text>
@@ -1314,18 +1374,8 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
                 </view>
                 <text v-if="editHint" class="irow__edit-hint ft-num">{{ editHint }}</text>
               </template>
-              <template v-else>
-                <view class="irow__mid">
-                  <view class="frow__line">
-                    <text class="irow__name">{{ it.foodName }}</text>
-                    <text v-if="it.temporary" class="frow__badge">临时</text>
-                  </view>
-                  <text class="irow__sub ft-num">
-                    {{ !mainMeal && it.time ? it.time + ' · ' : '' }}{{ it.grams }}g · 蛋白 {{ it.protein }}g · 碳水 {{ it.carb }}g · 脂肪 {{ it.fat }}g
-                  </text>
-                </view>
-                <text class="irow__kcal ft-num">{{ Math.round(it.kcal) }} 大卡</text>
-              </template>
+              <!-- 和食物列表同一种行（ADR 0066）：缩略图 ／ 名字＋标签 ／ 份量·时刻 ／ 三大营养素，右边大卡 -->
+              <FoodRow v-else class="irow__row" :entry="it" :time="mainMeal ? null : it.time" />
             </view>
           </view>
 
@@ -1928,25 +1978,26 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   color: $app-ink-muted;
 }
 
-/* 「份 / g」切换（ADR 0063）：挨着输入框，和 AI 识别草稿里的 g / ml 小分段同一个样子 */
+/* 「个 / g」切换（ADR 0063、0066）：挨着输入框，和 AI 识别草稿里的 g / ml 小分段同一个样子——
+   选中＝深字 ＋ 灰蓝胶囊底（The Calm Selection Rule），不用黑底白字 */
 .amt-seg {
   flex: none;
-  display: flex;
+  @include seg-track-solid;
   padding: 4rpx;
-  border-radius: $radius-pill;
-  background: $app-surface;
 }
 
 .amt-seg__opt {
-  padding: 6rpx 16rpx;
+  @include press(dim);
+  min-width: 40rpx;
+  padding: 8rpx 18rpx;
   border-radius: $radius-pill;
   font-size: $text-sm;
   color: $app-ink-muted;
+  text-align: center;
 }
 
 .amt-seg__opt--on {
-  background: $app-ink;
-  color: $app-surface;
+  @include seg-item-on;
 }
 
 .foods {
@@ -1958,21 +2009,7 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   border-radius: $radius-lg;
 }
 
-.frow__line {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-  min-width: 0;
-}
 
-.frow__badge {
-  flex: none;
-  padding: 2rpx 12rpx;
-  border-radius: $radius-pill;
-  background: $app-surface-2;
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
 
 .foods__row + .foods__row {
   border-top: 1rpx solid $app-line-soft;
@@ -2075,35 +2112,19 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  padding: 22rpx 0;
+  gap: 0 16rpx;
+  padding: 20rpx 0;
   border-top: 1rpx solid $app-line-soft;
   @include press(dim);
 }
 
-.irow__mid {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
 
 .irow__name {
   font-size: $text-md;
   color: $app-ink;
 }
 
-.irow__sub {
-  font-size: $text-xs;
-  color: $app-ink-muted;
-}
 
-.irow__kcal {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-  font-size: $text-md;
-  color: $app-ink;
-}
 
 .irow__edit {
   margin-left: auto;
@@ -2127,6 +2148,22 @@ const unitText = (f: { unit?: string | null }) => (f.unit === 'ml' ? 'ml' : 'g')
 
 .irow__edit .amt-seg {
   background: $app-surface-2;
+}
+
+/* 灰底轨道上，选中项换成白胶囊（否则和轨道同色看不出来） */
+.irow__edit .amt-seg__opt--on {
+  background: $app-surface;
+}
+
+.irow__row {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+/* 行自己已经变暗了，里面这一层别再暗一次 */
+.irow__row:active {
+  opacity: 1;
 }
 
 .irow__edit-hint {

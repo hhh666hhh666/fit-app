@@ -43,7 +43,7 @@ public class AccountService {
             "food", "meal_log", "meal_photo", "diet_daily", "water_log", "user_setting", "food_recognition",
             "exercise", "agent_token", "workout", "food_combo", "preset_hidden", "plan",
             "week_schedule", "user_profile", "trash_item", "diary_entry", "diary_photo", "body_record",
-            "avatar", "bowel_record");
+            "avatar", "bowel_record", "meal_pick_hidden");
 
     private final UserMapper userMapper;
     private final AccountDeletionMapper deletionMapper;
@@ -156,6 +156,7 @@ public class AccountService {
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
         vo.setAvatarId(user.getAvatarId());
+        vo.setAdmin(Boolean.TRUE.equals(user.getAdmin()));
         return vo;
     }
 }

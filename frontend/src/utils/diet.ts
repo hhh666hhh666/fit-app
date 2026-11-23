@@ -96,9 +96,28 @@ export function amountHint(
   raw: string,
   mode: AmountMode,
   portionGrams: number | null | undefined,
-  unit: string
+  unit: string,
+  /** 常用份的单位（「个」，ADR 0066）；不给按「份」。 */
+  portionName = '份'
 ): string {
   const g = amountToGrams(raw, mode, portionGrams)
   if (g == null || !portionGrams || portionGrams <= 0) return ''
-  return mode === 'portion' ? `共 ${trim2(g)}${unit}` : `约 ${trim2(g / portionGrams)} 份`
+  return mode === 'portion' ? `共 ${trim2(g)}${unit}` : `约 ${trim2(g / portionGrams)} ${portionName}`
+}
+
+// ── 常用份的单位（ADR 0066）──
+
+/** 编辑食物、边吃边数时可以点选的常用单位；「份」最通用，排第一。其余可以自己打字。 */
+export const PORTION_UNITS = [
+  '份', '个', '只', '颗', '粒', '片', '块', '根', '条', '串', '张',
+  '碗', '杯', '盘', '盒', '袋', '包', '瓶', '勺'
+] as const
+
+/**
+ * 常用份的单位：份标签现在只存单位（「个」）；迁移前的老写法「1个」「一个」去掉开头的 1 / 一。
+ * 没设常用份或标签为空时是「份」。
+ */
+export function portionUnit(label: string | null | undefined): string {
+  const s = (label ?? '').trim().replace(/^[1一]\s*/, '')
+  return s || '份'
 }
