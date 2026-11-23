@@ -84,6 +84,12 @@ jobs:
       - name: 按顺序重放迁移脚本
         run: |
           set -euo pipefail
+          # V48 用 Flyway 自己的历史表圈定「V45 之前保存的老条目」；命令行重放没有 Flyway，
+          # 先建一张空的同名替身表，让它的子查询取到 NULL、什么都不改。V48 已在线上执行过，
+          # 不能改它本身（Flyway 校验和会对不上）。2026-11-23 v0.42.0 首次在 CI 上重放到 V48 时暴露。
+          docker run --rm --network host -i mysql:8 \
+            mysql --default-character-set=utf8mb4 -h127.0.0.1 -uroot -proot fit_app \
+            -e "CREATE TABLE flyway_schema_history (version VARCHAR(50), installed_on TIMESTAMP NULL)"
           prev=0
           # ⚠️ glob 是**字典序**：两位数版本号会排错（V10 排在 V1 之前，'_' vs '0' 的字符序）——
           #    必须 sort -V 按数值版本排。V10 首次出现时暴露（2026-10-12 v0.3.0 Release 卡在「迁移重放」）。
