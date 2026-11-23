@@ -337,9 +337,9 @@ const missing = computed(() => counted.value.filter((it) => itemGrams(it) == nul
 
 function itemLine(it: CountItem): string {
   const g = itemGrams(it)
-  if (!it.count) return '吃一个，点一下卡片'
+  if (!it.count) return '吃一个，点一下'
   if (g == null) return `一${it.unit}多少 ${it.base} 还没填`
-  return `${trim2(g)}${it.base} · ${Math.round(itemNutrient(it, 'kcal'))} 大卡`
+  return `共 ${trim2(g)}${it.base}`
 }
 
 // ── 吃完了 ──
@@ -441,7 +441,7 @@ const hue = (i: number) => `cc--h${i % HUES}`
           <FtIcon name="plus" :size="34" :stroke="2" />
         </view>
         <text class="first__t">选第一种要数的食物</text>
-        <text class="first__s">之后吃一个，点一下卡片</text>
+        <text class="first__s">之后吃一个，点一下</text>
       </view>
 
       <!-- 计数卡：整张卡都是 +1 -->
@@ -470,9 +470,10 @@ const hue = (i: number) => `cc--h${i % HUES}`
               <FtIcon name="pencil" :size="12" :stroke="2" />
             </view>
           </view>
-          <view class="cc__num ft-num" :class="{ 'is-pop': popping[it.key] }">
-            <FtRollNumber :value="it.count" />
-            <text class="cc__unit">{{ it.unit }}</text>
+          <!-- 右上角：这一种的小计热量（克数没填时不显示） -->
+          <view v-if="it.count && itemGrams(it) != null" class="cc__kcal ft-num">
+            <FtRollNumber :value="Math.round(itemNutrient(it, 'kcal'))" />
+            <text class="cc__kcal-u">大卡</text>
           </view>
         </view>
 
@@ -488,8 +489,18 @@ const hue = (i: number) => `cc--h${i % HUES}`
 
         <view class="cc__foot">
           <text class="cc__line ft-num">{{ itemLine(it) }}</text>
-          <view class="cc__minus" :class="{ 'is-off': !it.count }" role="button" :aria-label="`${it.name}减一`" @click.stop="bump(it, -1)">
-            <FtIcon name="minus" :size="18" :stroke="2.2" />
+          <!-- 步进器：− 数字 ＋ 在同一行，改的和被改的挨在一起；减号小而淡，和加号隔着数字 -->
+          <view class="step">
+            <view class="cc__minus" :class="{ 'is-off': !it.count }" role="button" :aria-label="`${it.name}减一`" @click.stop="bump(it, -1)">
+              <FtIcon name="minus" :size="20" :stroke="2.2" />
+            </view>
+            <view class="cc__num ft-num" :class="{ 'is-pop': popping[it.key] }">
+              <FtRollNumber :value="it.count" />
+              <text class="cc__unit">{{ it.unit }}</text>
+            </view>
+            <view class="cc__plus" role="button" :aria-label="`${it.name}加一`" @click.stop="bump(it, 1)">
+              <FtIcon name="plus" :size="22" :stroke="2.4" />
+            </view>
           </view>
         </view>
 
@@ -800,16 +811,41 @@ const hue = (i: number) => `cc--h${i % HUES}`
   font-weight: $weight-bold;
 }
 
-.cc__num {
+.cc__kcal {
   flex: none;
+  align-self: flex-start;
   display: flex;
   align-items: baseline;
+  gap: 6rpx;
+  margin-top: 4rpx;
+  font-size: $text-lg;
+  font-weight: $weight-bold;
+  color: $app-ink-2;
+}
+
+.cc__kcal-u {
+  font-size: $text-xs;
+  color: $app-ink-muted;
+}
+
+.step {
+  flex: none;
+  display: flex;
+  align-items: center;
   gap: 8rpx;
+  margin-left: auto;
+}
+
+.cc__num {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6rpx;
+  min-width: 132rpx;
   font-family: $font-num;
-  font-size: 112rpx;
+  font-size: 56rpx;
   font-weight: $weight-heavy;
   line-height: 1;
-  letter-spacing: -0.03em;
   color: $app-ink;
 }
 
@@ -829,7 +865,7 @@ const hue = (i: number) => `cc--h${i % HUES}`
 
 .cc__unit {
   font-family: $font-text;
-  font-size: $text-md;
+  font-size: $text-base;
   font-weight: $weight-bold;
   color: $app-ink-muted;
 }
@@ -934,21 +970,37 @@ const hue = (i: number) => `cc--h${i % HUES}`
   color: $app-ink-muted;
 }
 
+// 减一个：和「＋」一样大的圆角方钮，灰蓝薄纱底、淡色图标；没数过时压淡、点了也不动
 .cc__minus {
   @include press(shrink);
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 72rpx;
-  height: 72rpx;
-  margin: -8rpx -12rpx -8rpx 0;
-  border-radius: 50%;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: $radius-sm;
   background: $app-surface-2;
-  color: $app-ink-2;
+  color: $app-ink-muted;
 }
 
 .cc__minus.is-off {
   opacity: 0.35;
+}
+
+// 加一个：识别色实心圆角方钮（整张卡点一下也是加一个，这颗给想点准的时候）
+.cc__plus {
+  @include press(shrink);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: $radius-sm;
+  background: var(--hue-fg);
+  box-shadow: 0 12rpx 24rpx -12rpx var(--hue-fg);
+  color: $app-surface;
 }
 
 // ── 点按效果 ──
