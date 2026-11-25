@@ -5,6 +5,10 @@
 **不在这里的东西**：compose 编排（`docker-compose.prod.yml` 在仓库根）、部署脚本（`scripts/server-*.sh`）、
 发布流水线（`.github/workflows/release.yml`）——它们由发布流程自动送到服务器，不需要手工传。
 
+**机器级档案也不在这里**：部署主机 `aliyun` 的规格、端口总表、域名解析（灰云 / 橙云）与 SSH / Cloudflare 隧道接入方式，
+统一维护在 GitHub 仓库 [hhh666hhh666/servers](https://github.com/hhh666hhh666/servers) 的 `aliyun/` 目录
+（查阅以 GitHub 为准，不假设本机有克隆副本）；本文件只管 fit-app 自己的部署、备份与回滚。
+
 ## 首次上线前的准备清单
 
 1. **镜像仓库 = ghcr.io**：无需任何配置——CI 用内置 `GITHUB_TOKEN` 推送（workflow 已声明 `packages: write`）。

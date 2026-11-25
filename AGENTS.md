@@ -10,7 +10,7 @@ Spring Boot + Vue 的自用项目。领域词看 `CONTEXT.md`，文档总索引�
 - **改代码 = 改文档**：改了行为就顺手改文档；移动 / 删除文件后全仓搜旧名 → `.codebuddy/rules/docs-with-code.md`
 - **会话工作台**：任务要动文件，动手**之前**先建 `docs/worklog/` 工作台 → `.codebuddy/rules/session-log.md`
 - **外部设计 skill**：用哪个（只留 `impeccable` 与 `web-design-guidelines`）、设计真相源不许另立 → `.codebuddy/rules/design-tools.md`
-- **本机 SSH 与服务器入口**：密钥位置、连接别名与红线 → `.codebuddy/rules/server-ssh.md`
+- **服务器入口与部署凭据红线**：服务器别名、档案出处（GitHub `servers` 仓库）与流水线耦合点 → `.codebuddy/rules/server-ssh.md`
 
 规则的体积预算：**单条 ≤ 100 行**，常驻规则越少越好。
 
