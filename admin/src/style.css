@@ -1,5 +1,5 @@
 /*
- * 管理端只借 Element Plus 的默认样式，不另立设计系统（.codebuddy/rules/design-tools.md）。
+ * 管理端只借 Element Plus 的默认样式，不另立设计系统（.agents/rules/design-tools.md）。
  * 这里只把主色和底色对齐 App：取值来自 frontend/src/uni.scss 的 $accent / $accent-strong / $app-canvas / $app-ink，
  * 那边改了这里跟着改。
  */

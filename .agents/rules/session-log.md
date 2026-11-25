@@ -1,6 +1,6 @@
 ---
+trigger: always_on
 description: 会话工作台——任务要动文件就在动手之前建 docs/worklog/ 下的一份，只写意图/结果/阻塞。
-alwaysApply: true
 ---
 
 # 会话工作台

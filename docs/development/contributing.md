@@ -20,7 +20,7 @@
 ## 提 PR 前本地要做什么
 
 1. 后端 `mvn -B -ntp test`；前端 `npm run typecheck`（`frontend/` 目录下）。
-2. 跑一遍守卫脚本（见 `.codebuddy/commands/wrap-up.md` 第 4 步）。
+2. 跑一遍守卫脚本（见 `.agents/skills/wrap-up/SKILL.md` 第 4 步）。
 3. 可选：在本机构建镜像做冒烟——但本机命中缓存会掩盖问题，真正的验证是 CI。
 
 ## CI 会拦什么
@@ -40,7 +40,7 @@
 - 各类文档的分工见 `docs/README.md`。
 - **提交前跑一次守卫脚本**（链接自检那条必须有）——CI 里有同名 job 会再验一次，红了就合不进去。
 - **AI 会话的过程记录**进 `docs/worklog/`——一次会话一份，动手之前先建、随进度更新。它只对创建它的那次会话有意义，**其他会话不必读**；它入库，所以内部**不写相对链接**。
-- 上面这些对 AI 也生效：规则放在 `.codebuddy/rules/`（每次会话自动加载），收尾自检用 `/wrap-up`。跨工具摘要见根目录 `AGENTS.md`。
+- 上面这些对 AI 也生效：规则放在 `.agents/rules/`（每次会话自动加载），收尾自检用 `/wrap-up`。跨工具摘要见根目录 `AGENTS.md`。
 
 ## 环境小坑
 

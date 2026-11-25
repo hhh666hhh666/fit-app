@@ -1,6 +1,6 @@
 ---
+trigger: always_on
 description: 改代码 = 改文档——单一信息源（能从代码查到的事实文档只写「去哪看」），移动/删除文件要全仓搜旧名。
-alwaysApply: true
 ---
 
 # 改代码 = 改文档

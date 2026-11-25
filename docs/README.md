@@ -16,8 +16,8 @@
 | [../PRODUCT.md](../PRODUCT.md) | 产品真相：受众 / 用途 / 定位 / 语气 / 约束 | 判断「某个设计对不对」的人 | 本文件（由 impeccable 生成） |
 | [../DESIGN.md](../DESIGN.md) | 视觉系统的**可读快照**（色板 / 排版 / 材质口径） | 改前端视觉的人 | **从 `frontend/src/uni.scss` 派生**；过时了重新生成 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 版本变更记录 | 所有人 | `git tag` |
-| [../AGENTS.md](../AGENTS.md) | **给 AI 的规矩**（跨工具摘要，只做路由） | AI / 未来的自己 | `.codebuddy/rules/` |
-| [../.codebuddy/commands/wrap-up.md](../.codebuddy/commands/wrap-up.md) | 收尾自检：把未决事项落 `docs/todo/`、补文档与引用、跑守卫脚本 | AI / 收尾时 | 本文件 |
+| [../AGENTS.md](../AGENTS.md) | **给 AI 的规矩**（跨工具摘要，只做路由） | AI / 未来的自己 | `.agents/rules/` |
+| [../.agents/skills/wrap-up/SKILL.md](../.agents/skills/wrap-up/SKILL.md) | 收尾自检（`/wrap-up`）：把未决事项落 `docs/todo/`、补文档与引用、跑守卫脚本 | AI / 收尾时 | 本文件 |
 | [../scripts/check-doc-links.sh](../scripts/check-doc-links.sh) | md 相对链接与路径引用自检，提交前跑 | 提交代码的人 | 文件系统 |
 | [../scripts/check-todo-archive.sh](../scripts/check-todo-archive.sh) | 断言已结案的待办都已移入 `docs/todo/archive/` | 结案待办的人 / CI | 文件系统 |
 | [../scripts/check-module-tests.sh](../scripts/check-module-tests.sh) | 断言每个带 Controller 的模块都配了测试类 | 加新模块的人 / CI | 文件系统 |
@@ -27,7 +27,7 @@
 | [design/API.md](./design/API.md) | 怎么看真实接口、通用响应与错误约定 | 对接接口或改 Controller 的人 | 接口文档与各 Controller |
 | [design/数据模型.md](./design/数据模型.md) | 实体关系、生命周期、历史一致性 | 改数据结构或写查询的人 | 迁移脚本 |
 | [design/前端.md](./design/前端.md) | 前端页面流、路由、状态与 API 边界 | 改前端的人 | `frontend/src/` |
-| [design/设计skill清单.md](./design/设计skill清单.md) | 外部设计 skill 的角色与禁区（档案；速查见 `.codebuddy/rules/design-tools.md`） | 改前端 UI 的人 / AI | 本文件 |
+| [design/设计skill清单.md](./design/设计skill清单.md) | 外部设计 skill 的角色与禁区（档案；速查见 `.agents/rules/design-tools.md`） | 改前端 UI 的人 / AI | 本文件 |
 | [adr/](./adr/) | **决策结论**卡片（Status / Considered Options / Consequences） | 查「为什么这么定」的人 | ADR 自身 |
 | [development/contributing.md](./development/contributing.md) | 分支 / 提交 / PR 约定与文档纪律 | 要提交代码的人 | `git log` |
 | [development/工作流skill清单.md](./development/工作流skill清单.md) | 非设计类外部 skill（grill-with-docs 等）的来源与本项目口径映射 | 要重装 skill 的人 / AI | 本文件 |
@@ -51,7 +51,7 @@
 
 命名与索引规则见 [todo/README.md](./todo/README.md)。那个文件里还有一张「已定，不用再想」的表——那些已经拍板并写进 ADR，列出来是为了防止以后重新纠结一遍。
 
-这条纪律对 AI 同样生效：项目规则里有**总是加载**的一条专门管它（见 `.codebuddy/rules/`），收尾时可以用 `/wrap-up` 自检。
+这条纪律对 AI 同样生效：项目规则里有**总是加载**的一条专门管它（见 `.agents/rules/`），收尾时可以用 `/wrap-up` 自检。
 
 ## 单一信息源纪律
 

@@ -1,10 +1,10 @@
 # 工作流 skill 清单（外部工具，装在项目级、不入库）
 
-**目的**：记下非设计类的外部 skill **从哪来、为什么装、和本项目约定怎么对齐**——换机器重装时照着做，也防止以后误判成「漏了」或「装错版本」。设计类的见 [《设计 skill 清单》](../design/设计skill清单.md)，安装口径（项目级 `.claude/skills/`、不入库）与那边一致。
+**目的**：记下非设计类的外部 skill **从哪来、为什么装、和本项目约定怎么对齐**——换机器重装时照着做，也防止以后误判成「漏了」或「装错版本」。设计类的见 [《设计 skill 清单》](../design/设计skill清单.md)，安装口径（项目级 `.agents/skills/`、不入库；Claude Code 对应 `.claude/skills/`）与那边一致。
 
 **读者**：要重装 skill 的人 / 未来的自己 / AI。
 
-**真相源**：本文件。与本项目文件约定的映射是**规则**，在 `.codebuddy/rules/docs-with-code.md` 的「外部 skill 与本项目口径的映射」一节，以那里为准。
+**真相源**：本文件。与本项目文件约定的映射是**规则**，在 `.agents/rules/docs-with-code.md` 的「外部 skill 与本项目口径的映射」一节，以那里为准。
 
 ## 一览
 
@@ -26,7 +26,7 @@
 | grilling | `skills/productivity/grilling/` |
 | domain-modeling | `skills/engineering/domain-modeling/` |
 
-**取法**与设计 skill 相同（稀疏克隆后整目录复制进 `.claude/skills/`，Windows 的 Git Bash 先 `export MSYS_NO_PATHCONV=1`），命令见《设计 skill 清单》的「来源」一节。市面上有多个同名改版（如 `alirezarezvani/claude-skills`），不要装错。
+**取法**与设计 skill 相同（稀疏克隆后整目录复制进 `.agents/skills/`，如同时用 Claude Code 再复制到 `.claude/skills/`；Windows 的 Git Bash 先 `export MSYS_NO_PATHCONV=1`），命令见《设计 skill 清单》的「来源」一节。市面上有多个同名改版（如 `alirezarezvani/claude-skills`），不要装错。
 
 ## 与本项目约定的差异（为什么不直接照它来）
 
@@ -41,3 +41,4 @@
 <!-- 增删 skill、改约定映射时在这里追加一行：改动 + 理由。别改上面的历史条目。 -->
 
 - 2026-10-22：新装 `grill-with-docs`、`grilling`、`domain-modeling`；不改名 `CONTEXT.md`，改在规则里映射。
+- 2026-11-25：同步安装到 `.agents/skills/`，使 Antigravity 可在项目级自动发现（`.gitignore` 已忽略、不入库）。

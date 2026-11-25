@@ -1,6 +1,6 @@
 ---
+trigger: always_on
 description: 未决事项必须落进 docs/todo/——任何「还没定」的事，在本次回复结束前变成文件。
-alwaysApply: true
 ---
 
 # 未决事项落盘

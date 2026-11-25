@@ -1,6 +1,6 @@
 ---
+trigger: always_on
 description: 服务器入口与部署凭据红线——本项目的服务器别名、档案出处（GitHub servers 仓库）与流水线耦合点；上服务器 / 动部署凭据前先读。
-alwaysApply: true
 ---
 
 # 服务器入口与红线

@@ -1,11 +1,11 @@
 ---
+trigger: always_on
 description: 外部设计 skill 的使用纪律——什么时候用哪个，以及设计真相源不许另立。
-alwaysApply: true
 ---
 
 # 外部设计 skill 的使用纪律
 
-下面这批 skill **装在项目的 `.claude/skills/`、不入库**——换机器不跟着走，来源与取法见 `docs/design/设计skill清单.md`；它们**按描述命中、不是每次自动加载**，所以开工时**点名（或 @ 提及）最稳**。
+下面这批 skill **装在项目的 `.agents/skills/`（Antigravity 标准项目级目录；Claude Code 对应 `.claude/skills/`）、不入库**——换机器不跟着走，来源与取法见 `docs/design/设计skill清单.md`；它们**按描述命中、不是每次自动加载**，所以开工时**点名（或 @ 提及）最稳**。
 下表是**调度表的唯一位置**；**逐项的角色、安装完整性与舍取原因**（档案性）见 `docs/design/设计skill清单.md`。
 
 ## 什么时候用哪个
@@ -15,7 +15,7 @@ alwaysApply: true
 | 定方向 / 整体重设计 / 抽设计系统，及 critique / audit / polish | `impeccable` | 引擎首次调用会从远端拉平台二进制 |
 | 无障碍与规范审查：键盘、对比度、i18n、深色、网址状态 | `web-design-guidelines` | 每次从远端拉最新规则，**需联网** |
 
-**一个都不设 `alwaysApply`**（不常驻注入）；`impeccable` 不装 hooks（探测器只在被主动调用时跑）。
+**一个都不常驻注入**（skill 按描述按需触发，不放进 `.agents/rules/`）；`impeccable` 不装 hooks（探测器只在被主动调用时跑）。
 **本机没装某个 skill 就跳过它**，别为此停下来等安装。
 只留这两个、其余为什么删掉，见设计 skill 清单的调整记录——**别凭印象再装回来**。
 

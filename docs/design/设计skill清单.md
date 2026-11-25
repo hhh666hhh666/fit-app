@@ -19,12 +19,12 @@
 
 ## 共同约定（适用的都写在这里，不逐行重复）
 
-- **都不设 `alwaysApply`**：不常驻注入上下文。
-- **都装在项目的 `.claude/skills/<名字>/`、不入库**（`.gitignore` 已忽略）：只对本项目生效，换机器不跟着走，按下面「来源」重装；**按描述命中、非自动加载**，开工时**点名（或 @ 提及）最稳**。
+- **都不常驻注入上下文**：skill 按描述按需触发，不放进常驻规则（`.agents/rules/`）。
+- **都装在项目的 `.agents/skills/<名字>/`（Antigravity 标准项目级目录；Claude Code 对应 `.claude/skills/<名字>/`）、不入库**（`.gitignore` 已忽略）：只对本项目生效，换机器不跟着走，按下面「来源」重装；**按描述命中、非自动加载**，开工时**点名（或 @ 提及）最稳**。
 
 ## 来源
 
-都是作者本人或官方组织的仓库。**只取下表那一个目录**，整个复制成 `.claude/skills/<名字>/`；不要装同名的第三方转载版（市面上有不少镜像 / 改版）。
+都是作者本人或官方组织的仓库。**只取下表那一个目录**，整个复制成 `.agents/skills/<名字>/`（如本机同时用 Claude Code 再复制到 `.claude/skills/<名字>/`）；不要装同名的第三方转载版（市面上有不少镜像 / 改版）。
 
 | Skill | 仓库 | 默认分支 | 仓库内目录 |
 |---|---|---|---|
@@ -36,7 +36,7 @@
 ```bash
 git clone --depth 1 --filter=blob:none --sparse -b <分支> https://github.com/<仓库>.git <临时目录>
 git -C <临时目录> sparse-checkout set --no-cone '/<仓库内目录>'
-cp -r <临时目录>/<仓库内目录> .claude/skills/
+cp -r <临时目录>/<仓库内目录> .agents/skills/
 ```
 
 ⚠️ Windows 的 Git Bash 会把 `'/<仓库内目录>'` 这种以 `/` 开头的参数改写成 Windows 路径，结果什么都检不出来；先 `export MSYS_NO_PATHCONV=1` 再跑。
@@ -65,3 +65,4 @@ cp -r <临时目录>/<仓库内目录> .claude/skills/
   - `shadcn-vue`：前端是 uni-app ＋ wot-design-uni，根本没用 shadcn-vue（ADR 0002 已退役那套栈），留着只会在做 UI 时误触发。
   - `ui-ux-pro-max`：触发描述极宽、每次塞入大段内容；给的是按关键词推的行业惯例，不懂本项目口味；`--persist` 还会写出第二份设计真相，要靠规则硬拦；搜索脚本另需 Python。删掉后 `.gitignore` 里为它兜底的 `design-system/` 一并撤掉。
   - `make-interfaces-feel-better`：内容质量不错，但对当前模型新增信息很少，价值只剩一份审查清单，不值得常驻在可触发列表里。
+- 2026-11-25：将项目级安装目录主口径切至 `.agents/skills/`（Antigravity 标准项目级发现目录，`.gitignore` 一并忽略、不入库），并把现有 `.claude/skills/` 下的外部 skill 同步安装过去。理由：Antigravity 自动扫描 `.agents/skills/*/SKILL.md` 而非 `.claude/skills/`；如本机同时用 Claude Code 则另保留 `.claude/skills/` 副本。
