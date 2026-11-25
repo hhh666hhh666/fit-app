@@ -56,16 +56,22 @@ mysqld 常驻本身就 230MB，余量只剩约 125MB。昨晚那 156 秒也不�
   冷匿名页可以进 swap，顶到上限时先变慢而不是被杀（宿主有 753MB 空闲 swap）。
   代价：MySQL 真被换出时查询延迟会明显变差。**2026-10-19 20:55 已落地**：写进 quizzy 编排的
   `mem_swappiness: 60`（持久化），并重建容器 4.5 秒验证；同时把 `temptable_max_ram` 钉到 64M。
+- **方案己：限制 glibc `malloc` 多线程 arena 数量并收紧 trim 阈值**——**2026-11-25 已落地**：
+  37 天复查发现 0 OOM 但 `quizzy-mysql` 仍在缓涨（`swap` 603MB、`memsw` 峰值 704/768MB，整机
+  Swap 956/1024MB）；`smaps` 铁证锁定 12 个严格 64MB 对齐的 glibc per-thread arena 吃掉 412MB
+  （每个 30–45MB，90%+ 在 Swap）。在 `quizzy` 编排的 `environment` 中加 `MALLOC_ARENA_MAX=2`
+  与 `GLIBC_TUNABLES=glibc.malloc.trim_threshold=131072`，零镜像改造、保持 `mem_limit: 384m` 不动。
+  代价：极高并发下仅 2 个 arena 可能有锁竞争；本机峰值并发仅 15，可忽略。
 
-➡️ 倾向：**戊 ＋ 丙 已落地**（swappiness 60、临时表上限 64M、备份内存闸与原子落盘）。
-剩下只有 `mem_limit` 抬不抬 512：先观察一周，看 `usage` 是否稳定在 250–300MB、swap 是否不再持续上涨；
-若仍爬到 380MB 以上，再改 quizzy 编排并重建一次。
+➡️ 倾向：**丙 ＋ 戊 ＋ 己 已落地**（备份内存闸与原子落盘、swappiness 60、临时表上限 64M、glibc arena 封顶 2 与收紧 trim）。
+37 天取证已证明「单抬 `mem_limit` 到 512MB 治标不治本」，现保持 384MB 观察 1–2 周：
+看 `memsw` 与容器 Swap 是否真正止涨并稳定在低位；若稳住即可结案归档，无需抬 `mem_limit`。
 
 ## 待确认
 
+- **观察 `MALLOC_ARENA_MAX=2` 长期效果（1–2 周）**：确认 `quizzy-mysql` 的 `memsw` 与 Swap 不再持续缓涨；若稳定则保持 `mem_limit: 384m` 并归档本待办。
 - 备份是否改用独立的只读账号（现在与 `docker exec` 路径一样直接用 root）——不建也能跑，属安全加固。
-- 18:28 那次留下的 `fit_app-20261019-182835.sql.gz.partial` 已改名隔离，是否保留待查后删除。
-- **要不要把 `mem_limit` 384 → 512**：观察一周后再定；要改就落在 quizzy 编排并重建一次（1–9 秒）。
+- ~~18:28 那次留下的 `fit_app-20261019-182835.sql.gz.partial` 已改名隔离，是否保留待查后删除~~（2026-11-25 已删除确认）。
 
 ## 更新记录
 
@@ -91,5 +97,18 @@ mysqld 常驻本身就 230MB，余量只剩约 125MB。昨晚那 156 秒也不�
   服务器副本同步并重建容器，实测恢复 **4.5 秒**；重建后 `temptable_max_ram=64MB`、cgroup swappiness=60、
   `mem_limit` 仍 384、两库表数与计划数完好、占用回落到 143MB）；fit-app 的 `scripts/backup-mysql.sh`
   加内存闸与原子落盘，三条路径实测通过（正常 124K／阈值挡住 rc=1 且 0 文件／dump 失败 rc=2 且 0 文件）。
+- 2026-11-25：**37 天复查 ＋ 根因破案 ＋ 方案己落地**——
+  - 巡检现场：`quizzy-mysql` 连续运行 37 天、0 重启 0 OOM（`memory.failcnt=0`），但物理 63MB ＋ Swap **603MB**，
+    `memsw` 峰值冲到 **704 / 768MB**，把宿主机 Swap 拖到 **956 / 1024MB**（仅剩 68MB，`mysqld` 一家占 63%）。
+  - 残缺备份 `/srv/fit-app/backups/db/fit_app-20261019-182835.sql.gz.partial` 已删除清理。
+  - `smaps` 取证破案：镜像 `mysql:8`（8.4.11 / EL9）用默认 glibc 分配器，`smaps` 中存在 **12 个严格 64MB 对齐
+    的 glibc per-thread malloc arena**，每个涨到 30–45MB（90%+ 在 Swap），合计吃掉 **412MB**（加主 `[heap]`
+    34MB 共 446MB）；同时 `table_open_cache=400` 顶满并触发 20,829 次 overflow，加速了小块分配碎片。
+    InnoDB 缓冲池实际仅用 47.6MB、峰值并发仅 15，推翻「单抬 `mem_limit` 即可解决」的旧判断。
+  - 落地修复：`quizzy` 仓库的 `docker-compose.prod.yml` 为 `mysql` 增加 `MALLOC_ARENA_MAX=2` 与
+    `GLIBC_TUNABLES=glibc.malloc.trim_threshold=131072`，备份旧文件后同步到 `aliyun` 重建容器
+    （11.4 秒恢复 `healthy`）。验证新进程 `/proc/<pid>/environ` 两变量均生效、容器占用回落至
+    `usage=161MB / memsw=164MB`、宿主机 Swap 从 956MB 降至 **371MB**（释放 585MB），`127.0.0.1:3306`
+    绑定、双库表数（`fit_app` 30、`quizzy` 14）及两个后端容器健康状态均正常。
 
 > 关联：ADR 0026、ADR 0005
